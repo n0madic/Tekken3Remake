@@ -227,7 +227,7 @@ The code repository never contains original data. Assets come from a disc image 
 
 - Records, unlocks, the ranking and options are stored in `user://` in the remake's own format. The content matches the PSX save block ([modes.md](research/code/modes.md)).
 - Two memory cards (the setting *Memory card*, slot 1 `progress.json` or slot 2 `progress2.json`, `app/progress_card.gd`): switching on the settings screen loads that card's progress (a card with no save starts from the defaults) and reopens the main menu through the transition screen. The remake's saving rules, outside `core` so that the traces still hold: AUTO SAVE starts on for a card with no save (the game's default is off), and leaving OPTIONS saves while auto save is on or still on in the file (the game saves only after statistics and unlock updates, so changed options waited for the next fight).
-- Settings (`user://settings.json`, the remake's settings screen, opened with Select on the main menu): Gameplay fixes, game texts, interface language, graphics preset, textures, texture pack, frame interpolation, framing, four volumes, vibration, touch controls and macros, the keyboard layouts' keys (on two tabs: General, Controls). They are kept separately from game progress.
+- Settings (`user://settings.json`, the remake's settings screen, opened with Select on the main menu): Gameplay fixes, game texts, interface language, graphics preset, textures, texture pack, fullscreen (desktop; F11 or Alt+Enter on Windows), frame interpolation, framing, four volumes, vibration, touch controls and macros, the keyboard layouts' keys (on two tabs: General, Controls). They are kept separately from game progress.
 
 ### Texts and localisation
 

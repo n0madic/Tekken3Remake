@@ -22,6 +22,8 @@ LANGUAGE_JA,日本語,日本語
 SETTING_MEMORY_CARD,Memory card,メモリーカード
 SETTINGS_CARD_HELP,"The save the game uses, as the memory card in slot 1 or 2: each keeps its own progress, records and game options. Switching loads that card's progress (unsaved progress is left behind).","ゲームが使うセーブデータ（スロット1または2のメモリーカード）。それぞれ進行状況、記録、ゲームオプションを別々に保存します。切り替えるとそのカードの内容を読み込みます（未保存の進行状況は失われます）。"
 SETTINGS_VALUE_CARD,Slot %d,スロット%d
+SETTING_FULLSCREEN,Fullscreen,フルスクリーン
+SETTINGS_FULLSCREEN_HELP,"Fills the whole screen with the game's window. On Windows F11 or Alt+Enter switches it anywhere.","ゲームのウィンドウを画面全体に表示します。Windowsではどこでも F11 または Alt+Enter で切り替えられます。"
 SETTING_GRAPHICS,Graphics preset,グラフィック設定
 SETTINGS_GRAPHICS_HELP,"Shadows, bloom, anti-aliasing and on High ambient occlusion and global illumination. Auto picks the best preset of this renderer.","影、ブルーム、アンチエイリアス、高設定ではアンビエントオクルージョン・グローバルイルミネーション。自動はこのレンダラーで最良の設定を選びます。"
 SETTING_TEXTURE_FILTER,Textures,テクスチャ

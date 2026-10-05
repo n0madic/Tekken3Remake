@@ -50,6 +50,9 @@ static func parse(args: PackedStringArray) -> DevOptions:
 			_use_for_session("shading", value, arg)
 	if not o.screenshot_path.is_empty() and not frames_given:
 		Log.info("DevOptions: --screenshot without --frames: the frame after step %d" % DEFAULT_FRAMES)
+	# A capture keeps the window as it opens: its size fixes the frame's.
+	if o.screenshot_path.is_empty():
+		Settings.apply_window()
 	return o
 
 

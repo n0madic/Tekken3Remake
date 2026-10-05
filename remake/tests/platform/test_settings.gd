@@ -182,3 +182,57 @@ func test_session_texture_pack_ends_with_any_choice() -> void:
 		Settings.values["texture_pack"] = saved
 	TexturePacks.clear()
 	Settings._dirty = false
+
+
+func _key(code: Key, alt := false, echo := false) -> InputEventKey:
+	var event := InputEventKey.new()
+	event.pressed = true
+	event.physical_keycode = code
+	event.alt_pressed = alt
+	event.echo = echo
+	return event
+
+
+func test_fullscreen_setting_is_sanitized() -> void:
+	expect_equal(GameSettings.sanitized({})["fullscreen"], false, "windowed by default")
+	expect_equal(GameSettings.sanitized({"fullscreen": "yes"})["fullscreen"], false, "a bad value: the default")
+	expect_equal(GameSettings.sanitized({"fullscreen": true})["fullscreen"], true, "a saved fullscreen kept")
+	expect(InputRouter.FULLSCREEN_KEY in InputRouter.RESERVED_KEYS, "F11 is no layout's key")
+
+
+func test_fullscreen_hotkeys_by_system() -> void:
+	for os_name: String in ["Windows", "macOS", "Linux"]:
+		var acts: bool = os_name == "Windows"
+		expect_equal(GameSettings.is_fullscreen_hotkey(_key(KEY_F11), os_name), acts, "F11 on " + os_name)
+		expect_equal(GameSettings.is_fullscreen_hotkey(_key(KEY_ENTER, true), os_name), acts, "Alt + Enter on " + os_name)
+		expect_equal(GameSettings.is_fullscreen_hotkey(_key(KEY_KP_ENTER, true), os_name), acts, "Alt + keypad Enter on " + os_name)
+	expect(not GameSettings.is_fullscreen_hotkey(_key(KEY_ENTER), "Windows"), "Enter alone is the right player's Start")
+	expect(not GameSettings.is_fullscreen_hotkey(_key(KEY_F11, false, true), "Windows"), "a held key does not toggle again")
+	var release := _key(KEY_F11)
+	release.pressed = false
+	expect(not GameSettings.is_fullscreen_hotkey(release, "Windows"), "a release does not toggle")
+
+
+func test_alt_enter_is_not_a_button() -> void:
+	expect(InputRouter.is_alt_enter(KEY_ENTER, true, "Windows"), "Alt + Enter on Windows")
+	expect(InputRouter.is_alt_enter(KEY_KP_ENTER, true, "Windows"), "Alt + keypad Enter on Windows")
+	expect(not InputRouter.is_alt_enter(KEY_ENTER, false, "Windows"), "Enter alone stays a button")
+	expect(not InputRouter.is_alt_enter(KEY_SPACE, true, "Windows"), "another key with Alt stays a button")
+	expect(not InputRouter.is_alt_enter(KEY_ENTER, true, "macOS"), "no hotkey, no mask elsewhere")
+
+
+## The toggle reads the window's mode (a headless run's stays windowed): from windowed it turns the
+## setting on, and a setting already on while the window is not fullscreen stays on (the window is
+## made fullscreen to match, not the setting turned off).
+func test_toggle_fullscreen_follows_the_window() -> void:
+	if not Settings.fullscreen_offered():
+		return
+	var saved: Variant = Settings.values["fullscreen"]
+	var was_dirty := Settings._dirty
+	Settings.values["fullscreen"] = false
+	Settings.toggle_fullscreen()
+	expect_equal(Settings.flag("fullscreen"), true, "windowed window, setting off → on")
+	Settings.toggle_fullscreen()
+	expect_equal(Settings.flag("fullscreen"), true, "windowed window, setting already on: stays on")
+	Settings.values["fullscreen"] = saved
+	Settings._dirty = was_dirty

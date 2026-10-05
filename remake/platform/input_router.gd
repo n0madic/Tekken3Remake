@@ -61,8 +61,10 @@ const BINDABLE := {
 	"start": PadState.START, "select": PadState.SELECT,
 }
 const STATS_KEY := KEY_F3     ## toggles the `--stats` line (DevOptions)
-## Keys no layout takes: Escape (ESCAPE_KEY), Tab (the settings screen's tabs) and STATS_KEY.
-const RESERVED_KEYS := [KEY_ESCAPE, KEY_TAB, STATS_KEY]
+const FULLSCREEN_KEY := KEY_F11   ## toggles fullscreen on Windows, as Alt + ALT_ENTER_KEYS do
+const ALT_ENTER_KEYS := [KEY_ENTER, KEY_KP_ENTER]
+## Keys no layout takes: Escape (ESCAPE_KEY), Tab (the settings screen's tabs), STATS_KEY and FULLSCREEN_KEY.
+const RESERVED_KEYS := [KEY_ESCAPE, KEY_TAB, STATS_KEY, FULLSCREEN_KEY]
 ## The device of each keyboard layout.
 const KEYBOARDS := [KEYBOARD, KEYBOARD_2]
 ## The player each keyboard layout takes when it is free (the touch controls: assign_touch).
@@ -194,7 +196,7 @@ func read_device(device: int) -> int:
 	if device == KEYBOARD or device == KEYBOARD_2:
 		var layout: Dictionary = layouts[KEYBOARDS.find(device)]
 		for key: Key in layout:
-			if Input.is_physical_key_pressed(key):
+			if Input.is_physical_key_pressed(key) and not is_alt_enter(key, Input.is_physical_key_pressed(KEY_ALT)):
 				var key_bit: int = layout[key]
 				bits |= key_bit
 		return bits
@@ -205,6 +207,18 @@ func read_device(device: int) -> int:
 	for axis: JoyAxis in AXES:
 		bits |= axis_bits(axis, Input.get_joy_axis(device, axis))
 	return bits
+
+
+## Whether the fullscreen hotkeys (F11, Alt + Enter) act on this system: on Windows only (F11 is
+## reserved from the layouts everywhere).
+static func fullscreen_hotkeys(os_name: String = OS.get_name()) -> bool:
+	return os_name == "Windows"
+
+
+## Whether `key` held with Alt is the fullscreen hotkey, not the button a layout binds to it (the
+## right player's Start by default).
+static func is_alt_enter(key: Key, alt_held: bool, os_name: String = OS.get_name()) -> bool:
+	return alt_held and key in ALT_ENTER_KEYS and fullscreen_hotkeys(os_name)
 
 
 ## The pad bits an axis at this value presses: L2 and R2 past TRIGGER_THRESHOLD, the left stick's

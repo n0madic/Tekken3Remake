@@ -21,7 +21,8 @@ const ROWS := [
 	["SETTINGS_GAME", ""], ["gameplay_fixes", "SETTINGS_FIXES_HELP"], ["game_texts", "SETTINGS_TEXTS_HELP"],
 	["language", "SETTINGS_LANGUAGE_HELP"], ["memory_card", "SETTINGS_CARD_HELP"],
 	["SETTINGS_SOUND", ""], ["volume_music", ""], ["volume_sfx", ""], ["volume_voices", ""], ["volume_system", ""],
-	["SETTINGS_DISPLAY", ""], ["graphics", "SETTINGS_GRAPHICS_HELP"], ["texture_filter", "SETTINGS_FILTER_HELP"],
+	["SETTINGS_DISPLAY", ""], ["fullscreen", "SETTINGS_FULLSCREEN_HELP"],
+	["graphics", "SETTINGS_GRAPHICS_HELP"], ["texture_filter", "SETTINGS_FILTER_HELP"],
 	["shading", "SETTINGS_SHADING_HELP"],
 	["texture_pack", "SETTINGS_PACK_HELP"], ["interpolation", "SETTINGS_INTERPOLATION_HELP"],
 	["framing", "SETTINGS_FRAMING_HELP"], ["stage_backdrops", "SETTINGS_BACKDROPS_HELP"],
@@ -196,6 +197,9 @@ func _input(event: InputEvent) -> void:
 	if key_event != null and key_event.pressed and not key_event.echo:
 		var key := key_event.physical_keycode
 		if listening >= 0:
+			# A fullscreen hotkey is no key to bind: it reaches Settings and the field keeps waiting.
+			if GameSettings.is_fullscreen_hotkey(event):
+				return
 			_handled()
 			# The layouts read physical keys only (InputRouter): a key event without one cannot
 			# be bound, and the field keeps waiting.

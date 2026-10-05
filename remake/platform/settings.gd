@@ -20,6 +20,7 @@ const SCHEMA := {
 	"memory_card": [1, [1, 2]],
 	"game_texts": ["english", ["english", "japanese"]],
 	"language": ["auto", ["auto", "en", "ja"]],
+	"fullscreen": [false, [false, true]],
 	"graphics": ["auto", ["auto", "web", "mobile", "mobile_high", "desktop_low", "desktop_high"]],
 	"texture_filter": ["smooth", ["smooth", "crisp"]],
 	"shading": ["smooth", ["original", "smooth", "curved"]],
@@ -267,6 +268,8 @@ func _offered(key: String) -> Array:
 			return list if Assets.japanese_texts() else ["english"]
 		"stage_backdrops":
 			return list if Assets.has_group("arcade") else ["playstation"]
+		"fullscreen":
+			return list if OS.has_feature("pc") else [false]
 	return list
 
 
@@ -283,6 +286,8 @@ func set_value(key: String, v: Variant) -> void:
 		_apply_volumes()
 	if key == KEY_BINDINGS:
 		_apply_key_layouts()
+	elif key == "fullscreen":
+		_apply_fullscreen(v as bool)
 	_dirty = true
 	changed.emit(key)
 
@@ -311,6 +316,61 @@ func cycle(key: String, step: int) -> void:
 		return
 	var i := list.find(value(key))
 	set_value(key, list[posmod(i + step, list.size())])
+
+
+## Whether `event` is a press of a fullscreen hotkey: F11 or Alt + Enter, on the systems where they
+## act (InputRouter.fullscreen_hotkeys).
+static func is_fullscreen_hotkey(event: InputEvent, os_name: String = OS.get_name()) -> bool:
+	var key := event as InputEventKey
+	if key == null or not key.pressed or key.echo or not InputRouter.fullscreen_hotkeys(os_name):
+		return false
+	return key.physical_keycode == InputRouter.FULLSCREEN_KEY \
+		or InputRouter.is_alt_enter(key.physical_keycode, key.alt_pressed, os_name)
+
+
+## Fullscreen is for the desktop builds (the others' windows are the system's).
+func fullscreen_offered() -> bool:
+	return choices("fullscreen").size() > 1
+
+
+func _input(event: InputEvent) -> void:
+	if is_fullscreen_hotkey(event):
+		get_viewport().set_input_as_handled()
+		toggle_fullscreen()
+
+
+## Switches the window between fullscreen and windowed, from the window's mode as it is now (it can
+## have been changed outside the setting: the engine's --fullscreen, the system).
+func toggle_fullscreen() -> void:
+	if not fullscreen_offered():
+		return
+	var on := not _window_fullscreen()
+	if values.get("fullscreen") == on:
+		_apply_fullscreen(on)
+	else:
+		set_value("fullscreen", on)
+
+
+## The saved fullscreen to the window at the start, by the entry points once their options are read
+## (DevOptions.parse): only a saved fullscreen is applied, so a window already made fullscreen (the
+## engine's --fullscreen) is left as it is.
+func apply_window() -> void:
+	if flag("fullscreen"):
+		_apply_fullscreen(true)
+
+
+static func _window_fullscreen() -> bool:
+	var mode := DisplayServer.window_get_mode()
+	return mode == DisplayServer.WINDOW_MODE_FULLSCREEN or mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
+
+
+## The window's mode to `on` (a borderless full-screen window, not the exclusive mode: it switches
+## quickly and keeps the desktop's other windows usable). Not on builds without the setting (a
+## synced settings file) and not without a window.
+func _apply_fullscreen(on: bool) -> void:
+	if DisplayServer.get_name() == "headless" or not fullscreen_offered():
+		return
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if on else DisplayServer.WINDOW_MODE_WINDOWED)
 
 
 ## The renderer this run uses: its method name as in the project settings.
