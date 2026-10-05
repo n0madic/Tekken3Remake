@@ -1,0 +1,80 @@
+keys,en,ja
+SETTINGS_TITLE,SETTINGS,設定
+SETTINGS_GAME,Game,ゲーム
+SETTINGS_DISPLAY,Display,画面
+SETTINGS_SOUND,Sound,サウンド
+SETTINGS_BACK,Back,戻る
+SETTINGS_ON,On,オン
+SETTINGS_OFF,Off,オフ
+SETTINGS_NONE,None,なし
+SETTINGS_KEYS,"Directions: choose    Left/Right, Cross: change    L1/R1, Tab: tab    Circle, Select, Esc: back","方向キー：選択    左右・×：変更    L1/R1・Tab：タブ    ○・SELECT・Esc：戻る"
+SETTINGS_TAB_GAME,General,一般
+SETTINGS_TAB_CONTROLS,Controls,操作
+SETTING_GAMEPLAY_FIXES,Gameplay fixes,ゲームプレイ修正
+SETTINGS_FIXES_HELP,"Fixes the original's bugs that change matches, the CPU's behaviour and the unlock pace. Takes effect from the next match.","対戦、CPUの動き、隠し要素の出現ペースに影響する原作のバグを修正します。次の対戦から有効です。"
+SETTING_GAME_TEXTS,Game texts,ゲームのテキスト
+SETTINGS_TEXTS_HELP,"English shows the North American release's wording everywhere it has one: menus, practice, records, Tekken Force, the Theater, the staff roll, the move lists and the rules page. The game plays the same either way.","英語は北米版の表記を使います：メニュー、プラクティス、記録、鉄拳フォース、シアター、スタッフロール、技表、ルール画面。ゲーム内容は同じです。"
+SETTINGS_TEXTS_MISSING,"Names, move lists and pictures need the USA disc converted (tools/remake_import/convert.py --usa-image).","名前・技表・画像には北米版ディスクの変換が必要です（tools/remake_import/convert.py --usa-image）。"
+SETTING_LANGUAGE,Interface language,表示言語
+SETTINGS_LANGUAGE_HELP,The language of the remake's own screens (this one and the hints). The game's screens follow Game texts.,リメイク独自の画面（この画面とガイド）の言語です。ゲーム画面は「ゲームのテキスト」に従います。
+LANGUAGE_EN,English,English
+LANGUAGE_JA,日本語,日本語
+SETTING_MEMORY_CARD,Memory card,メモリーカード
+SETTINGS_CARD_HELP,"The save the game uses, as the memory card in slot 1 or 2: each keeps its own progress, records and game options. Switching loads that card's progress (unsaved progress is left behind).","ゲームが使うセーブデータ（スロット1または2のメモリーカード）。それぞれ進行状況、記録、ゲームオプションを別々に保存します。切り替えるとそのカードの内容を読み込みます（未保存の進行状況は失われます）。"
+SETTINGS_VALUE_CARD,Slot %d,スロット%d
+SETTING_GRAPHICS,Graphics preset,グラフィック設定
+SETTINGS_GRAPHICS_HELP,"Shadows, bloom, anti-aliasing and on High ambient occlusion and global illumination. Auto picks the best preset of this renderer.","影、ブルーム、アンチエイリアス、高設定ではアンビエントオクルージョン・グローバルイルミネーション。自動はこのレンダラーで最良の設定を選びます。"
+SETTING_TEXTURE_FILTER,Textures,テクスチャ
+SETTINGS_FILTER_HELP,Smooth filters the original textures; Crisp keeps their pixels for a retro look.,なめらかは原作のテクスチャを補間し、くっきりはレトロな見た目のためにピクセルを保ちます。
+SETTING_SHADING,Shading,シェーディング
+SETTINGS_SHADING_HELP,Smooth blends the fighters' polygons by averaging their normals; Curved also rounds their outlines; Original lights them as the game does.,なめらかは法線を平均してキャラクターのポリゴンのつなぎ目を目立たなくし、曲面は輪郭も丸くします。オリジナルは原作どおりに陰影を付けます。
+SETTING_TEXTURE_PACK,Texture pack,テクスチャパック
+SETTINGS_PACK_HELP,"Replacement textures from user://texture_packs/<name>/ (see remake/README.md). Applies to the next scene.","user://texture_packs/<名前>/ の差し替えテクスチャ（remake/README.md 参照）。次のシーンから有効です。"
+SETTING_INTERPOLATION,Frame interpolation,フレーム補間
+SETTINGS_INTERPOLATION_HELP,"Smooth motion between the 60 Hz steps on faster displays; off shows each step as it is.","高リフレッシュレートの画面で60Hzのステップ間を補間します。オフでは各ステップをそのまま表示します。"
+SETTING_FRAMING,Beyond the scene,画面外の表示
+SETTING_STAGE_BACKDROPS,Stage backdrops,ステージ背景
+SETTINGS_BACKDROPS_HELP,"Arcade draws the arcade version's polygonal scenery, sky and floor (from the MAME set given to the converter); PlayStation draws the home version's flat panoramas. Takes effect from the next stage.","アーケードはアーケード版の立体的な背景・空・床（変換時に指定したMAMEセットから）、プレイステーションは家庭用版の平面パノラマを表示します。次のステージから有効です。"
+SETTINGS_FRAMING_HELP,"What fills the window where the scene ends (wide or tall windows): the stage's clear colour or black bars.","シーンの外側（横長・縦長の画面）をステージの背景色または黒帯で埋めます。"
+SETTING_VOLUME_MUSIC,Music,音楽
+SETTING_VOLUME_SFX,Effects,効果音
+SETTING_VOLUME_VOICES,Voices,ボイス
+SETTING_VOLUME_SYSTEM,System sounds,システム音
+SETTING_VIBRATION,Vibration,振動
+SETTING_TOUCH_CONTROLS,Touch controls,タッチ操作
+SETTINGS_TOUCH_HELP,"The on-screen stick and buttons. Auto shows them on touch screens.",画面上のスティックとボタン。自動ではタッチスクリーンで表示します。
+SETTING_TOUCH_MACROS,Touch macros,タッチのマクロ
+SETTINGS_MACROS_HELP,"Extra touch buttons that press several limbs at once: the throws (1+3, 2+4), or also 1+2 and 3+4.","複数のボタンを同時に押すタッチボタン：投げ（1+3、2+4）、または1+2と3+4も。"
+SETTING_TOUCH_SIZE,Touch button size,タッチボタンの大きさ
+SETTINGS_TOUCH_SIZE_HELP,"The size of the on-screen stick and buttons, in percent of the default.",画面上のスティックとボタンの大きさ（標準に対する割合）。
+SETTING_DEFAULT_KEYS,Default keys,キー設定を初期化
+SETTINGS_DEFAULT_KEYS_HELP,"Gives both keyboard layouts their default keys back: W A S D + R T / F G for player 1, the arrows + U I / J K for player 2.","両方のキーボード配置を初期設定に戻します：1PはW A S D + R T / F G、2Pは方向キー + U I / J K。"
+SETTINGS_PLAYER_KEYS,Player %d keyboard,%dP キーボード
+SETTINGS_PRESS_KEY,Press a key,キーを押してください
+SETTINGS_BIND_HELP,"Cross, Enter or a click, then press the new key. A key another button has swaps with this one's. Esc cancels.","×・Enter・クリックの後、新しいキーを押します。他のボタンに割り当て済みのキーは入れ替わります。Escで取り消し。"
+SETTINGS_VALUE_THROWS,Throws,投げ
+SETTINGS_VALUE_ALL,All,すべて
+SETTINGS_VALUE_NONE,None,なし
+SETTINGS_VALUE_AUTO,Auto,自動
+SETTINGS_VALUE_ENGLISH,English (USA),英語（北米版）
+SETTINGS_VALUE_JAPANESE,Japanese release,日本版
+SETTINGS_VALUE_WEB,Web,Web
+SETTINGS_VALUE_MOBILE,Standard,標準
+SETTINGS_VALUE_MOBILE_HIGH,High,高
+SETTINGS_VALUE_DESKTOP_LOW,Low,低
+SETTINGS_VALUE_DESKTOP_HIGH,High,高
+SETTINGS_VALUE_SMOOTH,Smooth,なめらか
+SETTINGS_VALUE_ORIGINAL,Original,オリジナル
+SETTINGS_VALUE_CURVED,Smooth + curved,なめらか＋曲面
+SETTINGS_VALUE_CRISP,Crisp (retro),くっきり（レトロ）
+SETTINGS_VALUE_STAGE,Stage colour,ステージの色
+SETTINGS_VALUE_BARS,Black bars,黒帯
+SETTINGS_VALUE_ARCADE,Arcade,アーケード
+SETTINGS_VALUE_PLAYSTATION,PlayStation,プレイステーション
+SETTINGS_VALUE_ON,On,オン
+SETTINGS_VALUE_OFF,Off,オフ
+SETTINGS_OPEN_HINT,Select: settings,SELECT：設定
+WEB_START,Click or press any key to start,クリックまたはキーを押してスタート
+MISSING_ASSETS,"Converted assets are missing.
+Run: python3 tools/remake_import/convert.py","変換済みのデータがありません。
+実行してください：python3 tools/remake_import/convert.py"

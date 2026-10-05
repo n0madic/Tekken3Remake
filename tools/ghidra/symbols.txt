@@ -1,0 +1,362 @@
+# Tekken 3 PSX, Japan Rev.1 (SLPS_013.00, EXE SHA-256 09e8b0b6...).
+# Addresses are guest addresses. Overlay code (>= 0x800B0000) is only valid in the
+# matching overlay program; entries are skipped when the address is uninitialized.
+
+# ---- boot / main loop ----
+func 80028df4 main
+cmt  80028df4 Main loop: per-frame update, then dispatch on g_gameState (0x800AE6CC, 20 states).
+data 800ae6cc g_gameState
+data 800ae6ec g_gameSubState
+data 800aff14 g_frameCounter
+
+# ---- BNS resource loading ----
+func 8006c208 BnsQueueLoad void BnsQueueLoad(int logicalId, void *dest, int unused);
+cmt  8006c208 Queue one BNS record. logicalId -> BNS id via g_bnsLogicalToId; BNS id >= 12 equals logicalId + 2.
+func 8006c36c BnsStartQueuedLoads
+func 8006c524 BnsIsLoading
+func 8006c190 BnsResetQueue
+func 80052cb4 LoadOverlayAsync
+func 80052db8 LoadOverlaySync
+func 80052c40 LoadMotionBank
+data 80098954 g_bnsLogicalToId u16 303
+data 8002466c g_bnsTable
+
+# ---- fighter model ----
+func 80036564 FighterLoadCharacter void FighterLoadCharacter(Fighter *f, void **kmdOut, void **pssdwOut);
+cmt  80036564 Loads kmd, vh, arc and divmot for fighter costume slot s: logical ids 95+4s .. 98+4s.
+func 80035e14 FighterSetupModel void FighterSetupModel(Fighter *f, void *arcMember0, KmdHeader *kmd, void *pssdw);
+func 80035138 KmdRelocate void KmdRelocate(KmdHeader *kmd, int rowCount, void *fighter);
+func 800352d4 PssdwRelocate
+func 80035998 FighterUploadTextures
+cmt  80035998 Member-0 TIMs: image x += 384, y += 256*player; CLUT y += 504 + 4*player.
+func 80035f3c FighterSetupParts void FighterSetupParts(Fighter *f, int unk, KmdHeader *kmd);
+func 80035b5c FighterSetupPart void FighterSetupPart(Fighter *f, int player, int part, int unk, KmdHeader *kmd);
+func 800353e4 FighterBuildPartPrims
+func 8003533c FighterBuildShadowPrims
+func 80037b78 FighterDrawParts void FighterDrawParts(Fighter *f);
+func 80036f00 DrawSkinnedPart void DrawSkinnedPart(KmdRow *row, void *prims, void *ot, int relight);
+func 80034a98 PartSelectVertexVariant
+func 80031f10 ArcMemberPtr
+func 80031f44 ArcMemberSize
+func 80078974 FighterCopyMoveText
+data 8001a05c g_partKmdRow u8 24
+data 8001a074 g_partMatrix u8 24
+data 8001a08c g_partPrimFlag s16 24
+data 800a96f0 g_fighters
+
+# ---- motion banks ----
+func 8002d068 DivmotLinkBank
+func 8002d2d0 DivmotMergeSharedSlots
+func 8006a18c DivmotRelocate
+func 80069b84 DivmotRelocateCommon
+func 8006a114 DivmotBufferFor
+data 800ae348 g_divmotBuffer
+data 800ae0e8 g_fighterDivmot
+data 800ae0f0 g_divmotCommon
+
+# ---- animation / pose ----
+func 80038a1c AnimSplineSample
+func 80038c14 AnimDecodeRoot
+func 80038da0 AnimDecodePose
+func 80038bc4 AnimScaleRoot
+func 8003a58c EulerToMatrix
+cmt  8003a58c Builds Rz(z)*Ry(y)*Rx(x); angles are 16-bit (65536 = 360 deg).
+func 8003af64 PoseBuildMatrices
+func 8003bc7c IkLimbTarget
+func 8003befc IkSolveLimb
+func 8003bddc IkBendMatrix
+func 8003b80c ComposeJointOffset
+func 8003b814 ComposeJoint
+func 8003b220 FighterComposeJoints void FighterComposeJoints(Fighter *f, int blend);
+func 8003aad0 FighterAnimate void FighterAnimate(Fighter *f);
+func 8003c4c4 FighterTransitionBlend int FighterTransitionBlend(Fighter *f);
+data 80097048 g_animChannelShift u8 49
+data 800a8ab0 g_poseVector s16 49
+data 8001e8c4 g_sinTable s16 4096
+data 8001f0c4 g_cosTable s16 4096
+
+# ---- moves / branches / input ----
+func 8002d3cc MoveLookup DivMove * MoveLookup(Fighter *f, int slot);
+func 8002d51c MoveTotalDamage
+func 8002d570 FighterStartStance void FighterStartStance(Fighter *f, Fighter *opp);
+func 8002d6b0 FighterStartWinPose void FighterStartWinPose(Fighter *f, Fighter *opp, int button);
+func 8002dc3c MoveBranchStep void MoveBranchStep(Fighter *f, Fighter *opp);
+func 8002db08 MoveReactionBranch void MoveReactionBranch(Fighter *f, Fighter *opp);
+func 8002e078 BranchFind short * BranchFind(short *rows, int frame, Fighter *f, Fighter *opp);
+func 8002e310 BranchCondition uint BranchCondition(u8 *row, Fighter *f, Fighter *opp);
+func 8002ce7c InputMatch uint InputMatch(Fighter *f, u16 *row, uint dir, uint pressed);
+func 800313b0 SituationClassify void SituationClassify(int player, Fighter *f, Fighter *opp);
+func 8002c7d4 InputUpdate void InputUpdate(Fighter *f, uint side, uint held, u16 pressed);
+func 8002bf3c InputSource void InputSource(Fighter *f);
+
+# ---- fight frame ----
+func 8002b0ac FightFrame
+func 800323cc ReplayUpdate
+func 8003d904 HudRoundUpdate
+func 800464cc FighterUpdateSide void FighterUpdateSide(Fighter *f, Fighter *opp);
+func 8004afcc CameraShakeStep
+func 80045834 MoveStartAll
+func 8003f330 FighterMovePhysics void FighterMovePhysics(Fighter *f);
+func 80046f98 SavePlayerPosition void SavePlayerPosition(Fighter *f);
+func 8002bcb8 FighterSkeletonUpdate void FighterSkeletonUpdate(Fighter *a, Fighter *b, Fighter *c);
+func 80040ca4 FighterVelocity void FighterVelocity(Fighter *f);
+func 80042204 CollisionShapesUpdate void CollisionShapesUpdate(Fighter *f);
+func 8003f2dc HurtRadiusSetup void HurtRadiusSetup(Fighter *f);
+func 800442a0 HitClearSlots void HitClearSlots(Fighter *f);
+func 80044304 HitTest void HitTest(Fighter *attacker, Fighter *defender);
+func 80047e54 HitTestSegments
+func 800479a4 SegmentHitsCylinder
+func 80040cf8 AttackVelocity void AttackVelocity(Fighter *f);
+func 8004539c MoveBranchAll
+func 80044634 HitApply void HitApply(Fighter *f);
+func 80045450 MoveStepAll
+func 800454e0 MoveStep void MoveStep(Fighter *f);
+func 80045eb0 FighterOpponent Fighter * FighterOpponent(Fighter *f);
+func 80044d24 HitClassify void HitClassify(Fighter *defender, Fighter *attacker, u8 *slot);
+func 80044e70 HitDamage void HitDamage(Fighter *defender, Fighter *attacker, u8 *slot);
+func 80044c4c HitExtraDamage int HitExtraDamage(Fighter *f);
+func 800452d0 HitZoneScale
+data 8001deec g_hitZonePercent u16 14
+data 800973dc g_hurtZoneJoint s32 14
+data 80097414 g_hurtRadiusByChar
+func 8002f600 MoveStartOrAdvance void MoveStartOrAdvance(Fighter *f, Fighter *opp);
+func 80037cf0 ShadowProjectSection
+func 80037d7c ShadowBuildPrims
+data 800ae310 g_shadowProjection
+func 800311bc TransitionRemap
+
+# ---- move lifecycle / combat (session 2) ----
+func 80043d2c FighterRelativeAngles void FighterRelativeAngles(Fighter *f, Fighter *opp);
+cmt  80043d2c Direction to opponent (+0x2A), heading delta/abs (+0x2E/+0x30), quadrants (+0x32/+0x40), aim directions (+0x34/+0x42).
+func 800312c4 MoveKeepsFrame
+cmt  800312c4 1 when a new move continues the frame counter: branchKind != 3 and (no active window, or window inside the move and poseFrame <= move+0x2E).
+func 8003127c BranchEntersBeforeActiveEnd
+func 80040b58 ClampSymmetric
+func 80040b9c TrackBudget
+cmt  80040b9c Returns the part of a turn step that exceeds the remaining tracking budget (limit - |accum|), else 0.
+func 8002e95c BranchFindReversal
+func 8002eb24 ReversalCondition
+cmt  8002eb24 Branch conditions 0x45-0x4B, evaluated only when the fighter was hit this frame (parries/reversals).
+func 8002eda0 AttackUsesJoint
+func 8002d4b8 MoveInSlotList
+func 8002edf8 HitSelectReaction void HitSelectReaction(Fighter *f, Fighter *attacker);
+cmt  8002edf8 Picks the defender reaction move from the 42-byte reaction record by guard/air/ground/counter/quadrant.
+func 8002f0e8 AirReactionKind
+func 8002f2c8 LaunchTrajectory
+cmt  8002f2c8 Computes launch horizontal speed (+0x98), vertical speed (+0x9C), entry frame and air duration from damage, juggle count and hit velocity.
+func 8003159c PushRepeatCount
+func 80031398 SituationReset
+func 8002d9b0 ThrowVictimStart
+func 800450cc HitBestSlot
+func 8004527c HitCopySlotFlags
+func 80040d2c CopyAttackDirection
+func 80044b78 HitSpawnEffect
+func 80045e50 FighterOpponentIndex
+data 800aff04 g_fighterDistance
+data 80010ce8 g_reactionRecords
+data 800174c4 g_throwVictimSlots
+data 800177dc g_closeReactions
+data 8001075c g_pushTables
+data 8001a630 g_airKinds
+data 80095b88 g_situation
+cmt  80045834 Per-frame move start/advance for every fighter; a pending throw (transition 0x21) is resolved first and its victim is started with transition 0x22.
+func 8004401c BodySeparate
+func 80046fcc BodyOverlapSolve
+func 8003eefc BodySphereProfile
+func 80045b60 MoveEvents
+func 800346f8 HandFaceCommand
+func 8003ad48 RootUpdate
+func 8003ac1c RootReanchor
+func 8003a980 MatrixAddScaled
+func 800762b0 MatrixOrthonormalize
+func 8003cad0 BlendSuppressed
+func 8003cb44 BlendDecayLength
+func 8003ccf0 BlendBranchLength
+func 8003cd44 BlendStanceLength
+func 8002da80 FighterCollapse
+func 8002cb08 InputForwardDoubleTap
+func 8002cbf0 InputBackDoubleTap
+func 8002ccd8 InputSequenceMatch
+func 8002a3e8 SinQ15
+func 8002a430 CosQ15
+func 8002a478 Atan2Angle
+func 8002a578 ISqrt
+data 80097364 g_bodySphereJoints
+data 80097384 g_bodyRadiusByChar
+data 800958f4 g_inputSeqA
+data 800959f0 g_inputSeqB
+func 8007508c SoundInit
+func 800750f8 SoundOpenCommonBanks
+func 8007522c SoundSelectBanks
+func 80075570 SoundLoadCharBank
+func 800756a4 SoundPlayFighter
+func 800758e8 SoundPlaySystem
+func 8007588c SoundStopFighter
+func 8004108c FighterSoundById
+func 80040f28 FighterVoice
+func 80041138 FighterSounds
+func 80041c30 SoundScriptStop
+func 80033780 ReplayRecordSound
+func 8006b0fc MusicPlay
+func 80029114 PadVibrate
+func 80029228 VibrationUpdate
+func 800760d4 FighterVibrate
+func 80076078 VibrateAll
+func 80076b6c EffectSpawn
+func 8004f698 StageAndMusicSelect
+func 80043394 ArenaBounds
+func 8004391c PairwiseDistances
+func 80040d68 LatchButtonTaps
+data 80097474 g_soundTable
+data 8001ad54 g_charVoices
+data 80098120 g_charRecords
+data 8002523c g_musicTracks
+data 80024fe4 g_xaStreams
+data 800ae1d0 g_musicTrack
+data 800ae14c g_stage
+func 800484d8 CameraFrame
+func 80045f40 CameraBuildView
+func 800633c0 CameraDirector
+func 80062e5c CameraBlend
+func 80062cf8 CameraReset
+func 80064944 CameraTrackFighters
+func 80064af8 CameraYawSpring
+func 800650f8 CameraFrameFighters
+func 8006636c CameraFight
+func 80067548 CameraChoose
+func 80067818 CameraThrowEnds
+func 80067988 CameraThrowStart
+func 80067fd4 CameraHitChoose
+func 800490f0 FloorDraw
+func 80049290 FloorDrawGrid
+func 80048324 StageSelectFloor
+data 800a8a88 g_camera
+func 8002c4cc CpuOrPadInput
+func 8002c2a4 InputClear
+func 8002c778 InputScripted
+func 80059b78 AiUpdate
+func 8005993c AiInitRound
+func 800596b0 AiReset
+func 80061770 AiLoadParams
+func 80056a4c AiCollectCandidates
+func 80058d6c AiExecuteCandidate
+func 80061ba8 AiPressCommand
+func 80061ac4 AiPadFromStep
+func 80061b24 AiStartScript
+func 80061d40 AiSideStep
+func 80058c40 AiAfterAttack
+func 800594c4 AiCallHook
+func 80062b50 AiHookForBank
+data 8009f6c0 g_aiRecords
+data 80023418 g_aiParams
+data 8009fd20 g_aiCandidates
+func 800392c8 HeadLookAt
+cmt  800392c8 Replaces the head local matrix by a smoothed look at the opponent for moves with flag bit 30 during the fight camera phase.
+func 80039a50 GonEyesFollow
+func 80034120 GonEyesSetOffset
+func 8002bdc4 CameraPhaseIsFight
+data 80095890 g_cameraPhase
+data 8009e920 g_headLook
+func 8004b174 SquareRoot0
+func 8004b634 Atan2Units4096
+func 80047968 BodyOverlapSolveScratch
+func 800431b4 FighterSavePlacement
+func 800431d8 ArenaRampStep
+func 8004af94 CameraShakeStart
+data 8009c050 g_replayState
+data 800ae330 g_replayBuffer
+data 800958c8 g_replayPlayback
+func 8003209c ReplayStart
+func 80031f60 ReplayInit
+func 800332d8 ReplayHandPose
+func 80033600 ReplayPowerTimer
+func 80032c0c ReplayRootRotation
+func 80032838 ReplayRootPosition
+func 80032de8 ReplayRecordPose
+func 80032ec8 ReplayPlayPose
+func 8003a6b4 RootRotationMatrix
+func 8003a86c VectorNormal
+func 8003a92c VectorCross
+func 80034bc4 FighterHandPoses
+func 80076284 BlendRootDy
+func 8003c4a4 BlendClear
+func 8003cc08 BlendForwardSuppressed
+func 80031320 BlendDstFrame
+func 8006ad84 FighterSavePrevSegments
+func 8006f5d8 PowerGlowJoints
+func 80076484 FighterUploadFlipbook
+func 8007699c FlipbookSetup
+func 8006e734 EffectQuadDraw
+func 8003a160 DynamicLightSet
+func 8006f3dc EffectDescriptorSpawn
+func 80064458 CameraBlendPair
+func 80063fe8 CameraLookPoint
+func 80064368 CameraUseSource
+func 80063f4c CameraSetProjection
+func 800642bc CameraSourceCopy
+data 800a0650 g_cameraSources
+data 800a06d0 g_cameraSourceState
+data 800a9140 g_cameraWeights
+func 80061e70 AiHookVsYoshimitsu
+func 800621d8 AiHookVsOgre
+func 80062804 AiHookAsKing
+func 80062bac AiHookVsPaul
+func 80062c10 AiHookNone
+func 80062c28 AiHookVsGon
+func 80062c84 AiHookAsHwoarang
+
+# ---- game states / screens (session 6) ----
+func@SLPS 800b0bd0 BootState
+cmt@SLPS 800b0bd0 Game state 0 (boot code in the EXE image): uploads the system textures, display on, then the title.
+func 8004fd48 TransitionScreen
+cmt  8004fd48 Game state 2: NAMCO PRESENTS, memory card load or autosave, title/enbu overlay load, then g_gameState = 0x80098318.
+func 8004fbe0 GoToViaTransition
+func 80050208 GoToViaScreenLoader
+func 8005025c ScreenOverlayLoad
+func 800504a8 RankingLoad
+func 80050478 GoToRanking
+func 80050600 FightPrepare
+func 80050710 FightMain
+func 80055b6c FightAllocBuffers
+func 800502c8 ContinueStart
+func 800502d8 ContinueCountdown
+cmt  800502d8 CONTINUE? n: 808-frame timer, face button -90, Start continues (1 = same fight, 2 = select), -1 = game over.
+func 80051244 ChallengerJoin
+func 800514ec OgreSceneCheck
+cmt  800514ec Arcade/time attack fight 10: after the first round the human wins, request the Ogre -> True Ogre scene (round state 10).
+func 8002a5d8 RoundTallySave
+func 8002a634 RoundTallyRestore
+func 8004c6a0 AutoSave
+func 8004c758 AutoSaveErrorShow
+func 8004d068 InsertionSortPairs
+cmt  8004d068 Stable insertion sort of (id, key) u32 pairs by key: arg 0 descending, 1 ascending.
+
+# ---- screen overlays (session 6) ----
+func@ranking 800c2a24 RankingFrame
+func@ranking 800c3480 NameEntry
+func@ranking 800c3438 NameEntryInit
+func@ranking 800c1d1c RankingTimeTable
+func@ranking 800c1e8c RankingSurvivorSort
+func@ranking 800c1fa8 RankingUsageTable
+func@ranking 800c390c RankingBackdropSetup
+func@ranking 800c3aac RankingBackdropCamera
+func@result 800ef4ac TeamResult
+func@result 800eff4c TimeAttackResult
+func@result 800f0a78 SurvivalResult
+func@result 800f1f08 ForceResult
+func@result 800f28e8 TimeAttackTotal
+func@result 800f2988 TimeRecordPending
+func@result 800f18fc ResultBanner
+func@ending 80112798 StaffRoll
+func@ending 801144b0 StaffRollTextWidth
+func@ending 80114494 StaffRollMin
+func@volley 800b528c BallChooseOpponent
+func@arcade 800b2350 ArcadeRecordClear
+func@arcade 800b4168 OgreSceneSetup
+func@arcade 800b4528 OgreSceneRun
+func 800564c8 ArcadeUnlocks
+func 800567a0 PlayCountUnlocks
+func 80056498 UnlockCharacter
+func 8005696c GonDefeatUnlock
+func 80051304 MenuExitCheck
+func 80075a90 ResultWinVoice

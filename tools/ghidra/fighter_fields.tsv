@@ -1,0 +1,242 @@
+# offset	type	name	comment
+0x000	s32	posX	anchor of the running move (root = anchor + rotated animation displacement)
+0x004	s32	posY
+0x008	s32	posZ
+0x00E	s16	facing	16-bit angle
+0x012	s16	playerIndex	0/1, VRAM/CLUT offsets
+0x016	s16	bankType	motion bank type (character record +9)
+0x018	s16	charId	selection index 0-22 (20 = True Ogre, 21+ Tekken Force enemies)
+0x01C	s16	costumeSlot	0..51
+0x01E	u8	index	fighter index 0/1 (2 = third fighter in mode 8)
+0x024	s16	rootDx	root displacement from animation
+0x026	s16	rootDy
+0x028	s16	rootDz
+0x02A	s16	targetDir
+0x02C	s16	heading	body heading (16-bit angle); facing follows it
+0x030	s16	relAngle	abs(headingDelta): 0 facing the opponent, 0x8000 back turned
+0x032	s16	facingQuadrant	own heading vs opponent direction: 0 front, 1/3 sides, 2 back
+0x036	s16	trackAccum
+0x040	s16	oppQuadrant	opponent heading vs direction to self: 0 facing me, 1/3 sides, 2 back turned
+0x04C	void*	rootMove	move row driving root motion
+0x050	s16	rootFrame
+0x054	void*	poseMove	move row driving the pose
+0x058	s16	poseFrame
+0x05C	s16	moveFrame	frames since the move started (1 at start unless the frame counter is kept)
+0x05E	s16	damage	damage of the running move (0 = not an attack)
+0x060	u32	state	move +0x04: bits 0-2 posture (crouch/stand/down), 3-4 guard, 11-15 class
+0x064	u16	attack	move +0x08: bits 0-2 postures hit, 3-4 guards that block, high byte level id
+0x066	u16	guard	state bits 3-4 while guarding is possible, else 0
+0x068	u8	attackHi	attack >> 8: 1 low, 2 mid, 4 high, 6 unblockable/ground, 8 throw
+0x069	u8	stateClass	state bits 11-15 (12 = jump)
+0x06A	s16	holdFrames	frames to hold the last pose frame (-1 none)
+0x06C	s16	branchWindow	remaining frames of the matched branch window
+0x06E	s16	frameStep	+1 forward, -1 playing backwards
+0x082	u8	slideState	1 armed, 2 sliding (transitions 0x10/0x12/0x13)
+0x083	u8	hitDone0	this move already hit fighter 0
+0x084	u8	hitDone1	this move already hit fighter 1
+0x08B	u8	branchKind	1 reaction, 2 input branch, 3 look-ahead branch, 4 move end
+0x092	s16	ballistic	1 while following a launch trajectory
+0x096	s16	groundOffset
+0x09A	s16	airVelX
+0x09C	s16	airVelY
+0x09E	s16	airVelZ
+0x0B4	u8	attackSegCount	1 or 2 joint pairs in the move attack descriptor, 0 without an active window
+0x0B7	u8	attackClass	move +0x14 bits 14-15
+0x0B9	u8	trackMode	0..12, see transitions
+0x0C2	u8	invulnerable
+0x0C3	u8	active
+0x0C6	u8	sideFlag	mirrors stick left/right
+0x0CE	u8	gotHit	hit (or guarded) this frame
+0x0D1	u8	contact	own attack made contact this move
+0x0DB	u8	inAir	move air window [+0x19,+0x1A] or juggled (+0x94)
+0x0DE	u8	ko
+0x0E3	u8	activeSegs	attack segments live this frame (0 outside [+0x2D,+0x2E])
+0x0EE	s16	hitFreezeIn	freeze frames received from the attacker move byte +0x2C
+0x0F4	u32	distAdj	distance to opponent minus size adjustment
+0x0F8	u32	dist	distance to opponent
+0x0FC	s32	dirX	x offset to the opponent (PairwiseDistances; ×10 on the fallback path)
+0x100	s32	dirZ	z offset to the opponent (0 on the fallback path)
+0x13C	u8[88]	hitSlots	2 x 0x2C hit records (fields from +0x1C)
+0x198	s16	entryFrame
+0x19A	s16	transition
+0x19C	s16	transBit7
+0x19E	s16	transBit6
+0x1A0	s16	moveSlot	current move slot
+0x1A4	void*	moveRow	current move row
+0x1A8	void*	reaction	reaction record
+0x1AC	u8[96]	attackSegs	4 x 24-byte segments
+0x20C	u8[280]	hurtZones	14 x 20-byte cylinders
+0x324	u8[128]	bodyPoints	8 x 16-byte points
+0x3C4	s32	velX
+0x3C8	s32	velY
+0x3CC	s32	velZ
+0x3F4	s32	health	16.16 fixed
+0x3F8	s32	healthMax
+0x402	u16	inDir	one-hot direction 1 << (d + 4)
+0x404	u16	inPressed	buttons pressed this frame
+0x406	u16	inHeld	buttons held
+0x40C	s32	inHistIndex
+0x41C	u8[60]	inHistory	pressed << 4 | direction
+0x4EC	s16	scaleBase	model scale, 4096 = 100%
+0x4EE	s16	scale
+0x4F0	FighterPart[22]	parts
+0x8B0	u8[68]	rootJoint
+0x8F4	u8[1632]	joints	24 x 0x44 joint blocks
+0xF68	s32	rootX	world root position
+0xF6C	s32	rootY
+0xF70	s32	rootZ
+0xF74	u8[576]	localMats	18 x 32-byte local joint matrices
+0x1274	void*	pssdw
+0x1278	s16	screenX
+0x02E	s16	headingDelta	heading - targetDir
+0x034	s16	aimDir	targetDir or targetDir+0x8000, whichever is nearer the heading (updated beyond 0x200 units)
+0x038	s16	oppToSelfDir	direction from opponent to self
+0x03A	s16	oppHeading
+0x03C	s16	oppHeadingDelta
+0x03E	s16	oppRelAngle	abs(oppHeadingDelta)
+0x042	s16	oppAimDir
+0x020	u8	oppIndex	default opponent index
+0x021	u8	throwPartner
+0x022	u8	lastAttacker	index of the fighter whose hit was applied
+0x023	u8	lastHitTarget
+0x074	s16	throwState	0 idle; >0 thrower step count; <0 throw victim
+0x076	s16	hitFreeze	freeze frames left (pose does not advance)
+0x078	s32	slideStepX
+0x07C	s32	slideStepZ
+0x080	s16	reactChain	counts consecutive reaction moves (0x400 flag chains)
+0x087	u8	wasHitThisMove
+0x088	u8	contactThisMove
+0x089	u8	guardedPrev	copy of +0xCF at move start
+0x08A	u8	inReaction	copy of +0xD0 at move start
+0x08C	u8	condFlagUsed	set by branch conditions 0x3A-0x3C
+0x08E	s16	launchArmed
+0x090	s16	airKind	0-5, row of 0x8001A630 (ground offset, air move slot)
+0x094	s16	juggleCount	air hits taken during the current launch
+0x098	s16	airSpeed	horizontal launch speed
+0x0A0	s16	curSlot	move slot of the running move
+0x0A2	s16	curTransition	transition code that started the running move
+0x0A4	s32	slideTargetX	point reached in 16 frames when slideToPoint is 1 (no writer of slideToPoint=1 in the code)
+0x0A8	s32	slideTargetZ
+0x0AC	s32	oppStartX	opponent root at move start
+0x0B0	s32	oppStartZ
+0x0B5	u8	crouchMove	move flag 0x2000
+0x0B6	u8	stepKind	1/2 from transitions 0x1A/0x1B
+0x0B8	u8	airPhase	root follows animation: 0 xyz, 1 none (launched), 2 y only (slide)
+0x0BE	u8	anchorDirty
+0x0BF	u8	slideToPoint
+0x0C1	u8	applyEndTurn	add move +0x12 to heading at next move start
+0x0C4	u8	inThrow
+0x0C5	u8	isCpu	fighter is driven by the CPU AI (InputSource)
+0x0C7	u8	fixedFacing
+0x0C8	u8	fixedFacingSide
+0x0CA	u8	humanGuard	set for human fighters outside mode 5; moves with state bit 8 keep their guard only when set
+0x0CF	u8	guarded	last applied hit was guarded
+0x0D0	u8	hitClean	last applied hit connected
+0x0D2	u8	whiffed	active window ended without contact
+0x0D3	u8	counterHit	last applied hit was a counter hit
+0x0D4	u8	closeHit	last applied hit used the close-range entry (+0x34)
+0x0DA	u8	moveChanged	new move differs from the previous one
+0x0DC	u8	landedA
+0x0DD	u8	landedB
+0x0DF	u8	aboutToHit	damage move within 3 frames of its first active frame
+0x0E4	u8	extraKind	HitExtraDamage mode
+0x0E6	u8	forcedHit
+0x0E7	u8	forcedHitIn
+0x0E8	s16	lastDamage	abs(damage) of the last applied hit
+0x0EA	s16	damageOverride	used instead of move damage (reversals)
+0x0EC	s16	extraDamage
+0x104	s16	hitCooldown	no hit tests while > 0
+0x106	s16	pushFrames
+0x108	s16	pushSpeed
+0x10A	s16	pushTableFrames
+0x10C	s16	pushDir
+0x110	void*	pushTable
+0x114	s16	turnFrames
+0x116	s16	turnStep
+0x118	s16	recoverMash	decreased by button presses
+0x11A	s16	recoverFrames
+0x11C	s16	attackAlert	9 frames after a move with flag 0x800 starts
+0x122	s16	powerTimer	120 after move flag 0x10000; disables guard, forces counter hits
+0x124	s16	pushRepeat
+0x126	s16	pushRepeatTimer
+0x128	s16	stepCooldown	blocks branch rows with flag 0x1C
+0x12C	s32	placedX	anchor saved by FUN_800431B4 when the fighter is placed for a round (ArenaBounds pull-back target)
+0x130	s32	placedZ
+0x134	s16	prevPoseFrame
+0x136	s16	prevSlot
+0x138	s16	prevMoveUnk10
+0x13A	s16	pushRepeatTrans
+0x194	void*	bestHitSlot
+0x3D0	s32	atkDirX	direction of first attack segment
+0x3D4	s32	atkDirY
+0x3D8	s32	atkDirZ
+0x3DC	s32	hitDirX	attacker atkDir copied on hit
+0x3E0	s32	hitDirY
+0x3E4	s32	hitDirZ
+0x00C	s16	tiltX	root rotation x (root matrix uses -tiltX)
+0x010	s16	tiltZ	root rotation z (root matrix uses -tiltZ)
+0x0E5	u8	blendActive
+0x0F54	u8[20]	rootMat	root rotation (MATRIX rotation part) from tilt and facing
+0x13B0	u8[544]	prevLocalMats	17 x 32-byte local matrices of the previous frame (slots 1-17)
+0x15F0	u8[544]	blendDelta	17 x 32-byte rotation deltas (9 s16 each) for motion blending
+0x1810	s16	prevRootDx
+0x1812	s16	rootDyBlended
+0x181C	s32	blendMode	0 none, 1 decay from previous pose, 2 blend into pending branch, 3 blend into stance
+0x1820	s32	blendModeB	cleared together with the blend mode (FUN_8003C4AC)
+0x1824	void*	lastPoseMove	pose move of the previous displayed frame (blending)
+0x182C	s32	lastPoseFrame	pose frame of the previous displayed frame (blending)
+0x1868	s16[3]	blendRootDelta
+0x186E	s16	blendWeight	4096 * counter / frames
+0x1870	s32	blendFrames
+0x1878	s32	blendCounter
+0x187C	void*	blendSrcMove
+0x1880	void*	blendDstMove
+0x1884	u8	blendSrcFrame
+0x1885	u8	blendDstFrame
+0x014	s16	costumeKey	charId*4 + costume: index into g_charRecords
+0x01A	s16	voiceSet	character record +8: index into g_charVoices
+0x0D5	u8	bodyContact	pushed apart by BodySeparate this frame (conditions 0x33/0x34); cleared by FUN_80043F40
+0x0D6	u8[3]	bodyContactWith	per other fighter index
+0x0D9	u8	noBodyPush	set by ArenaBounds when crossing the Tekken Ball court; body separation skipped when both are set
+0x0E0	u8	tapLP	LatchButtonTaps: LP newly pressed; all three cleared once no punch button is newly pressed (conditions 0x3A-0x3C)
+0x0E1	u8	tapRP
+0x0E2	u8	tapBoth	LP and RP held with one of them newly pressed
+0x3E8	s32	bodyPushX	BodySeparate correction added to anchor and root
+0x3EC	s32	bodyPushY
+0x3F0	s32	bodyPushZ
+0x01F	u8	curOppIndex	the opponent currently faced (FightFrame, FUN_8002BFCC); in mode 8 it follows target changes (side flag, Force AI)
+0x044	s16	roundWins	rounds won in the match; +1 per round won, both on a draw (FUN_8003E7C4); compared with the rounds to win 0x800AE2C4; saved and restored around a fighter reload (FUN_8002A5D8/FUN_8002A634)
+0x046	s16	roundWon	round result (FUN_8003E7C4): 1 won, −1 lost; a draw gives both −1, or 1 to a side that reaches the rounds to win
+0x048	s16	winPose	win-pose variant, 1 + frame parity (FUN_8003EB60); after a time-out the loser's −1 (both 0 when tied, FUN_8003EBF4); the round end waits until a positive variant's move has played
+0x05A	s16	eventFrame	the pose frame when the frame events last ran (MoveEvents runs the events after it up to the pose frame; blend source frame = value − 1)
+0x085	u8	hitDone2	this move already hit Tekken Force fighter 2 (HitTest, index - 2)
+0x086	u8	hitDone3	the same for fighter 3; also set to 1 when a queued move starts
+0x0BA	u8	moveFlagBA	cleared at move start and at reset
+0x0BB	u8	moveFlagBB	cleared at reset
+0x0BC	u8	skipStepPhysics	cleared at move start; FighterMovePhysics skips its step handling while set
+0x0BD	u8	attackPending	1 while the running move's damage is still to come or the opponent's power timer runs
+0x0C0	u8	resetFlagC0	cleared at reset; no reader found
+0x0C9	u8	noLookAt	disables the head look-at (and Gon's eyes); in mode 8 set for CPU and fixed-facing fighters
+0x0CC	s16	lastExtraDamage	HitExtraDamage of the last HitApply
+0x3A4	s32[3]	prevHurtZone	copy of the first hurt-zone words from the previous CollisionShapesUpdate
+0x3B8	s32	prevRootX	root of the previous frame (FighterVelocity)
+0x3BC	s32	prevRootY
+0x3C0	s32	prevRootZ
+0x3FC	s32	carriedHealth	health carried into the next round when 0x800AFF59 is set (FUN_8002BFCC)
+0x400	s16	healthLeft	health in 1/4096 of the maximum at the round result (FUN_8003E6D0); cleared at reset
+0x408	u16	scriptInput	scripted input word (input mode 2: demo, practice dummy)
+0x410	s32	cmdCount	command-buffer entries (at most 9)
+0x414	s32	cmdRead	command-buffer read count
+0x418	s32	cmdMergeTimer	presses within 3 frames merge into the last entry
+0x458	u8[10]	cmdBuffer	entries 1-9: held << 4 | direction while a move with flag 0x2000 runs
+0x462	u16[60]	inPressedHist	raw pressed pad words of the last 60 frames (ring, index +0x40C)
+0x4DC	s32[4]	pressCount	presses of LP, RP, LK, RK within the 60-frame window
+0x127A	s16	screenXCopy	screen x stored by FighterDrawParts for bank-type 11 fighters
+0x128A	u8	airFree	airborne and not in a reaction (FighterMovePhysics)
+0x128B	u8	setupFlag128B	cleared by FighterSetupParts
+0x12D0	u8[4]	ogreFreezeFlags	set while in hit freeze against bank 14 (Ogre), else cleared (FighterMovePhysics)
+0x12D4	u8[4]	composeFlags	cleared by FighterComposeJoints each frame
+0x1886	s8	aiSlot	AI record slot, -1 without one (AiInitRound)
+0x1887	s8	aiTarget	index of the fighter the AI targets (AiInitRound)
+0x1888	u8	keepLight	set while the body burns: back colour black (FUN_8003A564), FUN_8003A3B8 skipped
+0x11B4	u8[32]	attachLocal	local joint rotation of the first attached part (parts 18+, FighterComposeJoints)

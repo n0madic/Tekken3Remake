@@ -1,0 +1,33 @@
+# Original disc images: never commit
+*.bin
+*.cue
+*.ecm
+*.ape
+*.flac
+*.chd
+*.iso
+*.img
+*.rar
+*.zip
+
+# Extracted and converted game data: never commit
+/work/
+/remake/imported/
+
+# Godot
+/remake/.godot/
+/remake/export/*
+!/remake/export/.gdignore
+*.pck
+# Compiled from app/translations.csv at import
+/remake/app/*.translation
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+.claude/
+.scratch/
+
+.DS_Store

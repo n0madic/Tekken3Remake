@@ -1,0 +1,15 @@
+{
+ "about": "Generic English interface wording of the USA release (code/usa-version.md), kept in the project so that the English menus work without the USA conversion. Per game memory block: the Japanese release's string body (without its leading format codes) and its English one. Names, titles, credits, move lists and pictures come only from the USA disc (tools/remake_import/usa.py).",
+ "blocks": {
+  "exe": {"SOLD OUT": "SELECTED", "HOW TO": "RULES"},
+  "force": {"CHALLENGE FINAL STAGE!!": "FINAL STAGE CHALLENGE!!", "LIFE UP!": " +LIFE!"},
+  "practice": {"FREE": "1P FREESTYLE", "FREEZE SIGNAL": "HIT ANALYSIS", "REPLAY SETTINGS": "COMBO REPLAY",
+   "TECH ROLL u": "QUICK ROLL u", "TECH ROLL d": "QUICK ROLL d"},
+  "result": {"TEAM BATTLE RESULT": "TEAM BATTLE RESULTS", "SURVIVAL RESULT": "SURVIVAL RESULTS"},
+  "title": {"ARRANGE": "REMIXED", "WINNING AVERAGE DATA": "WIN AVERAGE DATA", "CHARACTERS DATA": "CHARACTER USAGE DATA"},
+  "ending": {"SOUND": "MUSIC", "ARRANGE": "REMIXED"}
+ },
+ "theater_help": ["", "", "", "", "RETURN TO THEATER MODE SCREEN", "MUSIC PLAYER", "SELECT MUSIC MODE", "RETURN TO TITLE SCREEN"],
+ "practice_prompt": "PLAY(SEL) REC(d+SEL)",
+ "record_rank": "%2d%s"
+}

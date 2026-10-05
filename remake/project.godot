@@ -1,0 +1,51 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="Tekken 3 Remake"
+config/description="A remake of Tekken 3 (PlayStation, Japan Rev.1) built from the research documentation."
+run/main_scene="res://app/game.tscn"
+config/features=PackedStringArray("4.7", "Forward Plus")
+config/icon="res://imported/icon.png"
+config/quit_on_go_back=false
+
+[autoload]
+
+Assets="*res://platform/asset_catalog.gd"
+Pads="*res://platform/input_router.gd"
+Settings="*res://platform/settings.gd"
+
+[debug]
+
+gdscript/warnings/untyped_declaration=2
+gdscript/warnings/unsafe_property_access=2
+gdscript/warnings/unsafe_method_access=2
+gdscript/warnings/unsafe_cast=1
+gdscript/warnings/unsafe_call_argument=2
+gdscript/warnings/integer_division=0
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/handheld/orientation=4
+
+[internationalization]
+
+locale/translations=PackedStringArray("res://app/translations.en.translation", "res://app/translations.ja.translation")
+
+[physics]
+
+common/max_physics_steps_per_frame=4
+
+[rendering]
+
+textures/vram_compression/import_etc2_astc=true

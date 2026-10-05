@@ -1,0 +1,5 @@
+# overlay  extra entry points (comma-separated) that auto-analysis misses: targets of computed jumps, or functions placed right after another one (result, ranking)
+practice 0x800B4EF8
+result 0x800F28E8,0x800F2988
+ranking 0x800C2108
+ending 0x80114494,0x801144B0,0x8011484C
