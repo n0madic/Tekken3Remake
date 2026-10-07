@@ -86,6 +86,26 @@ func test_only_the_sun_reaches_the_fighters() -> void:
 	lighting.free()
 
 
+## The sun takes the shadow biases of the preset in effect; the web preset raises Godot's defaults
+## and filters its samples against the Compatibility renderer's shadow acne (stripes of texels on
+## the fighters' slanted faces with smooth normals).
+func test_sun_takes_the_presets_shadow_biases() -> void:
+	var camera := Camera3D.new()
+	var lighting := StageLighting.new()
+	lighting.setup(_stage(4), camera)
+	var p := RenderQuality.current()
+	# The light keeps its parameters in single precision.
+	expect(is_equal_approx(lighting.sun.shadow_bias, p.get("shadow_bias", RenderQuality.SHADOW_BIAS) as float), "depth bias")
+	expect(is_equal_approx(lighting.sun.shadow_normal_bias,
+		p.get("shadow_normal_bias", RenderQuality.SHADOW_NORMAL_BIAS) as float), "normal bias")
+	var web: Dictionary = RenderQuality.PRESETS["web"]
+	expect((web["shadow_bias"] as float) > RenderQuality.SHADOW_BIAS, "web: a larger depth bias")
+	expect((web["shadow_normal_bias"] as float) > RenderQuality.SHADOW_NORMAL_BIAS, "web: a larger normal bias")
+	expect((web["soft"] as int) >= RenderingServer.SHADOW_QUALITY_SOFT_LOW, "web: filtered shadow samples")
+	camera.free()
+	lighting.free()
+
+
 ## Every mesh of a fighter is on the fighters' layer (hands included), or it would be lit twice
 ## (with the fill light) or not by the sun.
 func test_fighter_meshes_are_on_the_fighters_layer() -> void:

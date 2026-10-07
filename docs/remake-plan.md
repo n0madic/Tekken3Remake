@@ -293,7 +293,7 @@ The original frames every shot for a 4:3 screen, and its scene only exists where
 
 | Preset | Renderer | Features |
 |---|---|---|
-| Web | Compatibility | Shadow maps (2k), basic bloom, MSAA 2×; no SSAO or GI. |
+| Web | Compatibility | Shadow maps (2k, 5-sample filter, larger biases against self-shadowing stripes), basic bloom, MSAA 2×; no SSAO or GI. |
 | Mobile Standard / High | Mobile | Standard: shadows (2k), bloom, MSAA 2×, the 3D view at 85 % (bilinear: FSR is Forward+ only). High: soft 4k shadows, MSAA 4×, the 3D view at full size (the Mobile renderer has no SSAO or SSIL). |
 | Desktop Low / High | Forward+ | Low: shadows (2k), bloom, MSAA 2×. High: soft 4k shadows, MSAA 4×, SSAO and screen-space indirect light (SSIL). |
 

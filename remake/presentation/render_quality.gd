@@ -6,15 +6,27 @@ extends RefCounted
 ## packs (TexturePacks). Presets change only the look, never the game.
 ##
 ## | Preset       | Renderer      | Features                                                        |
-## | web          | Compatibility | shadow maps, basic bloom, MSAA 2×                              |
+## | web          | Compatibility | filtered shadow maps, basic bloom, MSAA 2×                     |
 ## | mobile       | Mobile        | shadows, bloom, MSAA 2×, the 3D view at 85 % (bilinear)       |
 ## | mobile_high  | Mobile        | soft 4k shadows, bloom, MSAA 4×, the 3D view at full size      |
 ## | desktop_low  | Forward+      | shadows, bloom, MSAA 2×                                        |
 ## | desktop_high | Forward+      | soft 4k shadows, bloom, MSAA 4×, SSAO, SSIL                    |
 
+## The main light's shadow biases (Godot's DirectionalLight3D defaults) where a preset sets none.
+const SHADOW_BIAS := 0.1
+const SHADOW_NORMAL_BIAS := 2.0
+
 const PRESETS := {
-	"web": {"msaa": Viewport.MSAA_2X, "shadow_size": 2048, "soft": RenderingServer.SHADOW_QUALITY_SOFT_VERY_LOW,
-		"glow": 0.5, "scale": 1.0},
+	# The Compatibility renderer offsets its shadow lookups along the vertex normal, by less the more
+	# that normal faces the light. With smooth normals (the Shading setting) a flat face slanted to
+	# the light gets almost no offset, and with the default biases and one unfiltered sample the
+	# fighters shadow themselves in rows of shadow-map texels (shadow acne), largest where the camera
+	# is far and the texels are coarse (the demonstration's close-ups). Larger biases and the
+	# 5-sample filter clear them, but for faint steps where the light grazes a limb, while the
+	# floor shadows still meet the feet. Changing the fighter shader instead (ignoring or forcing
+	# the shadow on faces turned from the light) shows the flat faces.
+	"web": {"msaa": Viewport.MSAA_2X, "shadow_size": 2048, "soft": RenderingServer.SHADOW_QUALITY_SOFT_LOW,
+		"glow": 0.5, "scale": 1.0, "shadow_bias": 2.0, "shadow_normal_bias": 4.0},
 	"mobile": {"msaa": Viewport.MSAA_2X, "shadow_size": 2048, "soft": RenderingServer.SHADOW_QUALITY_SOFT_VERY_LOW,
 		"glow": 0.5, "scale": 0.85},
 	# The Mobile renderer has no SSAO, SSIL or SSR: its best is sharper shadows and edges at full size.
@@ -48,8 +60,11 @@ static func apply_environment(env: Environment) -> void:
 
 
 static func apply_light(light: DirectionalLight3D) -> void:
-	var soft: int = current()["soft"]
+	var p := current()
+	var soft: int = p["soft"]
 	light.shadow_blur = 1.5 if soft >= RenderingServer.SHADOW_QUALITY_SOFT_HIGH else 1.0
+	light.shadow_bias = p.get("shadow_bias", SHADOW_BIAS) as float
+	light.shadow_normal_bias = p.get("shadow_normal_bias", SHADOW_NORMAL_BIAS) as float
 
 
 ## The window's viewport and the shadow atlas.
