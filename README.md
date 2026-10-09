@@ -215,10 +215,10 @@ Tekken 3 is © Bandai Namco Entertainment. This project is an unofficial fan wor
 with or endorsed by Bandai Namco.
 
 **The project's code and documentation** are licensed under the
-[PolyForm Noncommercial License 1.0.0](LICENSE.md) (SPDX: `PolyForm-Noncommercial-1.0.0`) from
-commit `31e937c` (5 October 2026) on: any noncommercial use, including by noncommercial
-organizations, with modification and redistribution under its terms; no commercial use. Revisions
-before that commit were released under the MIT License, and stay under it.
+[PolyForm Noncommercial License 1.0.0](LICENSE.md) (SPDX: `PolyForm-Noncommercial-1.0.0`):
+any noncommercial use, including by noncommercial organizations, with modification and
+redistribution under its terms; no commercial use. Revisions before that commit were released
+under the MIT License, and stay under it.
 
 **The game is not covered by that licence.** Its data, and any build that contains it, stay
 Bandai Namco's; so do the game texts the repository quotes, such as the USA release's interface
