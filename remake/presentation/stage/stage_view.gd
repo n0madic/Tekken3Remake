@@ -20,7 +20,8 @@ extends Node3D
 ## (step: the carousel, and the helicopter after a round's end and in replays); the sky is the
 ## environment's background (apply_environment), and the floor is the arcade's pattern of
 ## 2,500-unit tiles, 10 × 10 around the fighters as in the game, with the scene's ground beyond
-## it. Every tile shows its quarter-tile texture: the arcade's own budget of 11 split tiles a frame
+## it; its square is centred on the midpoint and turned with the scene, not snapped to the tiles
+## in world axes as in the arcade (game-bugs.md #67: the corners showed the sky). Every tile shows its quarter-tile texture: the arcade's own budget of 11 split tiles a frame
 ## (FUN_801A941C, the others at half the resolution) is not reproduced.
 
 const PANORAMA_SHADER := preload("res://presentation/stage/panorama.gdshader")
@@ -53,7 +54,6 @@ var props: ArcadeProps                 ## the arcade's animated props, or null
 var prop_nodes: Array[MeshInstance3D] = []
 var _round := -1                       ## the round the props were started for
 var _environment: Environment          ## the view's environment, its background the sky while shown
-var _target := Vector3.ZERO            ## the fighters' midpoint (Godot space)
 var _view_pitch := 0                   ## the camera's pitch of the last step (the sky's top edge)
 var _backdrop_turn := 0                ## the backdrop's turn of the last step (the sky turns with it)
 
@@ -99,28 +99,15 @@ func setup(stage: StageData) -> void:
 
 ## Keeps the panorama and the floor around the fighters' midpoint (Godot units, x and z): the
 ## game centres its floor grid under the fighters every frame, so the floor never ends. The
-## floor's pattern comes from the world position and stays in place. The arcade's floor is its
-## 10 × 10 tiles around the tile under the midpoint, so it moves by whole tiles.
+## floor's pattern comes from the world position and stays in place. The arcade's floor (10 × 10
+## tiles around the tile under the midpoint, FUN_801A941C) is centred on the midpoint here and
+## turns with the scene (set_backdrop_turn), so its edge stays under the scene's walls
+## (game-bugs.md #67).
 func follow(midpoint: Vector3) -> void:
-	_target = midpoint
 	panorama.position.x = midpoint.x
 	panorama.position.z = midpoint.z
-	var centre := midpoint
-	if arcade != null:
-		var tile := arcade.floor_tile_size
-		var origin := floor_grid_origin()
-		centre = WorldSpace.point(tile * (origin.x + FLOOR_PATTERN / 2), 0, tile * (origin.y + FLOOR_PATTERN / 2))
-	floor_mesh.position.x = centre.x
-	floor_mesh.position.z = centre.z
-
-
-## The arcade floor grid's first tile (x, z in tiles of the game's grid; FUN_801A941C draws
-## FLOOR_PATTERN × FLOOR_PATTERN tiles around the one under the fighters' midpoint).
-func floor_grid_origin() -> Vector2i:
-	var tile := arcade.floor_tile_size
-	var half := FLOOR_PATTERN / 2
-	return Vector2i(floori((_target.x * WorldSpace.UNITS_PER_METRE + tile / 2.0) / tile) - half,
-		floori((-_target.z * WorldSpace.UNITS_PER_METRE + tile / 2.0) / tile) - half)
+	floor_mesh.position.x = midpoint.x
+	floor_mesh.position.z = midpoint.z
 
 
 static func _panorama_mesh(stage: StageData) -> ArrayMesh:
@@ -446,9 +433,12 @@ static func _table_texture(path: String) -> ImageTexture:
 
 
 ## The panorama's turn of this step (BackdropTurn.angle, 4096 units); the arcade's sky turns
-## with it (FUN_801D8FD0 draws it with the camera's yaw minus the turn).
+## with it (FUN_801D8FD0 draws it with the camera's yaw minus the turn), and so does its floor's
+## outline (the pattern stays in world axes: game-bugs.md #67).
 func set_backdrop_turn(angle: int) -> void:
 	panorama.rotation.y = WorldSpace.radians(angle)
+	if arcade != null:
+		floor_mesh.rotation.y = panorama.rotation.y
 	_backdrop_turn = angle
 	if sky_material != null:
 		sky_material.set_shader_parameter("turn", float(angle))

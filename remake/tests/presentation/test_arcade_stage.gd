@@ -138,9 +138,10 @@ func test_texture_animation_cycles_every_period() -> void:
 	_free(view)
 
 
-## The arcade floor is the 10 × 10 tiles around the tile under the midpoint (FUN_801A941C): it
-## moves by whole tiles, and every tile shows the quarter-tile pattern.
-func test_floor_follows_by_whole_tiles() -> void:
+## The arcade floor's square (10 × 10 tiles) is centred on the midpoint and turns with the scene,
+## so its edge stays under the scene's walls (game-bugs.md #67); its pattern stays in world axes
+## (the shader reads the world position), and every tile shows the quarter-tile pattern.
+func test_floor_square_follows_the_scene() -> void:
 	var dir := AssetCatalog.ROOT.path_join("stages/a")
 	if not require(dir.path_join("arcade/arcade.json")):
 		return
@@ -149,11 +150,12 @@ func test_floor_follows_by_whole_tiles() -> void:
 	var view := StageView.new()
 	view.setup(StageData.load_from(dir))
 	Settings.values["stage_backdrops"] = saved
-	view.follow(WorldSpace.point(1200, 0, -1200))
-	expect(view.floor_mesh.position.is_equal_approx(Vector3.ZERO), "under tile (0, 0): %s" % view.floor_mesh.position)
-	view.follow(WorldSpace.point(1300, 0, 0))
-	expect(view.floor_mesh.position.is_equal_approx(WorldSpace.point(2500, 0, 0)), "under tile (1, 0): %s" % view.floor_mesh.position)
-	expect_equal(view.floor_grid_origin(), Vector2i(-4, -5), "the grid from tile (−4, −5)")
+	var midpoint := WorldSpace.point(1300, 0, -1200)
+	view.follow(midpoint)
+	expect(view.floor_mesh.position.is_equal_approx(midpoint), "centred on the midpoint: %s" % view.floor_mesh.position)
+	view.set_backdrop_turn(0x80)
+	expect(is_equal_approx(view.floor_mesh.rotation.y, view.panorama.rotation.y), "turned with the scene")
+	expect(view.floor_mesh.rotation.y != 0.0, "the turn applied")
 	var material := (view.floor_mesh.mesh as ArrayMesh).surface_get_material(0) as ShaderMaterial
 	var pattern := material.get_shader_parameter("pattern") as Texture2D
 	expect(pattern != null and pattern.get_width() == StageView.FLOOR_PATTERN * 128, "the quarter-tile pattern on every tile")
