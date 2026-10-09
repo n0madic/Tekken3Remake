@@ -155,7 +155,6 @@ func _physics_process(_delta: float) -> void:
 	view.stage_view.follow(Vector3.ZERO)
 	view.stage_view.set_floor_distance(float(distance))
 	view.stage_view.set_backdrop_turn(shown_turn & TURN_MAX)
-	view.stage_view.set_view_pitch(pitch)
 	view.stage_view.step(shown_yaw & 0xFFF)
 	_spotlight()
 

@@ -35,7 +35,6 @@ const TILED_FLOOR_HALF := 60000
 const FLOOR_FADE_FILE := "floor_fade.json"
 const ARCADE_SCENE_SHADER := preload("res://presentation/stage/arcade_scene.gdshader")
 const ARCADE_SKY_SHADER := preload("res://presentation/stage/arcade_sky.gdshader")
-const SKY_SCREEN_CENTRE := 240     ## the arcade's projection centre row (480-line display)
 const SKY_KINDS := {"tiles": 0, "gradient": 1, "fill": 2}
 const ANGLE_HALF := 2048           ## 4096-unit angles wrap to −2048 … 2047
 const FADE_SCALE := 0x4000000      ## FloorDrawGrid: the table index is depth · (FADE_SCALE / fade) >> 16
@@ -54,7 +53,6 @@ var props: ArcadeProps                 ## the arcade's animated props, or null
 var prop_nodes: Array[MeshInstance3D] = []
 var _round := -1                       ## the round the props were started for
 var _environment: Environment          ## the view's environment, its background the sky while shown
-var _view_pitch := 0                   ## the camera's pitch of the last step (the sky's top edge)
 var _backdrop_turn := 0                ## the backdrop's turn of the last step (the sky turns with it)
 
 
@@ -240,11 +238,6 @@ static func _arcade_sine_table(stages_dir: String) -> PackedInt32Array:
 	return _arcade_sine
 
 
-## The pitch of `camera` (4096 units, positive looking down, as CameraView's).
-static func camera_pitch(camera: Camera3D) -> int:
-	return roundi(asin(clampf(camera.global_basis.z.y, -1.0, 1.0)) * WorldSpace.ANGLE_UNITS / TAU)
-
-
 ## The floor's kind of this stage as drawn (stages.md#floor; the arcade's own when it is drawn).
 func floor_kind() -> int:
 	return arcade.floor_kind if arcade != null else _stage.floor_kind
@@ -280,25 +273,31 @@ func _show_sky() -> void:
 		_environment.background_mode = Environment.BG_SKY if is_visible_in_tree() else Environment.BG_COLOR
 
 
-## The camera's pitch of this step (4096 units): where the sky's top edge stands after the
-## stage's clamps (FUN_801A7688: the top row lies −pitch · k / 256 + offset lines down the
-## 480-line display; stages 0, 3, 5 and 11 keep it at or above the screen's top, 11 not
-## more than 192 lines above).
-func set_view_pitch(pitch: int) -> void:
-	_view_pitch = pitch
+## Every rendered frame: the arcade sky's layout for `camera`, whose original 4:3 frame spans
+## ±frame_tan in view-plane units (CameraRig.frame_tan). FUN_801A7688 scrolls the picture by the
+## camera's yaw (minus the backdrop's turn) and pitch: the frame's left edge shows strip pixel
+## ((−yaw) & 0xFFF)·512 / step, and the top row lies −pitch · k / 256 + offset lines down the
+## 480-line frame; stages 0, 3, 5 and 11 keep it at or above the frame's top, 11 not more than 192
+## lines above.
+func place_sky(camera: Camera3D, frame_tan: Vector2) -> void:
 	if sky_material == null:
 		return
-	var k := float(JsonFile.number(arcade.sky.get("pitch_scale", 0)))
-	if k <= 0.0:
-		return
-	var p := wrapi(pitch, -ANGLE_HALF, ANGLE_HALF)
-	var y := int(-p * k / 256.0) + JsonFile.number(arcade.sky.get("offset", 0))
-	if arcade.sky.get("clamp_top", false) or str(arcade.sky.get("kind", "")) == "gradient":
-		y = mini(y, 0)
-	var bottom: Variant = arcade.sky.get("clamp_bottom")
+	var b := camera.global_basis
+	var yaw := atan2(b.z.x, b.z.z) * WorldSpace.ANGLE_UNITS / TAU
+	var pitch := wrapf(asin(clampf(b.z.y, -1.0, 1.0)) * WorldSpace.ANGLE_UNITS / TAU, -ANGLE_HALF, ANGLE_HALF)
+	var sky := arcade.sky
+	var step := float(JsonFile.number(sky.get("step", 1)))
+	var k := float(JsonFile.number(sky.get("pitch_scale", 0)))
+	var y := -pitch * k / 256.0 + JsonFile.number(sky.get("offset", 0))
+	if sky.get("clamp_top", false) or str(sky.get("kind", "")) == "gradient":
+		y = minf(y, 0.0)
+	var bottom: Variant = sky.get("clamp_bottom")
 	if bottom != null:
-		y = maxi(y, JsonFile.number(bottom))
-	sky_material.set_shader_parameter("top", -p + (SKY_SCREEN_CENTRE - y) * 256.0 / k)
+		y = maxf(y, JsonFile.number(bottom))
+	sky_material.set_shader_parameter("view", b.inverse())
+	sky_material.set_shader_parameter("frame_tan", frame_tan)
+	sky_material.set_shader_parameter("scroll", fposmod(_backdrop_turn - yaw, WorldSpace.ANGLE_UNITS) * 512.0 / step)
+	sky_material.set_shader_parameter("sky_top", y)
 
 
 func _sky_parameters() -> void:
@@ -307,8 +306,7 @@ func _sky_parameters() -> void:
 	sky_material.set_shader_parameter("kind", SKY_KINDS.get(str(sky.get("kind", "tiles")), 0))
 	if sky.has("texture"):
 		sky_material.set_shader_parameter("strip", TexturePacks.texture(arcade.directory.path_join(str(sky["texture"]))))
-	sky_material.set_shader_parameter("yaw_step", float(JsonFile.number(sky.get("step", 1))))
-	sky_material.set_shader_parameter("pitch_scale", float(JsonFile.number(sky.get("pitch_scale", 256))))
+	sky_material.set_shader_parameter("turn_pixels", sky.get("turn_pixels", 4096.0) as float)
 	sky_material.set_shader_parameter("rows", float(JsonFile.number(sky.get("rows", 0))))
 	sky_material.set_shader_parameter("upper_fill", _fill(sky.get("upper_fill")))
 	sky_material.set_shader_parameter("lower_fill", _fill(sky.get("lower_fill")))
@@ -317,8 +315,6 @@ func _sky_parameters() -> void:
 		var stops: Array = gradient
 		sky_material.set_shader_parameter("gradient_top", _fill(stops[0]))
 		sky_material.set_shader_parameter("gradient_bottom", _fill(stops[1]))
-	set_view_pitch(_view_pitch)
-	sky_material.set_shader_parameter("turn", float(_backdrop_turn))
 
 
 ## An RGB fill (enabled: alpha 1) or none (alpha 0).
@@ -433,15 +429,13 @@ static func _table_texture(path: String) -> ImageTexture:
 
 
 ## The panorama's turn of this step (BackdropTurn.angle, 4096 units); the arcade's sky turns
-## with it (FUN_801D8FD0 draws it with the camera's yaw minus the turn), and so does its floor's
+## with it (FUN_801D8FD0 draws it with the camera's yaw minus the turn: place_sky), and so does its floor's
 ## outline (the pattern stays in world axes: game-bugs.md #67).
 func set_backdrop_turn(angle: int) -> void:
 	panorama.rotation.y = WorldSpace.radians(angle)
 	if arcade != null:
 		floor_mesh.rotation.y = panorama.rotation.y
 	_backdrop_turn = angle
-	if sky_material != null:
-		sky_material.set_shader_parameter("turn", float(angle))
 
 
 ## The camera's horizontal distance to the fighters' midpoint (game units) of this step, from

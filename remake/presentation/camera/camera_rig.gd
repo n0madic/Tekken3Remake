@@ -23,6 +23,8 @@ var coverage := PackedInt32Array()   ## per direction: highest covered elevation
 var visible_rect := Rect2(0, 0, 1, 1)
 ## Where the original 4:3 frame lies in the window (normalised): the HUD's frame.
 var frame_rect := Rect2(0, 0, 1, 1)
+## The 4:3 frame's half extent in view-plane units (±184/H, ±138/H): the arcade sky's screen.
+var frame_tan := Vector2(HALF_WIDTH, HALF_HEIGHT) / 500.0
 var _previous: CameraView
 var _current: CameraView
 
@@ -68,6 +70,7 @@ static func view_basis(pitch: float, yaw: float) -> Basis:
 func _project(h: float, pitch: float, yaw: float, window: Vector2) -> void:
 	var tan_x := HALF_WIDTH / h
 	var tan_y := HALF_HEIGHT / h
+	frame_tan = Vector2(tan_x, tan_y)
 	var aspect := window.x / maxf(window.y, 1.0)
 	var base := tan_x / tan_y
 	if aspect >= base:

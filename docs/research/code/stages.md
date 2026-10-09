@@ -41,7 +41,7 @@ Status: resource mapping, grid layout, floor descriptor and floor kinds `confirm
 
 ## Clear colour
 
-The background behind the panorama is a full-screen `TILE` per display buffer (`0x8009EAE0`, built by `FUN_80048548` after the panorama is set up). It is black, except (72, 104, 200) on stage 11 when `0x800AFF68` is clear. `FUN_8006DAB4` links it at the scene ordering table's last entry (`+0xFFC`, drawn first) on stage 11, whose panorama goes to entry `+0xFF4` instead of `+0xFC8`, and in True Ogre fights, which draw no panorama.
+The background behind the panorama is a full-screen `TILE` per display buffer (`0x8009EAE0`, built by `FUN_80048548` after the panorama is set up). It is black, except (72, 104, 200) on stage 11 when `0x800AFF68` is clear. `FUN_8006DAB4` links it at the scene ordering table's last entry (`+0xFFC`, drawn first) on stage 11, whose panorama goes to entry `+0xFF4` instead of `+0xFC8`, and in True Ogre fights, which draw no panorama. Stage 11's floor tiles are grates (texels of value 0, which the GPU leaves undrawn), so the colour shows through the floor there (`inferred` from the tiles and the remake's drawing).
 
 `StageSelectFloor` (`0x80048324`) → `FUN_80048648` prepares a second pair of tiles (`0x8009EB00`): a 368 × 80 band at y 280 in the stage's colour from `0x80097E88` (stages 0–14; black for the others). `CameraFrame` links the band at the same last entry while the counter `0x8009EB20` runs (`FUN_80048708`). `FUN_80048760` sets it to 2 (not in True Ogre fights) when the pause menu or practice's menu hands the screen back, and on every frame of the ranking pages drawn over the 3D backdrop:
 

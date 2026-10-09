@@ -180,8 +180,9 @@ func _place_camera() -> void:
 	var offset := Vector3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch)) * distance
 	camera.position = ORBIT_TARGET + offset
 	camera.look_at(ORBIT_TARGET)
-	# The arcade stage's sky follows the view.
-	stage_view.set_view_pitch(StageView.camera_pitch(camera))
+	# The arcade stage's sky follows the view (the camera's own height stands for the 4:3 frame's).
+	var tan_y := tan(deg_to_rad(camera.fov) / 2.0)
+	stage_view.place_sky(camera, Vector2(tan_y * CameraRig.HALF_WIDTH / CameraRig.HALF_HEIGHT, tan_y))
 
 
 func _update_info() -> void:

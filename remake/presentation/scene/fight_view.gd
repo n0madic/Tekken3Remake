@@ -199,7 +199,6 @@ func apply(sim: FightSimulation) -> void:
 	_spotlight(sim)
 	stage_view.set_floor_distance(_floor_distance(sim))
 	stage_view.set_backdrop_turn(sim.fight.backdrop.angle)
-	stage_view.set_view_pitch(v.pitch)
 	stage_view.step(v.yaw, sim.fight.rounds_played, sim.fight.round_state, sim.pads.physical[0])
 	if tiled != null:
 		tiled.step(sim)
@@ -263,6 +262,7 @@ func interpolate(weight: float, window: Vector2) -> void:
 		if view.visible:
 			view.show_between(weight)
 	rig.place(weight, window)
+	stage_view.place_sky(rig.camera, rig.frame_tan)
 	# FUN_80036254: under the overhead KO camera the fighters are drawn ViewMatrix.OVERHEAD_DEPTH
 	# units nearer to it (along the view axis).
 	var toward := rig.camera.global_basis.z * (ViewMatrix.OVERHEAD_DEPTH / WorldSpace.UNITS_PER_METRE) if _overhead else Vector3.ZERO

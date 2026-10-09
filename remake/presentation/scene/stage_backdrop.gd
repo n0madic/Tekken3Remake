@@ -25,9 +25,9 @@ func setup(stage: StageData) -> void:
 ## After a step: the view of this frame (`cut`: no interpolation into it).
 func show_view(view: CameraView, cut: bool) -> void:
 	rig.set_view(view, cut)
-	stage_view.set_view_pitch(view.pitch)
 	stage_view.step()
 
 
 func interpolate(weight: float, window: Vector2) -> void:
 	rig.place(weight, window)
+	stage_view.place_sky(rig.camera, rig.frame_tan)

@@ -8,8 +8,8 @@ taken from the ordering table, drawn in order into a 512 × 480 frame from the s
 compared with the converter's model: the strip `arcade.sky` bakes (without its retouch of the
 skipped cells, which the arcade leaves undrawn: `retouch=False`), scrolled to
 ((−yaw) & 0xFFF)·512 / step columns, its top row at the clamped −pitch·k / 256 + offset lines,
-with the upper and lower fills around it (what StageView.set_view_pitch and arcade_sky.gdshader
-draw).
+with the upper and lower fills around it (what StageView.place_sky and arcade_sky.gdshader
+draw on the 4:3 frame).
 
 The game fills 't' and 'd' cells with one tile primitive per screen slot (row, ninth of the
 row): a 'd' cell sets that tile's colour to the lower colour and a 't' cell draws it without

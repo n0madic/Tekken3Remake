@@ -2,7 +2,8 @@ shader_type spatial;
 // The stage floor: the converted 10 × 10 tile pattern repeating over the ground up to and
 // under the panorama walls. Texture coordinates come from the world position:
 // u = x / size + 0.5, v = z / size + 0.5 in Godot space (the pattern's rows run towards
-// the game's −z), so the tiles show no seams.
+// the game's −z), so the tiles show no seams. Texels of value 0 are transparent on the GPU
+// (alpha 0 in the converted pattern): stage 11's grates show what lies below through them.
 
 #ifdef CRISP
 uniform sampler2D pattern : source_color, filter_nearest_mipmap, repeat_enable;
@@ -40,7 +41,10 @@ void fragment() {
 		discard;
 	}
 	vec2 uv = world_position.xz / pattern_size + 0.5;
-	ALBEDO = texture(pattern, uv).rgb;
+	vec4 texel = texture(pattern, uv);
+	ALBEDO = texel.rgb;
+	ALPHA = texel.a;
+	ALPHA_SCISSOR_THRESHOLD = 0.5;
 	if (spot_kind != 0) {
 		vec2 a = world_position.xz - spot_lights.xy;
 		float level = spot_k / max(dot(a, a), 1.0e-6);

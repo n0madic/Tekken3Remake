@@ -64,7 +64,6 @@ func apply(perf: EnbuPerformance) -> void:
 	stage_view.step()
 	if perf.camera_drawn != null:
 		rig.set_view(perf.camera_drawn, perf.camera_drawn.cut)
-		stage_view.set_view_pitch(perf.camera_drawn.pitch)
 
 
 ## Every rendered frame: the pose and camera between the last two steps.
@@ -73,6 +72,7 @@ func interpolate(weight: float, window: Vector2) -> void:
 		if view != null and view.visible:
 			view.show_between(weight)
 	rig.place(weight, window)
+	stage_view.place_sky(rig.camera, rig.frame_tan)
 
 
 func _view(fighter: int, slot: int) -> FighterView:

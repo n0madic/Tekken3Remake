@@ -115,7 +115,7 @@ The floor is the PlayStation's design ([stages.md](../code/stages.md#floor)) wit
 | `0xFA6` | `s16` distance shading factor (−25 … −76). |
 | `0xFA8` | `s16` non-zero: an extra per-frame effect (`FUN_801A84A8`). |
 
-The floor tiles are the last 64 × 64 TIMs of the stage's TIM blocks.
+The floor tiles are the last 64 × 64 TIMs of the stage's TIM blocks. Texels of value 0 are transparent on the GPU: stage 11's tiles are grates (30 % of the pattern) through which the sky and the tower below show.
 
 ## Extras
 
