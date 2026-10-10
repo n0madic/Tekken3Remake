@@ -163,7 +163,9 @@ func _continue(first: bool) -> void:
 	var r := _continue_countdown(region.match_loser)
 	if r == 1 or r == 2:
 		g.sub = Sub.NEXT_FIGHT if r == 1 else Sub.SELECT
-		region.continuing = 0
+		# region.continuing = 0 DO NOT CLEAR CONTINUE HERE
+		if r == 2:
+			region.continuing = 0
 		g.globals.set_tie_winner(g.fight, region.match_winner)
 	elif r != 0:
 		g.sub = Sub.GAME_OVER_START

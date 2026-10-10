@@ -406,7 +406,12 @@ func round_start() -> void:
 		ball.fight_start(self)
 	if fight.mode == GameMode.PRACTICE and practice != null:
 		practice.setup()
-	events.add(SimEvents.Kind.MUSIC, -1, fight.music)
+	if fight.region.continuing != 0:
+		events.add(SimEvents.Kind.MUSIC_VOLUME, -1, 0x7F, 0x3C)
+	if fight.rounds_played == 1 and fight.region.continuing == 0:
+		events.add(SimEvents.Kind.MUSIC, -1, fight.music)
+	if fight.region.continuing != 0:
+		fight.region.continuing = 0
 
 
 ## FUN_8002AB68 in Tekken Force: the player and both enemy records at the origin facing +x (the
