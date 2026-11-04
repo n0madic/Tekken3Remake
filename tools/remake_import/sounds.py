@@ -23,6 +23,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 import hashlib
+from pathlib import Path
 import struct
 
 from common import Disc, Output, log
@@ -43,6 +44,7 @@ PROGRAM_BYTES = 16
 TONE_BYTES = 32
 TONES_PER_PROGRAM = 16
 VOLUME_MAX = 127
+UNCOMPRESSED_IMPORT = "compress/mode=0"   # in a `.wav.import` (project.godot's importer default)
 
 
 def vh_size(head: bytes) -> int:
@@ -82,7 +84,22 @@ def read_vab(read: Callable[[int, int], bytes], vh_addr: int, body_addr: int) ->
     return read(vh_addr, size), read(body_addr, total - size)
 
 
+def drop_compressed_imports(folder: Path) -> int:
+    """Removes Godot's import settings of samples imported with compression, so that the next import
+    takes the project's default (uncompressed): QOA is audible on samples this short and low-rated,
+    and Godot keeps a file's settings for good. Returns how many were removed."""
+    removed = 0
+    for sidecar in folder.rglob("*.wav.import"):
+        if UNCOMPRESSED_IMPORT not in sidecar.read_text(encoding="utf-8"):
+            sidecar.unlink()
+            removed += 1
+    return removed
+
+
 def convert(disc: Disc, out: Output, costume_slots: list[int]) -> None:
+    removed = drop_compressed_imports(out.root / "sounds")
+    if removed:
+        log.info("%d compressed sounds will be imported again", removed)
     banks = {}
     for name, (vh_addr, body_addr) in EXE_VABS.items():
         banks[name] = convert_bank(out, name, *read_vab(disc.exe_bytes, vh_addr, body_addr))

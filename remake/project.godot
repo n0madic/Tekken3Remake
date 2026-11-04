@@ -38,6 +38,12 @@ window/size/viewport_width=1280
 window/size/viewport_height=720
 window/handheld/orientation=4
 
+[importer_defaults]
+
+wav={
+"compress/mode": 0
+}
+
 [internationalization]
 
 locale/translations=PackedStringArray("res://app/translations.en.translation", "res://app/translations.ja.translation")

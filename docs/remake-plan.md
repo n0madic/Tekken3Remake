@@ -171,6 +171,7 @@ tools/remake/run_tests.sh    Headless test run; export_all.sh: every build; text
 - **Sound banks.**
   - The combat bank, the system bank, and one voice bank per character are loaded as `SoundBank` resources: samples with loop points, plus tone parameters.
   - A sound code resolves to a sample, a pitch, a volume and a pan ([sound.md](research/code/sound.md)).
+  - Samples are imported uncompressed (`[importer_defaults]` in `project.godot`): Godot's default QOA left 7–18 dB of signal to noise on these short, low-rate samples, measured in the engine, and was heard as a second sound over the menu cursor. The cost is about 5 MB. `convert.py` removes the import settings of samples imported earlier with compression.
   - The pitch comes from the documented playback-rate rule, which is bit-exact.
 - **Voices.** The original plays up to 24 voices. The remake uses Godot polyphony with a per-bus voice limit and the original priority order where it matters, such as announcer calls.
 - **Music.** The 32 music tracks map to streamed files with loop flags (a WAV `smpl` loop). The two soundtracks (ARRANGE / ARCADE) are an option, as in the original.

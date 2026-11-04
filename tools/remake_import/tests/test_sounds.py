@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 import struct
+import tempfile
 import unittest
 
 import common  # noqa: F401  (puts tools/research on the import path)
@@ -52,6 +54,22 @@ class ReadVabTest(unittest.TestCase):
         bank = sounds.convert_bank(out, sounds.STAFF_ROLL_BANK, *sounds.read_vab(read, VH_ADDR, BODY_ADDR))
         self.assertEqual(list(bank["tones"]), ["0_0"])
         self.assertIn("sounds/staff_roll/0_0.wav", out.files)
+
+
+class CompressedImportTest(unittest.TestCase):
+    def test_only_the_compressed_samples_are_imported_again(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "combat").mkdir()
+            (root / "combat/a.wav.import").write_text("[params]\ncompress/mode=2\n", encoding="utf-8")
+            (root / "combat/b.wav.import").write_text("[params]\ncompress/mode=0\n", encoding="utf-8")
+            (root / "combat/a.wav").write_bytes(b"sample")
+            self.assertEqual(sounds.drop_compressed_imports(root), 1)
+            self.assertEqual(sorted(p.name for p in (root / "combat").iterdir()), ["a.wav", "b.wav.import"])
+
+    def test_the_project_imports_samples_uncompressed(self) -> None:
+        project = Path(__file__).resolve().parents[3] / "remake/project.godot"
+        self.assertRegex(project.read_text(encoding="utf-8"), r'wav=\{\s*"compress/mode": 0\s*\}')
 
 
 if __name__ == "__main__":
