@@ -2,10 +2,10 @@ class_name GameSettings
 extends Node
 ## The remake's own settings (autoload `Settings`, remake-plan.md#save-data-and-settings): the
 ## Gameplay fixes, the game texts' language (English: the USA release's), the graphics preset and its options, the texture pack, audio
-## volumes, vibration, touch controls, the keyboard layouts, the interface language and the memory
+## volumes, touch controls, the keyboard layouts, the interface language and the memory
 ## card in use (its progress is ProgressCard's). They are kept in
 ## `user://settings.json` apart from the game's progress. The game's own options (difficulty,
-## rounds, the key configuration, ...) stay on its OPTIONS screen and in the progress block.
+## rounds, the key configuration, vibration, ...) stay on its OPTIONS screen and in the progress block.
 ##
 ## Each setting is one key of SCHEMA with its choices; `choices(key)` narrows them to what this
 ## build and platform offer (the presets by the renderer, the texture packs found).
@@ -32,7 +32,6 @@ const SCHEMA := {
 	"volume_sfx": [VOLUME_STEPS, []],
 	"volume_voices": [VOLUME_STEPS, []],
 	"volume_system": [VOLUME_STEPS, []],
-	"vibration": [true, [true, false]],
 	"touch_controls": ["auto", ["auto", "on", "off"]],
 	"touch_macros": ["throws", ["throws", "all", "none"]],
 	"touch_size": [100, [70, 85, 100, 115, 130]],

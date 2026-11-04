@@ -236,7 +236,7 @@ func _bot_input() -> PackedInt32Array:
 
 
 func _rumble() -> void:
-	vibration.drive(Settings.flag("vibration"))
+	vibration.drive(PadVibration.ALL_PADS)     # this set-up has no OPTIONS screen to turn it off
 
 
 func _process(_delta: float) -> void:

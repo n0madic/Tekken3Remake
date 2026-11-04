@@ -26,7 +26,7 @@ const ROWS := [
 	["shading", "SETTINGS_SHADING_HELP"],
 	["texture_pack", "SETTINGS_PACK_HELP"], ["interpolation", "SETTINGS_INTERPOLATION_HELP"],
 	["framing", "SETTINGS_FRAMING_HELP"], ["stage_backdrops", "SETTINGS_BACKDROPS_HELP"],
-	["vibration", ""], ["touch_controls", "SETTINGS_TOUCH_HELP"], ["touch_macros", "SETTINGS_MACROS_HELP"],
+	["touch_controls", "SETTINGS_TOUCH_HELP"], ["touch_macros", "SETTINGS_MACROS_HELP"],
 	["touch_size", "SETTINGS_TOUCH_SIZE_HELP"], ["default_keys", "SETTINGS_DEFAULT_KEYS_HELP"],
 	["back", ""],
 ]
@@ -34,7 +34,7 @@ const TABS := ["SETTINGS_TAB_GAME", "SETTINGS_TAB_CONTROLS"]
 const GAME := 0
 const CONTROLS := 1
 ## Each tab's first row; Back stands on both.
-static var tab_start := PackedInt32Array([0, ROWS.find(["vibration", ""])])
+static var tab_start := PackedInt32Array([0, ROWS.find(["touch_controls", "SETTINGS_TOUCH_HELP"])])
 ## Each tab's first row of the second column.
 static var column_break := PackedInt32Array([ROWS.find(["SETTINGS_DISPLAY", ""]),
 	ROWS.find(["touch_macros", "SETTINGS_MACROS_HELP"])])

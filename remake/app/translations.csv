@@ -42,7 +42,6 @@ SETTING_VOLUME_MUSIC,Music,音楽
 SETTING_VOLUME_SFX,Effects,効果音
 SETTING_VOLUME_VOICES,Voices,ボイス
 SETTING_VOLUME_SYSTEM,System sounds,システム音
-SETTING_VIBRATION,Vibration,振動
 SETTING_TOUCH_CONTROLS,Touch controls,タッチ操作
 SETTINGS_TOUCH_HELP,"The on-screen stick and buttons. Auto shows them on touch screens.",画面上のスティックとボタン。自動ではタッチスクリーンで表示します。
 SETTING_TOUCH_MACROS,Touch macros,タッチのマクロ

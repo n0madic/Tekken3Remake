@@ -8,6 +8,8 @@ extends RefCounted
 const PADS := 2
 const SLOTS := 4
 const CONTINUE := 0x1000
+static var ALL_PADS := PackedInt32Array([1, 1])
+static var NO_PADS := PackedInt32Array([0, 0])
 
 class MotorScript:
 	var steps := PackedInt32Array()
@@ -77,12 +79,13 @@ func clear() -> void:
 		large_level[p] = 0
 
 
-## One frame of the scripts driving both players' motors (Pads); `enabled` false holds them still
-## (the Vibration setting off).
-func drive(enabled: bool) -> void:
+## One frame of the scripts driving both players' motors (Pads). The scripts always run; a pad whose
+## entry in `enabled` is 0 holds its motors still (FUN_8002A37C reading 0x800A9621, GameGlobals.controller).
+func drive(enabled: PackedInt32Array) -> void:
 	update()
 	for p in PADS:
-		Pads.set_motors(p, small_on[p] and enabled, large_level[p] if enabled else 0)
+		var on := enabled[p] != 0
+		Pads.set_motors(p, small_on[p] and on, large_level[p] if on else 0)
 
 
 ## Both players' motors stopped (a fight that ends, the application quitting).

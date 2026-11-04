@@ -818,7 +818,7 @@ func _set_audio_fighters() -> void:
 
 
 func _rumble() -> void:
-	vibration.drive(Settings.flag("vibration") and not settings_view.visible)
+	vibration.drive(PadVibration.NO_PADS if settings_view.visible else flow.globals.controller)
 
 
 ## The views whose stage follows the Stage backdrops setting, as it changes (a fight's view is

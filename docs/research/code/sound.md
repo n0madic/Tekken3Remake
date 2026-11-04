@@ -177,7 +177,7 @@ Sounds end by keying off their SPU voice (`SsUtKeyOffV`); a new sound on a voice
 
 ## Vibration
 
-The game drives DualShock motors through `PadVibrate(player, pattern)` (`0x80029114`; player 2 = both). The pattern's slot (`0x80010050`) selects one of four queued patterns per player; `VibrationUpdate` (`0x80029228`) runs two scripts per slot — one for the small motor (on/off, pulse mask from `0x80095838` by frame), one for the large motor (strength `((v & 0xF00) >> 4) + 15`) — each a list of `u16` steps `flags(4) | level(4) | frames(8)`, where flag `0x1000` continues with the next step. Scripts come from `0x80095758`/`0x8009575C`.
+The game drives DualShock motors through `PadVibrate(player, pattern)` (`0x80029114`; player 2 = both). The pattern's slot (`0x80010050`) selects one of four queued patterns per player; `VibrationUpdate` (`0x80029228`) runs two scripts per slot — one for the small motor (on/off, pulse mask from `0x80095838` by frame), one for the large motor (strength `((v & 0xF00) >> 4) + 15`) — each a list of `u16` steps `flags(4) | level(4) | frames(8)`, where flag `0x1000` continues with the next step. Scripts come from `0x80095758`/`0x8009575C`. The scripts always run, but `FUN_8002A37C` zeroes a pad's motor levels while its enable byte `0x800A9621 + 0x2A·p` is 0. `FUN_8002A3C0` writes that byte: from the VIBRATION option (`0x800982EC + p`, off in the executable's defaults) at mode start and when the option is toggled, which also plays pattern `0x0D`; and 0 for the attract demonstration and the main menu.
 
 | Caller | Patterns |
 |---|---|

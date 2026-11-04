@@ -1,6 +1,6 @@
 extends TestSuite
 ## The settings screen's layout (SettingsView): two tabs (General: the game and sound settings,
-## the display ones beside them; Controls: vibration, the touch controls and the keyboard layouts'
+## the display ones beside them; Controls: the touch controls and the keyboard layouts'
 ## key fields beside their pad pictures); two columns on landscape windows, one on narrow windows; every row and
 ## field inside the panel and the panel inside the window, none overlapping, on both tabs; the
 ## settings with a single choice not shown; a tap or a drag on a volume's bar sets it there; a key
@@ -52,7 +52,7 @@ func _check(window: Vector2, columns: int) -> void:
 			for layout in 2:
 				expect(view._pictures[layout].has_point(view.button_spot(layout, PadState.CROSS)), "Cross on its picture")
 		else:
-			expect(view._rects[SettingsView.ROWS.find(["vibration", ""])] == Rect2(), "Controls rows only on their tab")
+			expect(view._rects[SettingsView.ROWS.find(["touch_controls", "SETTINGS_TOUCH_HELP"])] == Rect2(), "Controls rows only on their tab")
 		view.free()
 
 
@@ -80,7 +80,7 @@ func test_no_keyboard_no_key_fields() -> void:
 	expect(view._pictures.is_empty(), "no pad pictures")
 	expect_equal(view._rects[SettingsView.first_field], Rect2(), "no key fields")
 	expect_equal(view._rects[SettingsView.default_keys_row], Rect2(), "no Default keys")
-	expect(view._rects[SettingsView.ROWS.find(["vibration", ""])] != Rect2(), "vibration stays")
+	expect(view._rects[SettingsView.ROWS.find(["touch_controls", "SETTINGS_TOUCH_HELP"])] != Rect2(), "the touch controls stay")
 	expect(view._rects[SettingsView.back_row] != Rect2(), "and Back")
 	view.free()
 
@@ -107,7 +107,7 @@ func test_tabs_and_directions() -> void:
 	view._suppress = false
 	view.handle(PadState.R1)
 	expect_equal(view.tab, SettingsView.CONTROLS, "R1: the next tab")
-	expect_equal(view.cursor, SettingsView.ROWS.find(["vibration", ""]), "on its first row")
+	expect_equal(view.cursor, SettingsView.ROWS.find(["touch_controls", "SETTINGS_TOUCH_HELP"]), "on its first row")
 	view.handle(0)
 	var l2 := SettingsView.field_of(0, PadState.L2)
 	for n in 4:
