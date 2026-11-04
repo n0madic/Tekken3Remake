@@ -171,8 +171,9 @@ The Theater sound player (`FUN_8006B47C`) plays its list entry `id` as track `id
 
 Sounds end by keying off their SPU voice (`SsUtKeyOffV`); a new sound on a voice also keys the old one off first (`SoundPlayFighter`, `SoundPlaySystem`).
 
+- The winner's name (`0xC640`, `0xC64B`) and the `0x86DA` after it share voice 1, so effect type 16 and `FUN_80075B4C` wait for it with `SpuGetKeyStatus(2)` (the voice's bit: `inferred` from the two codes). The harness reports it silent; in the remake the simulation asks at once (`SimEvents.SOUND_AFTER_VOICE`) and `AudioDirector` does the waiting.
 - `SoundStopFighter(player, code)` (`0x8007588C`) keys off the code's voice: bits 10–13, plus the player for voices above 5; codes without a bank (`& 0xC000 = 0`) do nothing.
-- `FUN_8004B920(keep)` keys off every voice 0–23 except 2 and 3, which carry the announcer (effect type 16 waits for voice 2 to end before its `0x86DA`); with `keep` set it also leaves voices 1, 6 and 7. The round start calls it with `keep` = not the first round ([fight-frame.md](fight-frame.md#round-start)); the round flow with 0 when the replay hands over to the victory poses (or the round ends without them) and when Start cuts the result sequence short; the pause menu with 0 when it opens.
+- `FUN_8004B920(keep)` keys off every voice 0–23 except 2 and 3, which carry the announcer; with `keep` set it also leaves voices 1, 6 and 7. The round start calls it with `keep` = not the first round ([fight-frame.md](fight-frame.md#round-start)); the round flow with 0 when the replay hands over to the victory poses (or the round ends without them) and when Start cuts the result sequence short; the pause menu with 0 when it opens.
 - The voice echoes (effect types 17 and 18) replay a fighter sound with attenuation 1, then 2 (each `SoundPlayFighter` keys the voice off first); during a replay the echo uses its own voice with attenuation bit `0x80` (16 voices up).
 
 ## Vibration

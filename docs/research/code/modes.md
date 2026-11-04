@@ -641,7 +641,7 @@ Select + Start returns to the main menu, as everywhere.
 Screens:
 
 - **Backgrounds.** Team battle and survival draw a scrolling tile pattern with the moving banner `THE KING OF IRON FIST TOURNAMENT 3` (`FUN_800F18FC`). Time attack and Tekken Force draw a full-screen 368 × 480 8-bit picture. It is stored in the overlay as a six-member compressed-TIM archive (`0x800B99B4` for time attack, `0x800D8A20` for Tekken Force). `FUN_800F10C8`/`FUN_800F110C` upload it to VRAM (512–703, 0–479, CLUT rows 506–511), and `FUN_800F1150` draws it as six quads. Both pictures show the Tekken 3 logo: time attack on a gold burst, Tekken Force on red lightning.
-- **Winner's sounds.** The time attack result always ends with them, and the survival result does when the player placed in the top ten. `FUN_80075A90` plays sound `0xC640` (`0xC64B` for voice set `0x15`), and `FUN_80075B4C` plays `0x86DA` once SPU voice 2 has gone quiet and 15 more frames have passed. Tiger (costume key `0x22`) plays `0x86CA` instead.
+- **Winner's sounds.** The time attack result always ends with them, and the survival result does when the player placed in the top ten. `FUN_80075A90` plays sound `0xC640` (`0xC64B` for voice set `0x15`), and `FUN_80075B4C` plays `0x86DA` once SPU voice 1 has gone quiet and 15 more frames have passed. Tiger (costume key `0x22`) plays `0x86CA` instead.
 
 | State | Screen | Content and timing |
 |---:|---|---|

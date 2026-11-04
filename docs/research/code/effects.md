@@ -62,7 +62,7 @@ Every spawn is also logged so that replays can re-create it. The effect log (`FU
 | 11 | victim of fire breath | Burning body: 10 flames (1 for Gon) attached to joints 1, 2, 4, 8, 5, 9, 12, 13, 15, 16 for 60–75 frames, flickering 32 × 32 frames, embers and light; then each flame rises and bursts (5 frames). Sets the fighter's burning flag (`+0x1888`). |
 | 12, 13 | power hits | As types 1 and 2 with the ramp of row 509 (other colours). |
 | 15 | Tekken Ball overlay | Follows the ball (`FUN_800B0C70`): kind 0 = the hitting player's character flipbook looped (12-frame table `0x8002597C`) as a glow on the ball, kind 1 = a fireball-style flame; removed when the ball state changes. |
-| 16 | `FUN_8003E38C` | Sound only: waits for SPU voice 2 to stop, then plays `0x86DA`. |
+| 16 | `FUN_8003E38C` | Sound only: waits for SPU voice 1 to stop (`SpuGetKeyStatus(2)`, the voice's bit; `0xC640` and `0x86DA` both sound on it), then plays `0x86DA`. |
 | 17, 18 | voices | Sound only: replays a fighter sound two more times 15 frames apart (twice as fast during replay playback, `0x800958C8`), changing the variant bits 10–13 of the sound code — voice echoes. |
 | 19 | descriptor `0x1B` (Gon's gas attack) | Emitter at joint 11 (hips): spawns type 20 clouds on a timetable (`0x80025994`: frame, speed, height; −1 ends) while the move is active. |
 | 20 | type 19 | Gas cloud: 27-frame 32 × 32 flipbook (`0x80025A0C`) on the 50 % page, CLUT `0x7DC6`, rises slowly (`vy −= 0.225`), hit segment during the early frames. |

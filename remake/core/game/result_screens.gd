@@ -135,7 +135,8 @@ func _result_sounds(player: int) -> void:
 		seq_state += 1
 
 
-## After the voice (the SPU's voice 2 is never reported busy here) and 15 frames, sound 0x86DA.
+## After the voice and 15 frames, sound 0x86DA. The simulation takes SPU voice 1 as silent (as the
+## harness does); the wait for it, and the 15 frames after it, are the audio's.
 func _seq_tick() -> void:
 	match seq_state:
 		1:
@@ -146,7 +147,7 @@ func _seq_tick() -> void:
 			seq_delay = (seq_delay - 1) & 0xFF
 			if seq_delay != 0 and seq_delay < 0x80:
 				return
-			g.sound(SOUND_AFTER_VOICE)
+			g.sim.events.add(SimEvents.Kind.SOUND_AFTER_VOICE, -1, SOUND_AFTER_VOICE, SEQ_DELAY)
 			seq_state = 0
 
 

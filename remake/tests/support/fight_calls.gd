@@ -45,6 +45,8 @@ static func of_events(events: SimEvents) -> PackedStringArray:
 		match e.kind:
 			SimEvents.Kind.SOUND:
 				out.append("sound %d %04x %d" % [e.b, e.a & 0xFFFF, e.c])
+			SimEvents.Kind.SOUND_AFTER_VOICE:   # the harness's voice is silent: the plain call
+				out.append("sound 0 %04x 0" % (e.a & 0xFFFF))
 			SimEvents.Kind.SOUND_STOP:
 				out.append("sound_stop %d %04x" % [e.b, e.a & 0xFFFF])
 			SimEvents.Kind.SYSTEM_SOUND:

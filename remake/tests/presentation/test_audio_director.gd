@@ -19,6 +19,95 @@ func test_a_silent_code_keys_its_voice_off() -> void:
 	director.free()
 
 
+func _winner_voice_director() -> AudioDirector:
+	var director := AudioDirector.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(director)
+	director.set_fighters(PackedInt32Array([0, 2]), PackedInt32Array([0, 1]))
+	director.play_code(RoundHud.VOICE_WIN, 0, 0)
+	return director
+
+
+func _after_voice_events(frames: int) -> SimEvents:
+	var events := SimEvents.new()
+	events.add(SimEvents.Kind.SOUND_AFTER_VOICE, -1, ResultScreens.SOUND_AFTER_VOICE, frames)
+	return events
+
+
+## Both codes sound on voice 1: 0x86DA waits for the winner's name (FUN_8007477C), or it cuts it.
+func test_the_follow_up_waits_for_the_winners_voice() -> void:
+	if not require(Assets.path("sounds/sounds.json")):
+		return
+	var director := _winner_voice_director()
+	var voice := director.voices[AudioDirector.WINNER_VOICE]
+	var name_tone := voice.stream
+	expect(voice.playing and name_tone != null, "the name plays on the winner's voice")
+	director.handle(_after_voice_events(0))
+	director.handle(SimEvents.new())
+	expect(voice.playing and voice.stream == name_tone, "the name goes on")
+	voice.stop()
+	director.handle(SimEvents.new())
+	expect(voice.playing and voice.stream != name_tone, "then the follow-up plays")
+	voice.stop()
+	director.handle(SimEvents.new())
+	expect(not voice.playing, "once")
+	director.stop_all()
+	director.free()
+
+
+## FUN_80075B4C: on the result screens 15 frames lie between the voice's end and the sound.
+func test_the_result_screens_follow_up_waits_frames_more() -> void:
+	if not require(Assets.path("sounds/sounds.json")):
+		return
+	var director := _winner_voice_director()
+	var voice := director.voices[AudioDirector.WINNER_VOICE]
+	director.handle(_after_voice_events(ResultScreens.SEQ_DELAY))
+	voice.stop()
+	for frame in ResultScreens.SEQ_DELAY:
+		director.handle(SimEvents.new())
+		expect(not voice.playing, "quiet on frame %d" % frame)
+	director.handle(SimEvents.new())
+	expect(voice.playing, "then it plays")
+	director.stop_all()
+	director.free()
+
+
+## The voice already quiet: nothing to wait for (a skipped or missing name).
+func test_the_follow_up_plays_at_once_after_a_quiet_voice() -> void:
+	if not require(Assets.path("sounds/sounds.json")):
+		return
+	var director := _winner_voice_director()
+	var voice := director.voices[AudioDirector.WINNER_VOICE]
+	voice.stop()
+	director.handle(_after_voice_events(ResultScreens.SEQ_DELAY))
+	expect(voice.playing, "it plays at once")
+	director.stop_all()
+	director.free()
+
+
+## A skip, a new round or another screen's sound leaves the follow-up unplayed.
+func test_the_waiting_follow_up_is_dropped() -> void:
+	if not require(Assets.path("sounds/sounds.json")):
+		return
+	var director := _winner_voice_director()
+	var voice := director.voices[AudioDirector.WINNER_VOICE]
+	director.handle(_after_voice_events(0))
+	var keep := SimEvents.new()
+	keep.add(SimEvents.Kind.VOICES_OFF, -1, 1)
+	director.handle(keep)
+	expect(voice.playing, "a new round leaves the voice on")
+	voice.stop()
+	director.handle(SimEvents.new())
+	expect(not voice.playing, "and nothing follows")
+	director.play_code(RoundHud.VOICE_WIN, 0, 0)
+	director.handle(_after_voice_events(0))
+	director.play_code(RoundHud.VOICE_WIN, 0, 0)
+	voice.stop()
+	director.handle(SimEvents.new())
+	expect(not voice.playing, "another sound on the voice drops it too")
+	director.stop_all()
+	director.free()
+
+
 ## FUN_8007517c: the staff roll's bank takes the first voice slot, so its opening call (0xC7C0) plays
 ## from it and not from the winner's voices; the next fight's fighters take the slot back.
 func test_the_staff_roll_bank_replaces_the_first_voice_bank() -> void:

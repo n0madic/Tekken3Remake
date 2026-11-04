@@ -174,6 +174,7 @@ tools/remake/run_tests.sh    Headless test run; export_all.sh: every build; text
   - Samples are imported uncompressed (`[importer_defaults]` in `project.godot`): Godot's default QOA left 7–18 dB of signal to noise on these short, low-rate samples, measured in the engine, and was heard as a second sound over the menu cursor. The cost is about 5 MB. `convert.py` removes the import settings of samples imported earlier with compression.
   - The pitch comes from the documented playback-rate rule, which is bit-exact.
 - **Voices.** The original plays up to 24 voices. The remake uses Godot polyphony with a per-bus voice limit and the original priority order where it matters, such as announcer calls.
+- **The winner's call.** The `0x86DA` after the winner's name shares its voice and waits for it to end (and 15 frames more on the result screens). The simulation stays frame-exact without audio, so the wait is `AudioDirector`'s (`SimEvents.SOUND_AFTER_VOICE`); a skip or a new scene drops the waiting sound.
 - **Music.** The 32 music tracks map to streamed files with loop flags (a WAV `smpl` loop). The two soundtracks (ARRANGE / ARCADE) are an option, as in the original.
 - **Speaker out.** The options' MONO folds the whole mix to mono on the master bus (a stereo-enhance effect with no pan pull-out); STEREO leaves it.
 

@@ -20,6 +20,8 @@ const BANK_BUSES := {BANK_COMBAT: &"SFX", BANK_SYSTEM: &"System", BANK_FIGHTER: 
 ## FUN_8004B920: voices it leaves on (the announcer's), and with `keep_music` these as well.
 const VOICES_KEPT := [2, 3]
 const VOICES_KEPT_MUSIC := [1, 6, 7]
+const WINNER_VOICE := 1              ## SpuGetKeyStatus(2): the winner's name, and what follows it
+const NOTHING_DUE := -1
 
 var music := AudioStreamPlayer.new()
 var voices: Array[AudioStreamPlayer] = []
@@ -44,6 +46,8 @@ var _requested: Dictionary = {}     ## tone file → true: a background load is 
 ## Background loads of tones no fighter needs any more: taken (and thrown away) once finished, so
 ## that dropping them never waits for the decoder.
 var _dropped: Dictionary = {}
+var _due_code := NOTHING_DUE         ## the sound waiting for the winner's voice to end
+var _due_frames := 0                 ## and the frames it waits after that
 var mono := false                    ## SPEAKER OUT: MONO
 var _downmix := AudioEffectStereoEnhance.new()
 
@@ -180,6 +184,7 @@ func _apply_music_volume() -> void:
 ## Stops the music and every sound (before quitting: the audio server releases a playback on
 ## its next mix, so a stream still playing at exit is reported as leaked).
 func stop_all() -> void:
+	_due_code = NOTHING_DUE
 	music.stop()
 	for p in voices:
 		p.stop()
@@ -233,8 +238,10 @@ func key_off(voice: int) -> void:
 		voices[voice].stop()
 
 
-## FUN_8004B920: every voice off but the announcer's (and the music ones with `keep_music`).
+## FUN_8004B920: every voice off but the announcer's (and the music ones with `keep_music`). It marks
+## a skip or a new scene, so a sound still waiting for the winner's voice is dropped.
 func voices_off(keep_music: bool) -> void:
+	_due_code = NOTHING_DUE
 	for v in SPU_VOICES:
 		if v in VOICES_KEPT or (keep_music and v in VOICES_KEPT_MUSIC):
 			continue
@@ -245,11 +252,14 @@ func voices_off(keep_music: bool) -> void:
 ## finished after a movie handles only what came after the movie).
 func handle(events: SimEvents, from := 0) -> void:
 	_collect_dropped()
+	_step_due_sound()
 	for i in range(from, events.items.size()):
 		var e := events.items[i]
 		match e.kind:
 			SimEvents.Kind.SOUND:
 				play_code(e.a, e.b, e.c)
+			SimEvents.Kind.SOUND_AFTER_VOICE:
+				play_after_voice(e.a, e.b)
 			SimEvents.Kind.SOUND_STOP:
 				stop_code(e.a, e.b)
 			SimEvents.Kind.SYSTEM_SOUND:
@@ -278,6 +288,26 @@ func handle(events: SimEvents, from := 0) -> void:
 				fade_music(e.a, e.b)
 
 
+## FUN_8007477C, FUN_80075B4C: `code` sounds on the winner's voice, so it waits for the name to end,
+## then `frames` more. With the voice already quiet it plays now: the simulation has counted them.
+func play_after_voice(code: int, frames: int) -> void:
+	if not voices[WINNER_VOICE].playing:
+		play_code(code, 0, 0)
+		return
+	_due_code = code
+	_due_frames = frames
+
+
+## One step of the wait.
+func _step_due_sound() -> void:
+	if _due_code == NOTHING_DUE or voices[WINNER_VOICE].playing:
+		return
+	if _due_frames > 0:
+		_due_frames -= 1
+		return
+	play_code(_due_code, 0, 0)
+
+
 ## FUN_80075830: Mokujin's replacement for the codes of some sound ids.
 func _mokujin(code: int) -> int:
 	for pair in mokujin_sounds:
@@ -291,6 +321,8 @@ func _mokujin(code: int) -> int:
 func _key_on(voice: int, bank: int, fighter_bank: String, code: int, level: int) -> void:
 	if voice >= voices.size():
 		return
+	if voice == WINNER_VOICE:         # a menu sound on the voice: the screen has moved on
+		_due_code = NOTHING_DUE
 	var p := voices[voice]
 	p.stop()
 	var name: String = fighter_bank if bank == BANK_FIGHTER else str(BANK_NAMES.get(bank, ""))

@@ -878,13 +878,13 @@ static func _ball_glow_start(fight: FightState, o: Obj) -> void:
 	_aim(fight, o)
 
 
-## Type 16: waits for the announcer's voice (SPU voice 2) to stop, then plays 0x86DA. The
-## simulation takes the voice as silent (as the harness does), so it plays at once.
+## Type 16: waits for the winner's voice (SPU voice 1) to stop, then plays 0x86DA. The simulation
+## takes the voice as silent (as the harness does) and asks at once; the wait is the audio's.
 static func _announcer_wait(o: Obj, events: SimEvents) -> void:
 	if o.state == 0:
 		o.state = 1
 	elif o.state == 1:
-		events.add(SimEvents.Kind.SOUND, -1, 0x86DA, 0)
+		events.add(SimEvents.Kind.SOUND_AFTER_VOICE, -1, 0x86DA, 0)
 		finish(o)
 
 

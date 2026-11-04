@@ -12,6 +12,7 @@ enum Kind {
 	HAND,         ## a: hands (bit per channel), b: shape, c: speed; applied to the fighter's hands
 	LANDING_DUST, ## a knock-down landing: dust ring and floor mark at `point` (FUN_8004AC28)
 	SOUND,        ## a: sound code, b: player (voice channel), c: attenuation (SoundPlayFighter)
+	SOUND_AFTER_VOICE, ## a: sound code (player 0) due once the winner's voice has ended, b: frames more (SpuGetKeyStatus waits)
 	SOUND_STOP,   ## a: sound code whose voice stops, b: player (SoundStopFighter)
 	SYSTEM_SOUND, ## a: system sound id (SoundPlaySystem)
 	HIT_SPARK,    ## a: 0 hit, 1 guard, b: damage of the hit; `point` the contact (HitSpawnEffect)
