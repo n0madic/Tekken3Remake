@@ -775,6 +775,7 @@ func _build_fight_view() -> void:
 		return
 	var models: Array[CharacterModel] = []
 	var slots := PackedInt32Array()
+	var keys := PackedInt32Array()
 	var chars := PackedInt32Array()
 	# The records that fight: Tekken Force's third too (Tekken Ball's third is the ball's
 	# stand-in attacker and is not drawn).
@@ -782,6 +783,7 @@ func _build_fight_view() -> void:
 		var f := fight.fighters[p]
 		models.append(content.model(f.costume_slot))
 		slots.append(f.costume_slot)
+		keys.append(f.costume_key)
 		chars.append(f.char_id)
 	_set_audio_fighters()
 	fight_view = FightView.new()
@@ -792,7 +794,7 @@ func _build_fight_view() -> void:
 		light_stage = content.stage_number(TekkenForce.TILE_ONLY_LIGHT_STAGE)
 	fight_view.setup(stage, effect_data, models, slots, chars, light_stage)
 	fight_view.setup_modes(stage, fight.tables, content.mode_ram("volley") if fight.mode == GameMode.BALL else null)
-	hud.setup(hud_data, slots)
+	hud.setup(hud_data, keys)
 	practice_view.camera = fight_view.rig.camera
 
 
@@ -806,7 +808,7 @@ func _replace_fighters() -> void:
 		var f := fight.fighters[i]
 		if fight_view != null and i < fight_view.fighters.size():
 			fight_view.replace_fighter(i, content.model(f.costume_slot), f.costume_slot)
-		hud.set_slot(i, f.costume_slot)
+		hud.set_costume(i, f.costume_key)
 	_set_audio_fighters()
 
 

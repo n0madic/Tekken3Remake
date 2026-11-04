@@ -12,7 +12,8 @@ VRAM (832, 0) and 0x0E at (896, 0)) and each fighter's name from its own texture
 - name plates: the name at UV (0x40, 0) of the fighter's page (tpage 7, VRAM (448, 0) for
   player 1), 16 lines high and as wide as the character record's byte +5, through the
   system CLUT 0x7F10 + 2 · costume; the backing quad's texels (UV 0xDC–0xDD, 0xA8–0xB1)
-  through 0x7F11 + 2 · costume (FUN_8004EA84, FUN_8004EB9C). Tekken Force's enemies (keys
+  through 0x7F11 + 2 · costume (FUN_8004EA84, FUN_8004EB9C). The colours go by the costume
+  key, not the slot: slot 36 is Anna's first costume (red) and Nina's third (yellow). Tekken Force's enemies (keys
   0x54–0x57, slots 47–50) keep their names stacked on that page, costume c at V = 16 · c,
   through 0x7F10 on the first plate (force.ovl FUN_800B362C).
 
@@ -20,7 +21,7 @@ The text engine's fonts 0–3 (hud.md#text-engine, FUN_8004D15C) become glyph sh
 font and colour (`hud/font_<f>_<colour>.png`: characters 0x20–0x5F in rows of 16 cells), each
 glyph through the colour's CLUT at x = 256 + 16·((n + k) & 15), y = ((n + k) >> 4) + 24 | 480.
 
-Output: `hud/*.png` and `hud/hud.json` (the names' widths by costume slot, the fonts' metrics).
+Output: `hud/*.png` and `hud/hud.json` (the names' widths by costume key, the fonts' metrics).
 """
 
 from __future__ import annotations
@@ -53,6 +54,7 @@ DIGIT_CLUT = 0x7F1C
 CHAR_RECORDS = 0x80098120       # record pointer per costume key; byte +5: the name's width
 COSTUME_KEYS = 0x80095CE8
 COSTUME_KEY_COUNT = 0x5C
+NAMED_KEYS = 0x58               # the table's last four keys are the "none" placeholder (character 22)
 COSTUME_ARC_FIRST = 73
 FORCE_ENEMY_KEYS = range(0x54, 0x58)   # Tekken Force's enemies: names stacked by costume
 FONT_TABLE = 0x80021FD0         # 16 bytes per font: glyph UV table, advance, line, w, h, tpage, CLUT offset
@@ -72,6 +74,18 @@ def _sprite(out: Output, rel: str, indices: Vram, page: tuple[int, int], u: int,
     sources.piece(out, rel, 0, 0, indices.words, 4 * page[0] + u, page[1] + v, idx.shape[1], idx.shape[0], 4, colours)
 
 
+def name_sprites(slots: list[int]) -> dict[int, tuple[int, int, int]]:
+    """The name sprite of each costume key that has one, from the key → slot table: (costume slot,
+    colour set, V on the slot's name page)."""
+    sprites = {}
+    for key, slot in enumerate(slots[:NAMED_KEYS]):
+        if slot < 0:
+            continue
+        enemy = key in FORCE_ENEMY_KEYS
+        sprites[key] = (slot, 0 if enemy else key & 3, NAME_HEIGHT * (key & 3) if enemy else NAME_UV[1])
+    return sprites
+
+
 def convert(disc: Disc, out: Output) -> None:
     system = disc.system_vram()
     for side, (u, v) in zip(("left", "right"), CAP_UV):
@@ -86,17 +100,13 @@ def convert(disc: Disc, out: Output) -> None:
         _sprite(out, f"hud/plate_{costume}.png", system, PAGE_BARS, *PLATE_UV, system, PLATE_CLUTS + 2 * costume)
     names = {}
     pointers = disc.exe_u32(CHAR_RECORDS, COSTUME_KEY_COUNT)
-    for key, byte in enumerate(disc.exe_u8(COSTUME_KEYS, COSTUME_KEY_COUNT)):
-        slot = byte - 256 if byte > 127 else byte
-        if slot < 0 or str(slot) in names:
-            continue
+    slots = [b - 256 if b > 127 else b for b in disc.exe_u8(COSTUME_KEYS, COSTUME_KEY_COUNT)]
+    for key, (slot, costume, v) in name_sprites(slots).items():
         width = disc.exe_u8(pointers[key] + 5, 1)[0]
         textures = character.costume_textures(disc, COSTUME_ARC_FIRST + 4 * slot)
-        costume = 0 if key in FORCE_ENEMY_KEYS else key & 3
-        v = 16 * (key & 3) if key in FORCE_ENEMY_KEYS else NAME_UV[1]
-        _sprite(out, f"hud/name_{slot:02d}.png", textures, NAME_PAGE, NAME_UV[0], v, width, NAME_HEIGHT, system,
+        _sprite(out, f"hud/name_{key:02d}.png", textures, NAME_PAGE, NAME_UV[0], v, width, NAME_HEIGHT, system,
                 NAME_CLUTS + 2 * costume)
-        names[str(slot)] = {"file": f"name_{slot:02d}.png", "width": width, "plate": f"plate_{costume}.png"}
+        names[str(key)] = {"file": f"name_{key:02d}.png", "width": width, "plate": f"plate_{costume}.png"}
     fonts = {}
     for f in range(FONTS):
         at = FONT_TABLE + 16 * f

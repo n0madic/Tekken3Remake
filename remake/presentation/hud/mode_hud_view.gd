@@ -216,15 +216,15 @@ func ram_text(address: int) -> String:
 
 func _name(fight: FightState, i: int) -> void:
 	var f := _record(fight, i)
-	var tex := hud.name_texture(f.costume_slot)
+	var tex := hud.name_texture(f.costume_key)
 	if tex == null:
 		return
-	var w := hud.name_width(f.costume_slot)
+	var w := hud.name_width(f.costume_key)
 	var x := force_ram.s16(NAME_POS + 8 * i)
 	var y := force_ram.s16(NAME_POS + 8 * i + 2)
 	if i > 0:
 		x -= w
-	var plate := hud.plate_texture(f.costume_slot)
+	var plate := hud.plate_texture(f.costume_key)
 	if plate != null:
 		image(plate, x - 4, y + 9, w + 8, 10)
 	image(tex, x, y, w, 16)

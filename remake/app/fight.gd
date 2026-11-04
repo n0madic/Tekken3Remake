@@ -124,18 +124,20 @@ func _start_fight() -> void:
 	sim = FightSimulation.new(content, s, rules)
 	var models: Array[CharacterModel] = []
 	var slots := PackedInt32Array()
+	var keys := PackedInt32Array()
 	var chars := PackedInt32Array()
 	for p in 2:
 		var f := sim.fight.fighters[p]
 		models.append(content.model(f.costume_slot))
 		slots.append(f.costume_slot)
+		keys.append(f.costume_key)
 		chars.append(f.char_id)
 	audio.set_fighters(slots, chars)
 	var stage := content.stage_number(s.stage)
 	view = FightView.new()
 	add_child(view)
 	view.setup(stage, effect_data, models, slots, PackedInt32Array([s.chars[0], s.chars[1]]))
-	hud.setup(hud_data, slots)
+	hud.setup(hud_data, keys)
 	vibration.clear()
 	setup_screen.visible = false
 	hud.visible = true

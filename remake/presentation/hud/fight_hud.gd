@@ -33,24 +33,24 @@ const REPLAY_FONT := 1
 var data: HudData
 var box := Rect2()                   ## the scene's 4:3 frame in the window
 var _fight: FightState
-var _slots := PackedInt32Array([0, 0])
+var _keys := PackedInt32Array([0, 0])
 var _replay := false
 ## The flow's own texts over the fight (CONTINUE?, GAME OVER, A NEW CHALLENGER).
 var flow_texts: Array[RoundHud.Message] = []
 
 
-func setup(hud_data: HudData, costume_slots: PackedInt32Array) -> void:
+func setup(hud_data: HudData, costume_keys: PackedInt32Array) -> void:
 	data = hud_data
-	_slots = costume_slots.duplicate()
+	_keys = costume_keys.duplicate()
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 
 ## A record's costume swapped in during the fight (its name plate).
-func set_slot(record: int, costume_slot: int) -> void:
-	if record < _slots.size():
-		_slots[record] = costume_slot
+func set_costume(record: int, costume_key: int) -> void:
+	if record < _keys.size():
+		_keys[record] = costume_key
 
 
 ## After a simulation step.
@@ -148,15 +148,15 @@ func _draw_marks(p: int) -> void:
 
 ## FUN_8004EB9C: the name sprite on its backing quad.
 func _draw_name(p: int) -> void:
-	var slot := _slots[p]
-	var tex := data.name_texture(slot)
+	var key := _keys[p]
+	var tex := data.name_texture(key)
 	if tex == null:
 		return
-	var width := float(data.name_width(slot))
+	var width := float(data.name_width(key))
 	var at: Vector2 = NAME_POS[p]
 	var x := at.x if p == 0 else at.x - width
 	var plate := rect(x - PLATE_MARGIN, at.y + PLATE_TOP, width + 2.0 * PLATE_MARGIN, PLATE_BOTTOM - PLATE_TOP)
-	draw_texture_rect_region(data.plate_texture(slot), plate, PLATE_SOURCE)
+	draw_texture_rect_region(data.plate_texture(key), plate, PLATE_SOURCE)
 	draw_texture_rect(tex, rect(x, at.y, width, NAME_HEIGHT), false)
 
 

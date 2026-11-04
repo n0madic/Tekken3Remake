@@ -13,7 +13,7 @@ class FontInfo:
 	var columns: int
 
 var directory: String
-var names: Dictionary = {}           ## costume slot (string) → {file, width, plate}
+var names: Dictionary = {}           ## costume key (string) → {file, width, plate}
 var fonts: Dictionary = {}           ## font → FontInfo
 
 
@@ -41,19 +41,19 @@ func texture(file: String) -> Texture2D:
 	return TexturePacks.texture(directory.path_join(file))
 
 
-## The name sprite of a costume slot and its width, or null.
-func name_texture(slot: int) -> Texture2D:
-	var entry: Variant = names.get(str(slot))
+## The name sprite of a costume key and its width, or null.
+func name_texture(key: int) -> Texture2D:
+	var entry: Variant = names.get(str(key))
 	return texture(str((entry as Dictionary)["file"])) if entry is Dictionary else null
 
 
-func name_width(slot: int) -> int:
-	var entry: Variant = names.get(str(slot))
+func name_width(key: int) -> int:
+	var entry: Variant = names.get(str(key))
 	return JsonFile.number((entry as Dictionary)["width"]) if entry is Dictionary else 0
 
 
-func plate_texture(slot: int) -> Texture2D:
-	var entry: Variant = names.get(str(slot))
+func plate_texture(key: int) -> Texture2D:
+	var entry: Variant = names.get(str(key))
 	return texture(str((entry as Dictionary)["plate"])) if entry is Dictionary else null
 
 

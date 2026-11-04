@@ -10,7 +10,7 @@ const ROOT := "res://imported/"
 const MANIFEST := ROOT + "manifest.json"
 ## The converter output this build reads (tools/remake_import/common.py CONVERTER_VERSION); an
 ## older conversion counts as missing, so the game asks for a new one instead of misreading it.
-const CONVERTER_VERSION := 2
+const CONVERTER_VERSION := 3
 ## The message of the entry points when the converted assets are missing (translated as
 ## MISSING_ASSETS where the translations are imported).
 const MISSING_TEXT := "Converted assets are missing.\nRun: python3 tools/remake_import/convert.py"
