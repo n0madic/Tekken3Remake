@@ -201,6 +201,11 @@ func player() -> FighterState:
 	return fight.fighters[FighterState.index_at(gu32(PLAYER))]
 
 
+## FUN_800B2E70(0): the first enemy's record (the level's boss in its last fight).
+func first_enemy() -> FighterState:
+	return fight.fighters[FighterState.index_at(gu32(ENEMIES))]
+
+
 ## FUN_800B2E90: enemy slot `i` (0x18 bytes at SLOTS).
 static func slot(i: int) -> int:
 	return SLOTS + 0x18 * (i & 1)

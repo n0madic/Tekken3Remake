@@ -168,6 +168,48 @@ class LineRecorder extends ModeHudView:
 		calls.append(args)
 
 
+## Records the point a Tekken Force text is projected from.
+class BonusRecorder extends LineRecorder:
+	var point := PackedInt32Array()
+
+	func ram_text(_address: int) -> String:
+		return ""
+
+	func _screen(p: PackedInt32Array, _view: ViewMatrix) -> PackedInt32Array:
+		point = p
+		return PackedInt32Array([300, 100, 0])
+
+
+## FUN_800B1778 state 6 reads FUN_800B2E70(0): the bonus time left stands 500 units above the first
+## enemy, and goes when that enemy is down, whatever the player's health.
+func test_bonus_time_follows_the_first_enemy() -> void:
+	if not require(AssetCatalog.ROOT.path_join("manifest.json")):
+		return
+	var content := FightContent.load_from(AssetCatalog.ROOT)
+	var fight := FightState.new(null, RuleSet.original())
+	var force := TekkenForce.new(fight, content.mode_ram("force"))
+	force.assign_records()
+	force.put32(TekkenForce.BONUS_TIME, 90)
+	var player := force.player()
+	player.root_x = 999
+	player.health = 1
+	var enemy := force.first_enemy()
+	expect(enemy != player, "two records")
+	enemy.root_x = 1234
+	enemy.root_y = -100
+	enemy.root_z = 77
+	enemy.health = 1
+	var view := BonusRecorder.new()
+	view._bonus_left(force, null)
+	expect_equal(view.point, PackedInt32Array([1234, -600, 77]), "over the enemy")
+	expect_equal(view.calls, [[0, 5, 278, 100, 1, 50]], "1\"50, 22 pixels left of the point")
+	view.calls.clear()
+	enemy.health = 0
+	view._bonus_left(force, null)
+	expect_equal(view.calls, [], "the enemy is down")
+	view.free()
+
+
 ## Answers a table's entries with their addresses.
 class AddressRam extends GameRam:
 	func u32(address: int) -> int:

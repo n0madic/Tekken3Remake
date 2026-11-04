@@ -9,7 +9,7 @@ extends FightCanvas
 ## - Tekken Force (force.ovl): the player's and the shown enemies' name plates and health bars
 ##   (FUN_800B3790, FUN_800B3118), the level progress bar (FUN_800B3D34), the keys earned
 ##   (FUN_800B4924), LIFE UP! (FUN_800B4374), "+n SEC" over a defeated enemy,
-##   NOW LOADING..., the bonus time left over the player and the stage clear tally
+##   NOW LOADING..., the bonus time left over the first enemy and the stage clear tally
 ##   (FUN_800B1778; `tally`, `items`, `progress_draw`, `key_icons` in tools/research/force_sim.py);
 ## - Tekken Ball (volley.ovl): the two power gauges (FUN_800B4E6C), the popup texts
 ##   (FUN_800B4350; `ball_gauges`, `ball_popups` in tools/research/draw_sim.py) and a point's four
@@ -194,7 +194,7 @@ func _force(fight: FightState) -> void:
 		4:
 			print_fmt(ram_text(STR_NOW_LOADING), [0, 6, 0xF2, 0x1A6])
 		6:
-			_bonus_left(force)
+			_bonus_left(force, _sim.view)
 		7:
 			_tally(force)
 
@@ -366,13 +366,13 @@ func _seconds(force: TekkenForce, i: int) -> void:
 	print_fmt("%f%c%H%VSEC", [0, 6, x, y + 6])
 
 
-## The bonus time left over the player (FUN_800B1778 state 6).
-func _bonus_left(force: TekkenForce) -> void:
+## The bonus time left over the first enemy, the level's boss (FUN_800B1778 state 6).
+func _bonus_left(force: TekkenForce, view: ViewMatrix) -> void:
 	var b := force.g32(TekkenForce.BONUS_TIME)
-	var p := force.player()
-	if b <= 0 or p.health <= 0:
+	var enemy := force.first_enemy()
+	if b <= 0 or enemy.health <= 0:
 		return
-	var s := _screen(PackedInt32Array([p.root_x, p.root_y - 500, p.root_z]), _sim.view)
+	var s := _screen(PackedInt32Array([enemy.root_x, enemy.root_y - 500, enemy.root_z]), view)
 	var seconds := Fx.div_trunc(b, 60)
 	seconds -= Fx.div_trunc(seconds, 60) * 60
 	var hundredths := Fx.div_trunc(Fx.w32(b * 100), 60)

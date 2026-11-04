@@ -4,7 +4,7 @@
 `level_script` is FUN_800B1778 up to the start of its enemy-slot state machine (0x800B25A8):
 the script commands (scroll mode, spawns, spawn patterns, waits, items, end of level), the
 wait state, the end-of-level states with NOW LOADING, the bonus frame that shows the remaining
-bonus time over the player (projected with projection_sim) and the bonus tally, the boss set-up
+bonus time over the first enemy (projected with projection_sim) and the bonus tally, the boss set-up
 and the pattern spawner. The enemy-slot machine (model loading, entrances, defeat) that follows
 calls into the fight engine and is described in modes.md. Ghidra's decompile drops the whole
 tally (it takes the counter `0x800B6A6C` for read-only data); this port follows the disassembly.
@@ -124,7 +124,7 @@ class ForceHooks:
 HOOKS = ForceHooks()
 SLOTS = 0x800B6A7C               # 2 enemy slots, 0x18 bytes: fighter, ..., s16 state at +8, type +0xE, costume +0x10/+0x12
 SCRIPT_PTR = 0x800B6ABC          # the next 20-byte script record
-PLAYER_FIGHTER = 0x800B6AB4      # FUN_800B2E70(0)
+FIRST_ENEMY = 0x800B6AB4         # FUN_800B2E70(0)
 SCROLL_PARAM, SCROLL_MODE = 0x800B6A70, 0x800B70B4
 WAIT_DEFEATED, WAIT_COUNT = 0x800B6AC0, 0x800B6AC4
 PATTERN_ON, PATTERN_STOP_X, PATTERN_PTR = 0x800B6AC8, 0x800B6ACC, 0x800B6AD0
@@ -238,18 +238,18 @@ def _commands(ram: Ram, progress: int) -> None:
 
 
 def _bonus_frame(ram: Ram, gte) -> None:
-    """State 6: clear and bonus time, the remaining bonus time over the player, and on the stage
+    """State 6: clear and bonus time, the remaining bonus time over the first enemy, and on the stage
     clear (round state 8) the clear bonus and the key rule."""
     import projection_sim as pj
-    player = ram.u32(PLAYER_FIGHTER)
+    enemy = ram.u32(FIRST_ENEMY)
     clear = ram.s32(FIGHT_START_TIMER) - ram.s32(TIMER)
     bonus = ram.s32(ALLOWANCE + 4 * ram.s32(LEVEL) & M32) - clear
     ram.put(CLEAR_TIME, "i", ds._s32(clear) if clear >= 0 else 0)
     ram.put(BONUS_TIME, "i", ds._s32(bonus) if bonus >= 0 else 0)
     b = ram.s32(BONUS_TIME)
-    if b > 0 and ram.s32(player + 0x3F4) > 0:
-        sx, sy, _ = pj.screen_of(ram, gte, ram.s32(player + 0x990), ram.s32(player + 0x994) - 500,
-                                 ram.s32(player + 0x998), PROJ_SCRATCH)
+    if b > 0 and ram.s32(enemy + 0x3F4) > 0:
+        sx, sy, _ = pj.screen_of(ram, gte, ram.s32(enemy + 0x990), ram.s32(enemy + 0x994) - 500,
+                                 ram.s32(enemy + 0x998), PROJ_SCRATCH)
         ds.text(ram, STR_BONUS_LEFT, 0, 5, (sx & 0xFFFF) - 0x16, sy, ds._smod(ds._sdiv(b, 60), 60),
                 ds._smod(ds._sdiv(ds._s32(b * 100), 60), 100))
     if ram.u32(0x80097350) != 8:

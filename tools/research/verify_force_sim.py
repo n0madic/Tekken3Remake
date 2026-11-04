@@ -105,7 +105,7 @@ def random_script(cpu, rng) -> None:
     w32(cpu, 0x800B70E4, rng.randrange(0, 20000))
     w32(cpu, fs.WAIT_COUNT, rng.choice([-1, 0, 1, 3]))
     w32(cpu, fs.WAIT_DEFEATED, rng.randrange(4))
-    w32(cpu, fs.PLAYER_FIGHTER, 0x800A96F0)
+    w32(cpu, fs.FIRST_ENEMY, 0x800A96F0)
     for off, v in ((0x3F4, rng.choice([0, 0x320000, -1])), (0x990, rng.randrange(-8000, 8000)),
                    (0x994, rng.randrange(-2000, 500)), (0x998, rng.randrange(-8000, 8000))):
         cpu.write(0x800A96F0 + off, struct.pack("<i", v))
