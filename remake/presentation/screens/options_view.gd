@@ -23,7 +23,9 @@ var frame_count := 0
 
 
 func setup(hud_data: HudData, game_ram: GameRam, image: VramImage, screens_dir: String) -> void:
-	setup_psx(hud_data, game_ram, image)
+	var own := image.duplicate_image()
+	own.upload_file(screens_dir.path_join("options.tims"))
+	setup_psx(hud_data, game_ram, own)
 	pictures_dir = screens_dir
 	reload_pictures()
 

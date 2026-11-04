@@ -10,7 +10,7 @@ const SCREENS := "res://imported/screens"
 
 func test_options_pictures_follow_the_pack() -> void:
 	var picture := SCREENS.path_join("options.png")
-	if not require(TexturePacks.INDEX) or not require(picture + ".import"):
+	if not require(TexturePacks.INDEX) or not require(picture + ".import") or not require(SCREENS.path_join("vram_system.bin")):
 		return
 	var key := TexturePacks.key_of(picture)
 	if not expect(not key.is_empty(), "the options picture is replaceable"):
@@ -21,7 +21,7 @@ func test_options_pictures_follow_the_pack() -> void:
 	Settings.values["texture_pack"] = ""
 	TexturePacks.clear()
 	var view := OptionsView.new()
-	view.setup(null, null, VramImage.new(), SCREENS)
+	view.setup(null, null, VramImage.load_system(SCREENS.path_join("vram_system.bin")), SCREENS)
 	var original := view.picture_texture
 	expect(original != null and not original is ImageTexture, "no pack: the converted picture")
 

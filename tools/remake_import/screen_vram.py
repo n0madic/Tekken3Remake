@@ -6,7 +6,8 @@ textures, then each screen's pictures uploaded in the game's order.
 
 - `screens/vram_system.bin`: the 1024 × 512 VRAM words after the system textures (raw u16 LE);
 - `screens/<screen>.tims`: a screen's TIMs in upload order (u32 count, then per TIM its u32
-  length and bytes);
+  length and bytes); `options` holds GAME OPTION's mode pictures (their CLUTs are the font
+  colours of the system image);
 - `screens/portraits/<n>.png`: the character select's big portraits (126 × 252, 8-bit TIMs with
   their own CLUT), loaded one at a time by the game;
 - `screens/vs_portraits/<n>.png`: the pre-fight VS screen's portraits (`face_b<n>.tiz`, BNS 14–35,
@@ -39,6 +40,8 @@ FORCE_KEYS = (0x800B1000, 0x800B11A8, 0x800B1350)
 # in VRAM for the fights: the pad buttons and direction arrows of the move lists and practice's
 # key display (tpage 6, (384, 224)).
 TITLE_BUTTONS = 0x800D4FB8
+TITLE_ARCHIVE = 0x800EC570           # title.ovl: the title's and the options' pictures (uploaded at the title)
+MODE_PICTURES = 7                    # its member: GAME OPTION's mode pictures, (704, 0), 96 × 14 each
 SELECT_ARCHIVE = 0x80118C48          # select.ovl: the screen's pictures (uploaded at sub-state 0)
 SELECT_PORTRAITS = 0x800B974C        # select.ovl: the big portraits by attribute (22)
 RESULT_TIME_ATTACK = 0x800B99B4      # result.ovl: time attack's 368 × 480 picture (6 members)
@@ -125,6 +128,7 @@ def convert(disc: Disc, out: Output) -> None:
         system.upload_tim(tim)
     out.write("screens/vram_system.bin", system.words.astype("<u2").tobytes())
     _runtime(out, system, "screens/vram_system.bin", [])
+    write_tims(out, "screens/options.tims", system, [title[TITLE_ARCHIVE].tims[MODE_PICTURES]])
     found = disc.images("select")
     write_tims(out, "screens/select.tims", system, found[SELECT_ARCHIVE].tims)
     for i, tim in enumerate(overlay_images.archive_members(*disc.source("select", SELECT_PORTRAITS))):
