@@ -799,7 +799,7 @@ def background_draw(ram: Ram, gte) -> None:
     pj.local_matrix(ram, gte, pj.VIEW, m)
     sxy = BG_SCRATCH + 0x50
     pj.rot_trans_pers_psyq(ram, gte, zero, sxy, sxy + 4, sxy + 8)
-    top = pj._s32(ram.s16(sxy + 2) - (ram.u32(BG_H) << 6))
+    top = ds._s32(ram.s16(sxy + 2) - (ram.u32(BG_H) << 6))
     column = _cdiv(scroll, 64)
     scene_ot = ram.u32(ram.u32(0x800A911C) + 4) + 4 * ram.u32(BG_DEPTH) & M32
     tile_only = ram.u32(BG_TILE_ONLY)
@@ -818,10 +818,10 @@ def background_draw(ram: Ram, gte) -> None:
     angle = ram.u32(BG_SLOPE) & 0xFFF
     cos = ram.s16(pj.SIN_TABLE + 0x800 + 2 * angle)
     sin = ram.s16(pj.SIN_TABLE + 2 * angle)
-    rise = pj._s32(_cdiv(0xC0000, cos) * sin)
-    phase = pj._s32(0xB8000 - ((_cdiv(scroll, 192) * 192 - scroll) << 12))
-    y = pj._s32((top << 12) + pj._s32(_cdiv(phase, cos) * sin))
-    x0 = pj._s32(_cdiv(scroll, 64) * 64 - scroll << 12)
+    rise = ds._s32(_cdiv(0xC0000, cos) * sin)
+    phase = ds._s32(0xB8000 - ((_cdiv(scroll, 192) * 192 - scroll) << 12))
+    y = ds._s32((top << 12) + ds._s32(_cdiv(phase, cos) * sin))
+    x0 = ds._s32(_cdiv(scroll, 64) * 64 - scroll << 12)
     gates = 0
     # Map size, OT entry and level are read again where the game reads them: more than three
     # gate tiles overrun BG_GATES into these globals (a map narrower than three columns).
@@ -833,7 +833,7 @@ def background_draw(ram: Ram, gte) -> None:
         for _ in range(7):
             if not (y < -0x40000 or 0x1E0 << 12 < y):
                 w = ram.s32(BG_W)
-                cell = 2 * (pj._s32(c - w * _cdiv(c, w)) + row * w)
+                cell = 2 * (ds._s32(c - w * _cdiv(c, w)) + row * w)
                 word = ram.u16(tex + cell & M32)
                 ram.put(sprites + 0xE, "H", ram.u16(clut + cell & M32))
                 ram.put(sprites + 0xC, "B", (word & 3) << 6)
@@ -855,11 +855,11 @@ def background_draw(ram: Ram, gte) -> None:
                     gates += 1
                     ds.link(ram, ot_entry(), g, ram.u8(g + 3))
             c += 1
-            x = pj._s32(x + 0x40000)
+            x = ds._s32(x + 0x40000)
             if c == _cdiv(c, 3) * 3:
-                y = pj._s32(y - rise)
+                y = ds._s32(y - rise)
         row += 1
-        y = pj._s32(row_y + 0x40000)
+        y = ds._s32(row_y + 0x40000)
 
 
 BG_MAP = 0x800AE1D4              # stage archive member 2: u16 w, u16 h, u16 texture[w·h], u16 clut[w·h]
