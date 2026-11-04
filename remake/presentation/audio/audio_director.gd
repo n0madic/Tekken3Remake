@@ -15,6 +15,7 @@ const BANK_COMBAT := 1
 const BANK_SYSTEM := 2
 const BANK_FIGHTER := 3
 const BANK_NAMES := {BANK_COMBAT: "combat", BANK_SYSTEM: "system"}
+const STAFF_ROLL_BANK := "staff_roll"   ## FUN_8007517c's bank from ending.ovl: the roll's opening voice
 const BANK_BUSES := {BANK_COMBAT: &"SFX", BANK_SYSTEM: &"System", BANK_FIGHTER: &"Voices"}
 ## FUN_8004B920: voices it leaves on (the announcer's), and with `keep_music` these as well.
 const VOICES_KEPT := [2, 3]
@@ -253,6 +254,9 @@ func handle(events: SimEvents, from := 0) -> void:
 				stop_code(e.a, e.b)
 			SimEvents.Kind.SYSTEM_SOUND:
 				play_system(e.a)
+			SimEvents.Kind.STAFF_ROLL_BANK:
+				fighter_banks[0] = STAFF_ROLL_BANK
+				_preload_bank(STAFF_ROLL_BANK)
 			SimEvents.Kind.VOICE_OFF:
 				key_off(e.a)
 			SimEvents.Kind.VOICES_OFF:

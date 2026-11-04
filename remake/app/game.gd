@@ -62,6 +62,7 @@ var ending_view := EndingView.new()
 var practice_view := PracticeView.new()
 var move_list_view := MoveListView.new()
 var mode_hud := ModeHudView.new()
+var team_icons := TeamIconsView.new()
 var movie := MoviePlayer.new()
 var mask := ScreenMask.new()
 var fade := FadeOverlay.new()
@@ -114,7 +115,7 @@ func _ready() -> void:
 	var layer := CanvasLayer.new()
 	layer.layer = 1
 	add_child(layer)
-	for view: Control in [bars, hud, mode_hud, pause_view, practice_view, move_list_view, attract_screen, main_menu_view, options_view,
+	for view: Control in [bars, team_icons, hud, mode_hud, pause_view, practice_view, move_list_view, attract_screen, main_menu_view, options_view,
 			select_view, quick_view, vs_view, result_view, ranking_view, ending_view, mask, movie]:
 		layer.add_child(view)
 	var top := CanvasLayer.new()
@@ -225,6 +226,7 @@ func _load() -> void:
 	practice_view.setup(hud_data, ram, vram_system)
 	move_list_view.setup(hud_data, ram, vram_system, AssetCatalog.ROOT)
 	mode_hud.setup_modes(hud_data, ram, vram_system, content.mode_ram("force"), screens_dir)
+	team_icons.setup_psx(hud_data, ram, vram_system)
 	pause_view.setup(hud)
 	_apply_texts()
 
@@ -689,7 +691,8 @@ func _show() -> void:
 		hud.flow_texts = flow.texts.duplicate()
 		hud.show_state(flow.sim)
 		pause_view.show_state(flow.sim)
-	mode_hud.show_state(flow.sim, hud_shown)
+	mode_hud.show_state(flow.sim, hud_shown, flow.globals.player_active)
+	team_icons.show_state(flow.sim, hud_shown)
 	practice_view.visible = fighting and flow.region.mode == GameMode.PRACTICE
 	if practice_view.visible:
 		practice_view.show_state(flow)
@@ -847,6 +850,7 @@ func _process(_delta: float) -> void:
 		bars.frame(fight_view.rig.visible_rect, fight_view.clear_colour if surround else Color.BLACK)
 		hud.place(fight_view.rig.frame_rect)
 		mode_hud.place(fight_view.rig.frame_rect)
+		team_icons.place(fight_view.rig.frame_rect)
 		practice_view.place(fight_view.rig.frame_rect)
 		move_list_view.place(fight_view.rig.frame_rect)
 		RenderingServer.set_default_clear_color(fight_view.clear_colour)

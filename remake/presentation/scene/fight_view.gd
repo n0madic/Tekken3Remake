@@ -188,8 +188,7 @@ func apply(sim: FightSimulation) -> void:
 	_wind.step()
 	effects.step(sim.events)
 	effects.objects.show_pool(sim.fight.effects)
-	var v := sim.camera.view
-	var view := CameraView.new(v.pitch, v.yaw, v.x, v.y, v.z, v.h)
+	var view := sim.camera.view.copy()
 	rig.set_view(view, _is_cut(view))
 	_last_view = view
 	_overhead = sim.camera.overhead != 0
@@ -199,7 +198,7 @@ func apply(sim: FightSimulation) -> void:
 	_spotlight(sim)
 	stage_view.set_floor_distance(_floor_distance(sim))
 	stage_view.set_backdrop_turn(sim.fight.backdrop.angle)
-	stage_view.step(v.yaw, sim.fight.rounds_played, sim.fight.round_state, sim.pads.physical[0])
+	stage_view.step(view.yaw, sim.fight.rounds_played, sim.fight.round_state, sim.pads.physical[0])
 	if tiled != null:
 		tiled.step(sim)
 		stage_view.set_floor_edge(tiled.floor_edge)

@@ -1,7 +1,7 @@
 class_name FightHud
 extends Control
 ## The fight HUD (hud.md) with the game's own sprites: health bars with their animation, the
-## timer, the round marks, the name plates, the round messages and the replay caption, laid out
+## timer, the round marks (team battle's members: TeamIconsView), the name plates, the round messages and the replay caption, laid out
 ## in the game's 384 × 480 frame-buffer units inside the scene's 4:3 frame.
 
 const BAR_Y := 40.0
@@ -90,7 +90,8 @@ func _draw() -> void:
 		if _fight.mode != GameMode.FORCE:
 			for p in 2:
 				_draw_bar(p)
-				_draw_marks(p)
+				if _fight.mode != GameMode.TEAM:
+					_draw_marks(p)
 				_draw_name(p)
 		_draw_timer()
 	if _fight.replay_playing == 0:

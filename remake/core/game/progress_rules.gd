@@ -9,7 +9,8 @@ const ALL_CHARACTERS := 0x1FFFFF
 const FIGHTS_CAP := 0xFFFF
 const NO_CHARACTER := 0x16
 const DOCTOR_B_BIT := 1 << Character.DOCTOR_B
-const UNLOCK_STEP_MASK := 0x83FF        ## the characters whose clears count as unlock steps
+const UNLOCK_STEPS := 14                ## the schedule's steps
+const UNLOCK_STEP_MASK := 0x83FF        ## the bit positions FUN_800B2350 tests (bug #29)
 const SECOND_CLEARS := 0x10900          ## the second-clear bits: Kuma (Panda), Eddy (Tiger), Gun Jack
 ## Start costumes unlocked by usage: (character, usage, costume bit).
 static var USAGE_COSTUMES: Array[PackedInt32Array] = [PackedInt32Array([9, 50, 0x200]),
@@ -77,8 +78,8 @@ func add_start_costume(bit: int) -> void:
 
 ## ArcadeUnlocks (FUN_800564C8): the first `n` steps of the schedule.
 func arcade_unlocks(n: int) -> void:
-	if (n & 0xFFFFFFFF) > 14:
-		n = 14
+	if (n & 0xFFFFFFFF) > UNLOCK_STEPS:
+		n = UNLOCK_STEPS
 	for step in maxi(n, 0):
 		var kind := schedule[2 * step]
 		var value := schedule[2 * step + 1]
@@ -127,7 +128,7 @@ func play_unlocks() -> void:
 	var need := 50 if progress.play_steps_seen != 0 else 100
 	if progress.fights_since_unlock >= need:
 		progress.play_steps_seen = 1
-		var steps := mini(progress.play_steps + 1, 14)
+		var steps := mini(progress.play_steps + 1, UNLOCK_STEPS)
 		progress.fights_since_unlock = 0
 		progress.play_steps = steps
 		arcade_unlocks(steps)
@@ -178,10 +179,10 @@ func record_clear(character: int, costume: int) -> void:
 
 
 ## The unlock steps a cleared mask opens: the bit positions below the number of cleared
-## characters that are set in 0x83FF (bug #29), or with `fixed` the cleared characters in it.
+## characters that are set in 0x83FF (bug #29), or with `fixed` one step per cleared character.
 static func unlock_steps(cleared: int, fixed: bool) -> int:
 	if fixed:
-		return popcount(cleared & UNLOCK_STEP_MASK)
+		return mini(popcount(cleared), UNLOCK_STEPS)
 	var n := 0
 	for i in popcount(cleared):
 		if (1 << i) & UNLOCK_STEP_MASK:

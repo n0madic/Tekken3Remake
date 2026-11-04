@@ -1,8 +1,11 @@
 class_name ModeHudView
 extends FightCanvas
-## Tekken Ball's and Tekken Force's parts of the fight HUD, over FightHud (which keeps the timer,
-## and in Tekken Ball the usual bars, marks and names):
+## The fight HUD's mode line, and Tekken Ball's and Tekken Force's parts of it, over FightHud
+## (which keeps the timer, and in Tekken Ball the usual bars, marks and names):
 ##
+## - every mode: the per-player line (FUN_8004EFF8, FUN_8004EE3C, ModeLine; `hud_mode_line` in
+##   tools/research/draw_sim.py): STAGE n and the run's time, the mode's name, the survival count,
+##   SCORE and HI-SCORE, the coin prompt, GAME OVER;
 ## - Tekken Force (force.ovl): the player's and the shown enemies' name plates and health bars
 ##   (FUN_800B3790, FUN_800B3118), the level progress bar (FUN_800B3D34), the keys earned
 ##   (FUN_800B4924), LIFE UP! (FUN_800B4374), "+n SEC" over a defeated enemy,
@@ -12,6 +15,29 @@ extends FightCanvas
 ##   (FUN_800B4350; `ball_gauges`, `ball_popups` in tools/research/draw_sim.py) and a point's four
 ##   streaks (FUN_800B3198, `_streaks` in tools/research/ball_sim.py).
 
+const MODE_LINE_X := 0x80022228        ## per player: the line's x
+const COIN_X := 0x8002222C             ## per player: the coin prompt's right end
+const MODE_LINE_Y := 0x18
+const MODE_LINE_COLOUR := 6
+const STR_GAME_OVER_LINE := 0x80022234
+const STR_TEAM_LINE := 0x80022248
+const STR_TA_LINE := 0x80022260
+const STR_SURV_LINE := 0x80022278
+const STR_BALL_LINE := 0x80022290
+const STR_SCORE := 0x800222A8
+const STR_HI_SCORE := 0x800222BC
+const FMT_PREFIX := 0x800980E8         ## "%c%f%H%V"
+const STR_STAGE := 0x800B0A18          ## arcade.ovl
+const STR_FINAL_STAGE := 0x800B0A2C
+const STR_TICKS := 0x800B0A3C
+const STR_TIME := 0x800B0A4C
+const SURVIVAL_WINS_TEXTS := 0x800B4E64   ## arcade.ovl: the wins' format by digits
+const SURVIVAL_COUNT_TEXTS := 0x800B4E78  ## arcade.ovl: the title by survivor rank
+const SURVIVAL_COUNT_MAX := 10
+const SURVIVAL_WINS_X := 0x30
+const SURVIVAL_WINS_MAX := 9999
+const TIME_CAP := 359_999
+const LAST_STAGE := 10
 const NAME_POS := 0x800B0EC8           ## force.ovl: per record (x, y); the enemies' right-aligned
 const BAR_COLOURS := 0x800B69FC        ## 4 × RGB (4 bytes apart): the progress bar's segments
 const HALF_DARK := Color(0, 0, 0, 0.5)   ## a black texel half and half: the scene halved
@@ -46,6 +72,7 @@ const STREAK_BOTTOM := 0x1E0
 var force_ram: GameRam
 var keys_vram: VramImage
 var _sim: FightSimulation
+var _humans := PackedInt32Array([0, 0])   ## GameGlobals.player_active
 var _shown := false
 var _glow := Rect2()                   ## the progress bar's additive part this frame
 var _glow_colour := Color.BLACK
@@ -60,11 +87,12 @@ func setup_modes(hud_data: HudData, exe: GameRam, system: VramImage, force: Game
 	add_pass(CanvasItemMaterial.BLEND_MODE_ADD, _progress_glow)
 
 
-## After a simulation step.
-func show_state(sim: FightSimulation, fighting: bool) -> void:
+## After a simulation step (`humans`: GameGlobals.player_active).
+func show_state(sim: FightSimulation, fighting: bool, humans: PackedInt32Array) -> void:
 	_sim = sim
+	_humans = humans
 	var mode := sim.fight.mode
-	_shown = fighting and (mode == GameMode.BALL or mode == GameMode.FORCE)
+	_shown = fighting and mode != GameMode.VS and mode != GameMode.PRACTICE
 	visible = _shown
 	if _shown:
 		redraw()
@@ -75,10 +103,76 @@ func _draw() -> void:
 		return
 	begin()
 	var fight := _sim.fight
+	if fight.hud_shown != 0 and fight.replay_playing == 0:
+		_mode_line(fight)
 	if fight.mode == GameMode.FORCE and fight.force != null:
 		_force(fight)
 	elif fight.mode == GameMode.BALL and fight.ball != null:
 		_ball(fight)
+
+
+# ---- The mode line ------------------------------------------------------------------------------
+
+## FUN_8004EE3C for both players.
+func _mode_line(fight: FightState) -> void:
+	for p in 2:
+		var x := ram.s16(MODE_LINE_X + 2 * p)
+		var y := MODE_LINE_Y
+		match ModeLine.code(fight, _humans, p):
+			ModeLine.COIN:
+				coin(p, ram.s16(COIN_X + 2 * p), y, 5, fight.vblank)
+			ModeLine.GAME_OVER:
+				ptext(STR_GAME_OVER_LINE, [2, 0, x + 0x20, y])
+			ModeLine.STAGE_TIME:
+				_stage_time(fight, x, y)
+			ModeLine.TEAM:
+				ptext(STR_TEAM_LINE, [MODE_LINE_COLOUR, 0, x, y])
+			ModeLine.TIME_ATTACK:
+				ptext(STR_TA_LINE, [MODE_LINE_COLOUR, 0, x, y])
+			ModeLine.SURVIVAL:
+				ptext(STR_SURV_LINE, [MODE_LINE_COLOUR, 0, x, y])
+			ModeLine.SURVIVAL_COUNT:
+				_survival_count(fight.region.ctx_s32(ModeRules.SURVIVAL_RANK), x, y)
+				_survival_wins(fight.region.ctx_s32(Opponents.SURVIVAL_WINS), x + SURVIVAL_WINS_X, y)
+			ModeLine.BALL:
+				ptext(STR_BALL_LINE, [MODE_LINE_COLOUR, 0, x, y])
+			ModeLine.SCORE:
+				if fight.force != null:
+					_force_score(fight.force, p, x, y)
+
+
+## Tekken Force: SCORE on the first player's side, HI-SCORE on the second's.
+func _force_score(force: TekkenForce, p: int, x: int, y: int) -> void:
+	if p == 0:
+		ptext(STR_SCORE, [5, 0, x, y, MODE_LINE_COLOUR, force.score()])
+	else:
+		ptext(STR_HI_SCORE, [2, 0, x, y, MODE_LINE_COLOUR, force.gu32(TekkenForce.HISCORE)])
+
+
+## FUN_800B1E78: STAGE n (the last one: FINAL, blinking) and the run's time so far.
+func _stage_time(fight: FightState, x: int, y: int) -> void:
+	var stage := fight.region.fight_index + 1
+	var t := mini(fight.region.fight_clock + fight.region.total_time, TIME_CAP)
+	var format := STR_STAGE if stage < LAST_STAGE or fight.vblank & 0x20 else STR_FINAL_STAGE
+	ptext(format, [7, 0, x, y, stage])
+	ptext(STR_TICKS, [5, 0, x + 0x5C, y - 2, x + 0x75])
+	ptext(STR_TIME, [5, 0, x + 0x4B, y, t / 60 / 60, x + 99, (t / 60) % 60, x + 0x7D, (t % 60) * 100 / 60])
+
+
+## FUN_800B20DC: the survivor rank's title (none at 0).
+func _survival_count(n: int, x: int, y: int) -> void:
+	if n == 0:
+		return
+	var text_at := ram.u32(SURVIVAL_COUNT_TEXTS + 4 * mini(n, SURVIVAL_COUNT_MAX))
+	print_fmt(ram.string(FMT_PREFIX) + ram.string(text_at), [5, 0, x, y])
+
+
+## FUN_800B2004: the wins, in the format of their digits.
+func _survival_wins(n: int, x: int, y: int) -> void:
+	n = mini(n, SURVIVAL_WINS_MAX)
+	var k := 0 if n <= 1 else 1 if n <= 9 else 2 if n <= 99 else 3 if n < 1000 else 4
+	var text_at := ram.u32(SURVIVAL_WINS_TEXTS + 4 * k)
+	print_fmt(ram.string(FMT_PREFIX) + ram.string(text_at), [1, 0, x, y, n])
 
 
 # ---- Tekken Force -------------------------------------------------------------------------------
@@ -264,7 +358,7 @@ func _seconds(force: TekkenForce, i: int) -> void:
 	var y := s[1] - ((clock - (p.until - 0x3C)) * 8 >> 4)
 	var kind := force.g16(TekkenForce.slot(i) + 0xE)
 	var seconds := force_ram.u16(TekkenForce.KILL_SECONDS + 4 * kind + 2)
-	var x := float(s[0] - 0x1B)
+	var x := s[0] - 0x1B
 	print_fmt("%f%c%H%V+", [0, 5, x, y + 4])
 	x += text_width("+", 0)
 	print_fmt("%f%c%H%V%d", [1, 5, x, y, seconds])

@@ -15,11 +15,13 @@ with the VAG's loop as a `smpl` loop.
   tone and program pans (0–127, 64 centre);
 - `voice_banks`: costume slot → the name of its voice bank. A costume's voices are its `.vh`
   (BNS 72 + 4s) with the body in member 2 of its `.arc` (BNS 73 + 4s); identical banks are
-  written once, named after the first slot that uses them.
+  written once, named after the first slot that uses them. `staff_roll` is the bank of ending.ovl
+  that the game opens in the fighter's slot before the staff roll (FUN_8007517c), one long tone.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import hashlib
 import struct
 
@@ -32,6 +34,8 @@ EXE_VABS = {                     # bank name → (VH address, body address) in t
     "combat": (0x80025AAC, 0x800D3C8C),     # VAB 0
     "system": (0x80026CCC, 0x8011063C),     # VAB 1
 }
+STAFF_ROLL_BANK = "staff_roll"   # FUN_8007517c opens it in the fighter's voice slot before the roll
+STAFF_ROLL_VAB = (0x800EFD18, 0x800F0938)   # ending.ovl: its VH and body
 VOLUMES = 0x80027B58             # 16 key-on volumes by sound code bits 6–9
 VH_TABLES = 0x820                # header (0x20) + 128 program records (16 bytes)
 PROGRAMS = 128
@@ -70,13 +74,19 @@ def convert_bank(out: Output, name: str, header: bytes, body: bytes) -> dict:
     return {"tones": tones}
 
 
+def read_vab(read: Callable[[int, int], bytes], vh_addr: int, body_addr: int) -> tuple[bytes, bytes]:
+    """A VAB in memory: its header and body, read by address."""
+    head = read(vh_addr, VH_TABLES)
+    size = vh_size(head)
+    total = struct.unpack_from("<I", head, 0x0C)[0]
+    return read(vh_addr, size), read(body_addr, total - size)
+
+
 def convert(disc: Disc, out: Output, costume_slots: list[int]) -> None:
     banks = {}
     for name, (vh_addr, body_addr) in EXE_VABS.items():
-        head = disc.exe_bytes(vh_addr, VH_TABLES)
-        size = vh_size(head)
-        total = struct.unpack_from("<I", head, 0x0C)[0]
-        banks[name] = convert_bank(out, name, disc.exe_bytes(vh_addr, size), disc.exe_bytes(body_addr, total - size))
+        banks[name] = convert_bank(out, name, *read_vab(disc.exe_bytes, vh_addr, body_addr))
+    banks[STAFF_ROLL_BANK] = convert_bank(out, STAFF_ROLL_BANK, *read_vab(disc.blocks()["ending"].read, *STAFF_ROLL_VAB))
     voice_banks = {}
     seen: dict[str, str] = {}
     for slot in costume_slots:

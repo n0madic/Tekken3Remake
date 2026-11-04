@@ -757,7 +757,7 @@ After the tenth arcade fight the game enters state 19 with `0x800AE158 = 0`; a n
 
 | Phase | Duration | Content |
 |---:|---|---|
-| 0 | 31 frames | Silence, then sound `0xC7C0`. |
+| 0 | 31 frames | Silence, then sound `0xC7C0`: bank 3, program 0, tone 0 of the bank `FUN_8007517C` opened in the fighter's voice slot before the roll (VAB 2, embedded in `ending.ovl`: VH `0x800EFD18`, body `0x800F0938`, one tone), not the winner's voices. |
 | 1 | until `c` = 240 | Music track 4 starts. |
 | 2 | until `FUN_8006BCC8` returns 0 | Waits for the music. |
 | 3 | 60 frames | Pause. `c` restarts here and at the next phase. |

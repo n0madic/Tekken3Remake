@@ -19,6 +19,30 @@ func test_a_silent_code_keys_its_voice_off() -> void:
 	director.free()
 
 
+## FUN_8007517c: the staff roll's bank takes the first voice slot, so its opening call (0xC7C0) plays
+## from it and not from the winner's voices; the next fight's fighters take the slot back.
+func test_the_staff_roll_bank_replaces_the_first_voice_bank() -> void:
+	if not require(Assets.path("sounds/sounds.json")):
+		return
+	var director := AudioDirector.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(director)
+	expect(director.banks.has(AudioDirector.STAFF_ROLL_BANK), "the bank is converted")
+	director.set_fighters(PackedInt32Array([0, 2]), PackedInt32Array([0, 1]))
+	var events := SimEvents.new()
+	events.add(SimEvents.Kind.STAFF_ROLL_BANK, -1)
+	events.add(SimEvents.Kind.SOUND, -1, StaffRoll.SOUND_START, 0)
+	director.handle(events)
+	expect_equal(director.fighter_banks[0], AudioDirector.STAFF_ROLL_BANK, "the first slot")
+	var tones: Dictionary = (director.banks[AudioDirector.STAFF_ROLL_BANK] as Dictionary)["tones"]
+	var voice := director.voices[(StaffRoll.SOUND_START >> 10) & 0xF]
+	expect(voice.playing, "the opening call plays")
+	expect_equal(voice.stream.resource_path.get_file(), str((tones["0_0"] as Dictionary)["file"]).get_file(), "its tone")
+	director.set_fighters(PackedInt32Array([0, 2]), PackedInt32Array([0, 1]))
+	expect(director.fighter_banks[0] != AudioDirector.STAFF_ROLL_BANK, "a fight takes the slot back")
+	director.stop_all()
+	director.free()
+
+
 ## The first hit or voice of a fight must not load its tone in the middle of a step: the common
 ## banks are requested with the director and a fighter's voice bank when the fighter is set, and the
 ## voice banks of earlier fights are dropped.

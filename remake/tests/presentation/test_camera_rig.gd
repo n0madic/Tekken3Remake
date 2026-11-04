@@ -128,3 +128,26 @@ func test_coverage_follows_the_view_direction() -> void:
 	expect(worst < 0.01, "the frame moves smoothly while the camera turns (largest step %.4f)" % worst)
 	rig.camera.free()
 	rig.free()
+
+
+## The Godot camera has the rotation of the game's view matrix (ViewMatrix.build), with Tekken
+## Force's level 4 roll. S = diag(1, −1, −1) turns the game's axes into Godot's, and the view
+## matrix's row 1 is scaled by ASPECT.
+func test_the_basis_has_the_view_matrix_rotation() -> void:
+	if not require(AssetCatalog.ROOT.path_join("manifest.json")):
+		return
+	var tables := FightTables.load_from(AssetCatalog.ROOT + "tables")
+	var directions: Array[Vector3] = [Vector3(1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, 1)]
+	var s := Basis(Vector3(1, 0, 0), Vector3(0, -1, 0), Vector3(0, 0, -1))
+	for a: PackedInt32Array in [PackedInt32Array([0, 0, 0x82]), PackedInt32Array([0x180, 0x7F0, 0x82]),
+			PackedInt32Array([0x90, 0x400, -0x82]), PackedInt32Array([0x200, 0xC10, 0])]:
+		var view := CameraView.new(a[0], a[1], 0, 0, 0, 500)
+		view.roll = a[2]
+		var r := ViewMatrix.build(view, tables).rot
+		var basis := CameraRig.view_basis(WorldSpace.radians(a[0]), WorldSpace.radians(a[1]), WorldSpace.radians(a[2]))
+		var scale_y := float(ViewMatrix.ASPECT) / 4096.0
+		for d in directions:
+			var want := Vector3(r[0] * d.x + r[1] * d.y + r[2] * d.z,
+				(r[3] * d.x + r[4] * d.y + r[5] * d.z) / scale_y, r[6] * d.x + r[7] * d.y + r[8] * d.z) / 4096.0
+			var got := s * (basis.transposed() * (s * d))
+			expect(got.distance_to(want) < 0.002, "angles %s, %s: %s against %s" % [str(a), str(d), str(got), str(want)])

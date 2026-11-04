@@ -31,6 +31,7 @@ enum Kind {
 	MOVE_LIST,    ## the move lists are shown: a: the sides' mask, b: the side of the exit prompt (MoveListScreen)
 	FORCE_NAMES,  ## Tekken Force: fighter `a`'s name plate changes to character `b` (FUN_800B362C)
 	SHOUT,        ## a: the voice id (0x2nnn) of an attack shout that plays, b: player (the arcade models' face: ArcadeFace)
+	STAFF_ROLL_BANK, ## FUN_8007517c: the staff roll's bank (ending.ovl) replaces the first voice bank
 }
 
 ## EFFECTS_DRAW modes: the game's flipbook and dust ring draw calls (FUN_80077744,

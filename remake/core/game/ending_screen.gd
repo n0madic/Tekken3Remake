@@ -51,6 +51,7 @@ func after_movie() -> void:
 		g.theater.after_movie()
 		return
 	roll.start()
+	g.sim.events.add(SimEvents.Kind.STAFF_ROLL_BANK, -1)
 	g.sim.events.add(SimEvents.Kind.MUSIC_PREPARE, -1, MUSIC_ROLL)
 	g.sub = 3
 

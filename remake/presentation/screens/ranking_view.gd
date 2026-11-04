@@ -40,9 +40,10 @@ func setup(hud_data: HudData, game_ram: GameRam, image: VramImage, screens_dir: 
 		var v := image.duplicate_image()
 		v.upload_file(screens_dir.path_join("ranking_%d.tims" % i))
 		_pages.append(v)
-	# The rows' lines, faces and bars are clipped below the header; their texts, in the front
-	# slot, are not (the draw area is reset before the text slot is drawn).
+	# The rows' lines, faces and bars and their texts (%p 1: the same ordering table entry) are
+	# clipped below the header by the draw area of FUN_800C23D8.
 	add_pass(CanvasItemMaterial.BLEND_MODE_MIX, func() -> void: _rows(false), ROWS_CLIP)
+	add_pass(CanvasItemMaterial.BLEND_MODE_MIX, func() -> void: _rows(true), ROWS_CLIP)
 	add_pass(CanvasItemMaterial.BLEND_MODE_SUB, func() -> void: _strip(0x7FD0))
 	add_pass(CanvasItemMaterial.BLEND_MODE_ADD, func() -> void: _strip(0x7F50))
 	add_pass(CanvasItemMaterial.BLEND_MODE_MIX, _front)
@@ -119,7 +120,6 @@ func _front() -> void:
 	if flow == null or _mode() == RankingScreen.TableMode.HIDDEN:
 		return
 	_header()
-	_rows(true)
 	if _mode() >= RankingScreen.TableMode.NAME_ENTRY:
 		var pos := ram.u16(NAME + RankingScreen.N_POS)
 		if pos < 3 and ram.u8(PAGE) < 2:

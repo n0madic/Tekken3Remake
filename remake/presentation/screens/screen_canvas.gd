@@ -263,6 +263,8 @@ func print_fmt(fmt: String, args: Array, font_index := 0, colour := 0) -> void:
 		var number := 0
 		if value is int:
 			number = value
+		elif value is float:
+			number = int(value as float)
 		match code:
 			"c", "f", "H", "V", "h", "v":
 				x = _flush_run(run, font, colour, x, y)

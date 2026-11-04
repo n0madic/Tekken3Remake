@@ -3,8 +3,8 @@ extends Node3D
 ## Shows the simulation's camera (CameraView) with a Godot camera, for any window shape
 ## (remake-plan.md#aspect-ratios).
 ##
-## The game's view matrix is `Rx(−pitch)·Ry(−yaw)` (CameraBuildView) looking along +z with y
-## down, and the projection distance H is in pixels of the 368 × 480 display, whose rows are
+## The game's view matrix is `Rx(−pitch)·Ry(−yaw)·Rz(−roll)` (CameraBuildView; only Tekken Force's
+## last level rolls) looking along +z with y down, and the projection distance H is in pixels of the 368 × 480 display, whose rows are
 ## scaled by 0x1BD2/4096 for the 4:3 picture: the 4:3 frame spans ±184/H horizontally and
 ## ±138/H vertically in view-plane units. That frame is always fully visible. A wider window
 ## extends it sideways (up to 21:9); a taller one extends it upwards as far as the stage's
@@ -50,19 +50,24 @@ func place(weight: float, window: Vector2) -> void:
 	var pitch := lerp_angle(WorldSpace.radians(a.pitch), WorldSpace.radians(b.pitch), weight)
 	var yaw := lerp_angle(WorldSpace.radians(a.yaw), WorldSpace.radians(b.yaw), weight)
 	var eye := WorldSpace.point(lerpf(a.x, b.x, weight), lerpf(a.y, b.y, weight), lerpf(a.z, b.z, weight))
-	camera.transform = Transform3D(view_basis(pitch, yaw), eye)
+	var roll := lerp_angle(WorldSpace.radians(a.roll), WorldSpace.radians(b.roll), weight)
+	camera.transform = Transform3D(view_basis(pitch, yaw, roll), eye)
 	_project(lerpf(a.h, b.h, weight), pitch, yaw, window)
 
 
-## Camera-to-world basis in Godot space: S·Mᵀ·S with M = Rx(−pitch)·Ry(−yaw), S = diag(1, −1, −1).
-static func view_basis(pitch: float, yaw: float) -> Basis:
+## Camera-to-world basis in Godot space: S·Mᵀ·S with M = Rx(−pitch)·Ry(−yaw)·Rz(−roll),
+## S = diag(1, −1, −1).
+static func view_basis(pitch: float, yaw: float, roll := 0.0) -> Basis:
 	var cy := cos(-yaw)
 	var sy := sin(-yaw)
 	var cx := cos(-pitch)
 	var sx := sin(-pitch)
 	var y := Basis(Vector3(cy, 0, sy), Vector3(0, 1, 0), Vector3(-sy, 0, cy))      # columns
 	var x := Basis(Vector3(1, 0, 0), Vector3(0, cx, -sx), Vector3(0, sx, cx))
-	var m := x * y
+	var cz := cos(-roll)
+	var sz := sin(-roll)
+	var z := Basis(Vector3(cz, sz, 0), Vector3(-sz, cz, 0), Vector3(0, 0, 1))
+	var m := x * y * z
 	var s := Basis(Vector3(1, 0, 0), Vector3(0, -1, 0), Vector3(0, 0, -1))
 	return s * m.transposed() * s
 

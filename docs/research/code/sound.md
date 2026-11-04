@@ -29,7 +29,7 @@ Every playable sound is a 16-bit code:
 | 4–5 | VAB program. |
 | 0–3 | Tone; played as key `60 + tone` with fine tuning 0. |
 
-`SoundPlayFighter` (`0x800756A4`) stops the voice and calls `SsUtKeyOnV(voice, vab, program, tone, 60 + tone, 0, vol, vol)`; `SoundPlaySystem` (`0x800758E8`) plays entry `n` of the system table (reached only through `FUN_80040E98`: the announcer, the continue and game-over calls and the sound scripts' ids 5–9, all in VAB 1, so the entries of bank 3 — which would play VAB 2, the voice cache's first slot, whatever character it holds — are never played this way); `SoundStopFighter` (`0x8007588C`) keys the voice off. For character 15 codes are first remapped through `0x8001AF7C`.
+`SoundPlayFighter` (`0x800756A4`) stops the voice and calls `SsUtKeyOnV(voice, vab, program, tone, 60 + tone, 0, vol, vol)`; `SoundPlaySystem` (`0x800758E8`) plays entry `n` of the system table (reached only through `FUN_80040E98`: the announcer, the continue and game-over calls and the sound scripts' ids 5–9, all in VAB 1, so the entries of bank 3 — which would play VAB 2, the voice cache's first slot, whatever character it holds — are never played this way); `SoundStopFighter` (`0x8007588C`) keys the voice off. For character 15 codes are first remapped through `0x8001AF7C`. Before the staff roll `FUN_8007517C` closes VABs 2 and 3 and opens the bank embedded in `ending.ovl` (VH `0x800EFD18`, body `0x800F0938`, one tone) as VAB 2 in the fighter's slot, so the roll's `0xC7C0` plays it ([staff roll](modes.md#arcade-ending-and-staff-roll)).
 
 ### Playback rate
 

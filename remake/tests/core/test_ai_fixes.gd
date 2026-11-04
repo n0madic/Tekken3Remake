@@ -131,10 +131,11 @@ func test_damage_history() -> void:
 
 
 ## #29: eleven characters cleared, among them five outside 0x83FF: the game counts bit positions
-## 0–10 of the mask (10 steps), fixed only the six cleared ones inside it.
+## 0–10 of the mask (10 steps), fixed every cleared character, up to the schedule's 14 steps.
 func test_unlock_pace() -> void:
 	var cleared := 0x3F | (0x1F << 10)
 	expect_equal(ProgressRules.unlock_steps(cleared, false), 10, "the game's steps")
-	expect_equal(ProgressRules.unlock_steps(cleared, true), 6, "fixed steps")
+	expect_equal(ProgressRules.unlock_steps(cleared, true), 11, "fixed steps")
 	expect_equal(ProgressRules.unlock_steps(ProgressRules.ALL_CHARACTERS, false), 11, "all cleared")
-	expect_equal(ProgressRules.unlock_steps(ProgressRules.ALL_CHARACTERS, true), 11, "all cleared, fixed")
+	expect_equal(ProgressRules.unlock_steps(ProgressRules.ALL_CHARACTERS, true), 14, "all cleared, fixed")
+	expect_equal(ProgressRules.unlock_steps(1 << Character.KUMA | 1, true), 2, "an unlocked character's clear counts")

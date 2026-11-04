@@ -44,3 +44,13 @@ static func _font(advance: int, line: int) -> HudData.FontInfo:
 	info.advance = advance
 	info.line = line
 	return info
+
+
+## A pen position given as a float is the same position (a float used to draw at x = 0).
+func test_float_positions() -> void:
+	var canvas := Recorder.new()
+	canvas.hud = HudData.new()
+	canvas.hud.fonts[0] = _font(8, 16)
+	canvas.print_fmt("%H%VA", [37.0, 21.0])
+	expect_equal(canvas.calls, [["A", 0, 0, 37.0, 21.0]])
+	canvas.free()
