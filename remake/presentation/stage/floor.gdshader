@@ -16,7 +16,10 @@ uniform float pattern_size = 18.0;
 uniform vec3 far_edge = vec3(0.0, 0.0, 1.0e9);
 // The spotlight floors (stages.md#floor, kinds 1–4; FUN_80049AE0): the brightness is
 // min(K / r², limit) / 128 with r the floor distance to a light point, or the sum of two for
-// kind 1 (spot_lights = (a.x, a.z, b.x, b.z) in Godot units, spot_k = K in square metres).
+// kind 1 (spot_lights = (a.x, a.z, b.x, b.z) in Godot units, spot_k = K in square metres). The
+// game multiplies display colours, ALBEDO is linear: hence the power. Their only light is this
+// one: no specular, whose sheen at grazing angles ignores ALBEDO and would keep the far floor lit.
+const float DISPLAY_GAMMA = 2.2;
 uniform int spot_kind = 0;
 uniform vec4 spot_lights = vec4(0.0);
 uniform float spot_k = 0.0;
@@ -52,7 +55,8 @@ void fragment() {
 			vec2 b = world_position.xz - spot_lights.zw;
 			level += spot_k / max(dot(b, b), 1.0e-6);
 		}
-		ALBEDO *= min(level, spot_limit) / 128.0;
+		ALBEDO *= pow(min(level, spot_limit) / 128.0, DISPLAY_GAMMA);
+		SPECULAR = 0.0;
 	} else if (shade != 0) {
 		float beyond = max(-VERTEX.z * units_per_metre - camera_distance, 0.0);
 		int i = min(int(floor(beyond * float(fade_scale) / 65536.0)), 1023);
