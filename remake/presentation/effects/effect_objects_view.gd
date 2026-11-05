@@ -85,11 +85,20 @@ func _prepare(node: MultiMeshInstance3D, shader: Shader, page: Texture2D, palett
 	material.set_shader_parameter("palettes", palettes)
 	if shader == ADD_SHADER:
 		material.set_shader_parameter("hdr_boost", EffectsView.HDR_BOOST)
+	material.set_shader_parameter("ball_margin", EffectsView.BALL_MARGIN)
+	material.set_shader_parameter("min_pull", EffectsView.MIN_PULL)
 	node.material_override = material
 	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	# The instances are placed in view space by the shader: the node's bounds cannot be known.
 	node.custom_aabb = AABB(Vector3(-1000, -1000, -1000), Vector3(2000, 2000, 2000))
 	add_child(node)
+
+
+## Tekken Ball's solid ball as `BallView.occluder` gives it (a zero radius for none): the objects
+## the game draws over it are drawn clear of the sphere, in the shader.
+func set_ball(ball: Vector4) -> void:
+	for node: MultiMeshInstance3D in [additive, half]:
+		(node.material_override as ShaderMaterial).set_shader_parameter("ball", ball)
 
 
 ## The players' character flipbooks (the charged ball's glow).

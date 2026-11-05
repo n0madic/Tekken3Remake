@@ -65,3 +65,44 @@ func test_drift_fades_each_frame() -> void:
 	expect_equal(snappedf(sprite.velocity.length() / first, 0.0001), snappedf(pow(EffectsView.DRIFT_DECAY, 10.0), 0.0001), "the speed decays by 0x76/128 a frame")
 	expect((sprite.node.position - start).length() < first * 10.0, "the sprite drifts less than at a constant speed")
 	view.free()
+
+
+func test_sparks_the_game_draws_over_the_ball_are_placed_clear_of_it() -> void:
+	var eye := Vector3.ZERO
+	var forward := Vector3(0, 0, -1)
+	var ball := Vector4(0, 0, -5, 0.5)       # 5 m ahead, 0.5 m radius: its surface starts 4.5 m ahead
+	var front := 5.0 - 0.5 - EffectsView.BALL_MARGIN
+	var at := Vector3(0.1, 0.2, -5.0)         # at the ball's depth, inside the sphere's reach
+	var k := EffectsView.pull_over_ball(eye, forward, at, ball)
+	expect(k < 1.0, "a spark at the ball's depth is pulled toward the camera")
+	expect(is_equal_approx(-(at * k).z, front), "to just in front of the sphere")
+	expect((at * k).normalized().is_equal_approx(at.normalized()), "along its view ray, so it stays where it was on the screen")
+	var inside := EffectsView.pull_over_ball(eye, forward, Vector3(0, 0, -(5.0 + EffectsView.SORT_BIAS - 0.01)), ball)
+	expect(inside < 1.0, "also one up to the sort bias behind the ball's centre: the game files it over the ball")
+	var behind := EffectsView.pull_over_ball(eye, forward, Vector3(0, 0, -(5.0 + EffectsView.SORT_BIAS + 0.01)), ball)
+	expect_equal(behind, 1.0, "one beyond it is behind the ball, as in the game")
+	expect_equal(EffectsView.pull_over_ball(eye, forward, Vector3(0, 0, -4.0), ball), 1.0, "one already in front of the sphere stays")
+	expect_equal(EffectsView.pull_over_ball(eye, forward, Vector3(3, 0, -5.0), ball), 1.0, "and one too far aside to touch it")
+	expect_equal(EffectsView.pull_over_ball(eye, forward, at, Vector4.ZERO), 1.0, "without a solid ball nothing moves")
+
+
+func test_place_pulls_a_spark_and_lets_it_go() -> void:
+	var data := EffectData.new()
+	var book := EffectData.Flipbook.new()
+	book.frames = 5
+	data.system.append(book)
+	var view := EffectsView.new()
+	view.setup(data)
+	var events := SimEvents.new()
+	events.add_at(SimEvents.Kind.SPARK, -1, PackedInt32Array([0, 0, 5000]), 0)     # 5 m ahead of the camera
+	view.step(events)
+	var sprite := view.sprites[0]
+	var eye := Vector3.ZERO
+	var forward := Vector3(0, 0, -1)
+	view.place(eye, forward, Vector4(0, 0, -5, 0.5))
+	expect(sprite.node.scale.x < 1.0 and sprite.node.position.z > sprite.at.z, "pulled toward the camera and scaled down")
+	expect_equal(sprite.at, Vector3(0, 0, -5), "its place in the world unchanged")
+	view.place(eye, forward, Vector4.ZERO)
+	expect_equal(sprite.node.position, sprite.at, "back where it is when the ball goes")
+	expect_equal(sprite.node.scale, Vector3.ONE, "at full size")
+	view.free()

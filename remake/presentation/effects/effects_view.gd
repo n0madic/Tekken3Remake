@@ -7,8 +7,17 @@ extends Node3D
 ##
 ## Sizes follow FUN_80077158: a 32-texel frame covers 32·0x2E0B/H world units at the game's
 ## projection distance H = 500 (754 units). Additive sprites fade over their last 10 frames.
+##
+## Tekken Ball: the game files a whole sprite in the ordering table 0x6E depth units (OTZ, a quarter
+## of the world depth) nearer than its centre, and the ball as one entry at its centre, so a spark
+## near the ball is drawn over all of it. The remake's ball is a solid sphere that would cut the
+## spark where it passes through, so `place` draws such a spark in front of the sphere, along the
+## same view ray and scaled to match: it looks the same, but is not cut.
 
 const SPRITE_UNITS := 32.0 * 0x2E0B / 500.0
+const SORT_BIAS := 0x6E * 4.0 / WorldSpace.UNITS_PER_METRE   ## FUN_80077158's `(otz − 0x6E) >> 3`, in metres of depth
+const BALL_MARGIN := 8.0 / WorldSpace.UNITS_PER_METRE        ## clearance in front of the ball's surface
+const MIN_PULL := 0.25                ## the least a sprite is scaled by when pulled toward the camera
 const FADE_FRAMES := 10
 const LIGHT_FRAMES := 48              ## FUN_8003A160's countdown
 const LIGHT_RANGE := 3.0
@@ -24,6 +33,7 @@ class Sprite:
 	var frame := 0                    ## 1-based once running; 0 before its start delay ends
 	var delay := 0
 	var velocity := Vector3.ZERO      ## the drift per frame (Godot units)
+	var at := Vector3.ZERO            ## where the effect is; the node is there unless `place` pulls it toward the camera
 
 class Light:
 	var node: OmniLight3D
@@ -93,6 +103,35 @@ func step(events: SimEvents) -> void:
 					_spawn(data.dust, p, i * data.dust_interval)
 
 
+## Every rendered frame, with the camera's position and viewing direction and Tekken Ball's solid
+## ball as `BallView.occluder` gives it: the sprites the game draws over the ball are placed clear
+## of the sphere (`pull_over_ball`), the others where they are; the effect objects likewise.
+func place(eye: Vector3, forward: Vector3, ball: Vector4) -> void:
+	objects.set_ball(ball)
+	for s in sprites:
+		var k := pull_over_ball(eye, forward, s.at, ball)
+		s.node.position = eye + (s.at - eye) * k
+		s.node.scale = Vector3.ONE * k
+
+
+## The factor, 1 or less, that moves a sprite centred at `at` along its view ray from `eye` (and
+## scales it) so that its plane is just in front of the ball sphere `ball` = (centre, radius):
+## 1 for a sprite the game draws behind the ball (its centre more than SORT_BIAS beyond the ball's
+## centre), one clear of the sphere already, or one too far from it to touch it.
+static func pull_over_ball(eye: Vector3, forward: Vector3, at: Vector3, ball: Vector4) -> float:
+	if ball.w <= 0.0:
+		return 1.0
+	var centre := Vector3(ball.x, ball.y, ball.z)
+	if at.distance_to(centre) >= ball.w + SPRITE_UNITS / WorldSpace.UNITS_PER_METRE * 0.5 * sqrt(2.0):
+		return 1.0
+	var depth := (at - eye).dot(forward)
+	var ball_depth := (centre - eye).dot(forward)
+	var front := ball_depth - ball.w - BALL_MARGIN
+	if depth - SORT_BIAS >= ball_depth or depth <= front or front <= 0.0:
+		return 1.0
+	return maxf(front / depth, MIN_PULL)
+
+
 func clear() -> void:
 	objects.clear()
 	for s in sprites:
@@ -135,7 +174,9 @@ func _spawn(book: EffectData.Flipbook, at: Vector3, delay: int, drift := Vector3
 	s.material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD if book.additive else BaseMaterial3D.BLEND_MODE_MIX
 	s.material.albedo_texture = book.texture
 	s.material.uv1_scale = Vector3(1.0 / book.frames, 1, 1)
+	s.at = at
 	s.node.position = at
+	s.node.scale = Vector3.ONE
 	sprites.append(s)
 	_paint(s)
 
@@ -145,6 +186,7 @@ func _new_sprite() -> Sprite:
 	s.material = StandardMaterial3D.new()
 	s.material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	s.material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	s.material.billboard_keep_scale = true     # `place` scales a sprite it pulls toward the camera
 	s.material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	s.material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
 	s.material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
@@ -199,7 +241,8 @@ func _advance() -> void:
 		else:
 			s.frame += 1
 			s.velocity *= DRIFT_DECAY
-			s.node.position += s.velocity
+			s.at += s.velocity
+			s.node.position = s.at
 		if s.frame > s.book.frames:
 			_release(s)
 		else:

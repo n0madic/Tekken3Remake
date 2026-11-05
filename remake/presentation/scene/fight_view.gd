@@ -272,6 +272,7 @@ func interpolate(weight: float, window: Vector2) -> void:
 		_place_backdrop(window)
 	if ball != null:
 		ball.show_between(weight)
+		effects.place(rig.camera.global_position, -rig.camera.global_basis.z, ball.occluder())
 	if items != null:
 		items.show_between(weight, rig.camera, Rect2(rig.frame_rect.position * window, rig.frame_rect.size * window))
 

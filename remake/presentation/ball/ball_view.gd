@@ -40,6 +40,9 @@ var _court_z := PackedFloat32Array([0, 0])
 var _type := -1
 var _zone := -1                         ## the neutral zone the court was built for
 var _snap := true                       ## the next step's pose is not interpolated into (the first, a return)
+var _radius := 0.0                      ## the sphere's radius in metres (its farthest vertex)
+var _stretch := 1.0                     ## the largest scale the impact squash gives an axis
+var _solid := false                     ## drawn into the scene (depth-tested), not over it
 
 
 func setup(ram: GameRam) -> void:
@@ -111,6 +114,8 @@ func _sphere(t: int) -> ArrayMesh:
 					var n := svector(_ram, NORMALS + 8 * v)
 					normals.append(WorldSpace.point(n.x, n.y, n.z).normalized())
 					colours.append(c)
+	for p in positions:
+		_radius = maxf(_radius, p.length())
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = positions
@@ -119,6 +124,14 @@ func _sphere(t: int) -> ArrayMesh:
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return mesh
+
+
+## The sphere that hides what is drawn behind it, as (x, y, z, radius) in metres; a zero radius
+## when the ball is not shown or is drawn over the scene (kinds 0 and 10).
+func occluder() -> Vector4:
+	if not visible or not _solid:
+		return Vector4.ZERO
+	return Vector4(_ball.position.x, _ball.position.y, _ball.position.z, _radius * _stretch)
 
 
 ## The court: the centre band (x ±100) and the side lines (x ± the neutral zone) in nine rows
@@ -185,6 +198,7 @@ func apply(sim: FightSimulation) -> void:
 		_ball.mesh = _meshes[t]
 	var kind := b.u8(TekkenBall.B_KIND)
 	var over := kind in OVERLAY_KINDS
+	_solid = not over
 	if kind in FLAT_KINDS:
 		# The faces' flat grey: kind 0 fades out from black by 8 a frame, kind 1 in from 7, the
 		# others white.
@@ -203,6 +217,7 @@ func apply(sim: FightSimulation) -> void:
 	var angles := PackedInt32Array([b.u16(TekkenBall.B_ANGLES), b.u16(TekkenBall.B_ANGLES + 2), b.u16(TekkenBall.B_ANGLES + 4)])
 	var rotation_basis := _psx_rotation(angles)
 	var squash := b.s16(TekkenBall.B_SQUASH) / 4096.0
+	_stretch = 1.0 + absf(squash)
 	var squash_basis := Basis.IDENTITY
 	if squash != 0.0:
 		var axis := _psx_rotation(PackedInt32Array([b.u16(TekkenBall.B_SQUASH_AXIS), b.u16(TekkenBall.B_SQUASH_AXIS + 2),
