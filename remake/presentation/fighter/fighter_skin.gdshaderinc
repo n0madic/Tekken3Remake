@@ -8,6 +8,12 @@
 // converter's smooth one (character.py smooth_normals): CUSTOM2.xyz in joint bone_n plus, while
 // they agree, CUSTOM3.xyz in joint CUSTOM2.w (smooth_normal()). Joint j is the 3 × 4 affine matrix in
 // bone_rows[3j .. 3j + 2], already converted to Godot space (metres, y up).
+//
+// Face order: the game does not depth-test a model's faces, it files each one in its ordering table
+// under the depths of two of its corners (face_key_depth()), so a thigh that pokes through a skirt
+// is covered by it when the skirt's entry is nearer. With `face_order` every face is drawn at one
+// depth in the camera's projection, the one its entry stands for, so the depth test reproduces the
+// painter's order; the tie within an entry goes by face number. The sort keys are in `face_keys`.
 
 const int JOINT_ROWS = 84;                    // 3 × CharacterModel.JOINT_COUNT
 // A smooth normal's half shorter than this (squared, in part-local units: sums of unit normals)
@@ -30,7 +36,20 @@ uniform bool smooth_normals = false;
 uniform float smooth_crease_cos = 0.17364818;   // CharacterModel.smooth_crease_cos
 uniform bool curved = false;
 uniform sampler2D corner_data : filter_nearest, repeat_disable;
-uniform int corner_texels = 6;                  // CurvedMesh.CORNER_TEXELS
+uniform int corner_texels = 6;                  // FaceKeys.CORNER_TEXELS
+// The faces' sort keys (FaceKeys): per triangle key_texels texels, the corner numbers of its face's
+// corners 0, 1, 2 and key corner, then the face's bias and number; face_count is the model's faces.
+uniform bool face_order = false;
+uniform sampler2D face_keys : filter_nearest, repeat_disable;
+uniform int key_texels = 2;                     // FaceKeys.KEY_TEXELS
+uniform int face_count = 1;
+uniform float units_per_metre = 1000.0;         // WorldSpace.UNITS_PER_METRE
+// The ordering table has 1024 entries of 32 game units of depth each (a corner's depth is its
+// screen Z >> 5, a face's entry the mean of two). Nearer than this the face is kept in front of
+// the camera's near plane (CameraRig.NEAR is 0.05 m).
+const float TABLE_ENTRIES = 1024.0;
+const float ENTRY_UNITS = 32.0;
+const float FACE_NEAR = 0.06;
 // Bit per joint: faces skinned to it collapse to a point (parts the game does not draw).
 uniform int hidden_joints = 0;
 // The Textures setting: smooth (bilinear; the atlas keeps a 2-texel gutter around each region)
@@ -102,6 +121,13 @@ vec4 corner_texel(int corner, int t) {
 	return texelFetch(corner_data, ivec2(i % width, i / width), 0);
 }
 
+// A corner's skinned position from its texels: `a` (pa, bone_a), `b` (pb, bone_b), `own` (the
+// weight wb + 2 · curves in w) and `third` (pc, bone_c + wc).
+vec3 corner_skinned(vec4 a, vec4 b, vec4 own, vec4 third) {
+	float wb = own.w - (own.w >= 1.0 ? 2.0 : 0.0);
+	return skinned(int(a.w + 0.5), a.xyz, int(b.w + 0.5), b.xyz, wb, third.w, third.xyz);
+}
+
 // Corner k of triangle t, skinned: its position, smooth normal for the light and for the patch
 // (smooth_normal()'s shared one), whether the edge to the next corner may bulge, and whether its
 // joint is hidden.
@@ -114,9 +140,8 @@ void corner(int t, int k, out vec3 p, out vec3 n, out vec3 patch_n, out bool bul
 	vec4 game = corner_texel(c, 4);
 	vec4 third = corner_texel(c, 5);
 	bulges = own.w >= 1.0;
-	float wb = own.w - (bulges ? 2.0 : 0.0);
 	int bone_a = int(a.w + 0.5);
-	p = skinned(bone_a, a.xyz, int(b.w + 0.5), b.xyz, wb, third.w, third.xyz);
+	p = corner_skinned(a, b, own, third);
 	int own_joint = int(game.w + 0.5);
 	int other_joint = int(other.w + 0.5);
 	n = normalize(smooth_normal(own_joint, own.xyz, other_joint, other.xyz, game.xyz, false));
@@ -160,7 +185,59 @@ void curved_vertex(inout vec3 vertex, inout vec3 normal, vec4 custom0) {
 	}
 }
 
+vec4 key_texel(int triangle, int t) {
+	int i = triangle * key_texels + t;
+	int width = textureSize(face_keys, 0).x;
+	return texelFetch(face_keys, ivec2(i % width, i / width), 0);
+}
+
+// Corner `c` skinned, in view space.
+vec3 view_corner(int c, mat4 modelview) {
+	vec3 p = corner_skinned(corner_texel(c, 0), corner_texel(c, 1), corner_texel(c, 2), corner_texel(c, 5));
+	return (modelview * vec4(p, 1.0)).xyz;
+}
+
+// The depth, in the camera's projection, of the ordering-table entry the game files `triangle`'s
+// face under (DrawSkinnedPart, the arcade's FUN_8019A858: ((Z[corner 0] + Z[key corner] − bias) &
+// 0x7FE) >> 1 with Z the screen Z >> 5; the bias is negated for a double-sided face seen from behind,
+// and of the faces in one entry the one filed first is drawn last, over the others: the lower face
+// number is the nearer depth). −1: the entry is out of the table, the face keeps its own depth.
+float face_key_depth(int triangle, mat4 modelview, mat4 projection) {
+	vec4 corners = key_texel(triangle, 0);
+	vec4 info = key_texel(triangle, 1);
+	vec3 v0 = view_corner(int(corners.x + 0.5), modelview);
+	vec3 v1 = view_corner(int(corners.y + 0.5), modelview);
+	vec3 v2 = view_corner(int(corners.z + 0.5), modelview);
+	vec3 vk = view_corner(int(corners.w + 0.5), modelview);
+	// The face's screen winding (NCLIP > 0): clockwise, as Godot's front faces are, so its normal
+	// (v1 − v0) × (v2 − v0) points away from the camera.
+	bool front = dot(cross(v1 - v0, v2 - v0), v0) > 0.0;
+	int bias = int(round(info.x));
+	int sum = (int(max(-v0.z * units_per_metre, 0.0)) >> 5) + (int(max(-vk.z * units_per_metre, 0.0)) >> 5)
+		- (front ? bias : -bias);
+	if (sum < 0 || sum >= 2 * int(TABLE_ENTRIES)) {
+		return -1.0;
+	}
+	float entry = float(sum >> 1) + (info.y + 0.5) / float(face_count);
+	float z = max(entry * ENTRY_UNITS / units_per_metre, FACE_NEAR);
+	vec4 c = projection * vec4(0.0, 0.0, -z, 1.0);
+#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
+	// OpenGL's clip space runs from −1 to 1; the window depth the fragment writes from 0 to 1.
+	return 0.5 * c.z / c.w + 0.5;
+#else
+	return c.z / c.w;
+#endif
+}
+
+// The face's depth for the fragment shader, −1 when the face keeps its own (face_order off, an
+// orthographic camera such as the sun's shadow map, or an entry out of the table).
+varying flat float face_depth;
+
 void vertex() {
+	// The triangle of the corner: a curved grid names it in CUSTOM0.x, a flat mesh in the bytes of
+	// its vertex colour (FaceKeys.colors).
+	int triangle = curved ? int(CUSTOM0.x + 0.5)
+		: int(COLOR.r * 255.0 + 0.5) | (int(COLOR.g * 255.0 + 0.5) << 8) | (int(COLOR.b * 255.0 + 0.5) << 16);
 	if (curved) {
 		curved_vertex(VERTEX, NORMAL, CUSTOM0);
 	} else {
@@ -175,6 +252,19 @@ void vertex() {
 			? smooth_normal(bone_n, CUSTOM2.xyz, int(CUSTOM2.w + 0.5), CUSTOM3.xyz, NORMAL, false)
 			: joint_direction(bone_n, NORMAL));
 	}
+	face_depth = -1.0;
+	if (face_order && PROJECTION_MATRIX[3][3] == 0.0) {
+		face_depth = face_key_depth(triangle, MODELVIEW_MATRIX, PROJECTION_MATRIX);
+	}
+#if CURRENT_RENDERER != RENDERER_COMPATIBILITY
+	// A shader that writes POSITION must write it on every path: the engine's own value first. The
+	// clip-space depth is linear across a triangle, so its three corners at one depth make the face
+	// flat, and the depth pre-pass and the SSAO pass see the same values.
+	POSITION = PROJECTION_MATRIX * (MODELVIEW_MATRIX * vec4(VERTEX, 1.0));
+	if (face_depth >= 0.0) {
+		POSITION.z = face_depth * POSITION.w;
+	}
+#endif
 }
 
 varying vec3 texel_srgb;
@@ -199,6 +289,10 @@ void fragment() {
 	ALPHA_SCISSOR_THRESHOLD = 0.5;
 	ALPHA_ANTIALIASING_EDGE = 0.3;
 	ALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_texture, 0));
+#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
+	// The Compatibility renderer has no depth pre-pass to keep in step: the fragment writes the depth.
+	DEPTH = face_depth >= 0.0 ? face_depth : FRAGCOORD.z;
+#endif
 	// The game lights its models with diffuse Gouraud shading only. Any specular reflection, however
 	// faint at head-on angles, rises with Godot's Fresnel term towards grazing ones, so it gives dark
 	// polygons (hair) a plastic sheen the original never shows.

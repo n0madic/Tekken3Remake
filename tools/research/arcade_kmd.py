@@ -72,6 +72,7 @@ class Face:
     verts: tuple[int, ...]          # vertex slots, GPU order
     colours: tuple[int, ...]        # lit-colour slots
     double_sided: bool
+    z_bias: int                     # the ordering-table bias (signed, 7 bits; FUN_8019A858)
     clut: int                       # player 1 values
     tpage: int
     uvs: tuple[tuple[int, int], ...]
@@ -154,15 +155,17 @@ def parse_faces(data: bytes, pos: int, tex: int) -> list[Face]:
         quad = group in QUAD_GROUPS
         verts = (w[0] & 0xFF, (w[0] >> 8) & 0xFF, (w[0] >> 16) & 0xFF) + ((w[0] >> 24,) if quad else ())
         if group == 0:
-            colours, double = (w[1] & 0xFF,), bool(w[0] >> 31)
+            colours, double, bias = (w[1] & 0xFF,), bool(w[0] >> 31), w[0] >> 24
         elif group == 1:
-            colours, double = (w[1] & 0xFF,), bool(w[1] & 0x8000)
+            colours, double, bias = (w[1] & 0xFF,), bool(w[1] & 0x8000), w[1] >> 8
         elif group == 2:
-            colours, double = (w[1] & 0xFF, (w[1] >> 8) & 0xFF, (w[1] >> 16) & 0xFF), bool(w[0] >> 31)
+            colours, double, bias = (w[1] & 0xFF, (w[1] >> 8) & 0xFF, (w[1] >> 16) & 0xFF), bool(w[0] >> 31), w[0] >> 24
         else:
-            colours, double = tuple((w[1] >> s) & 0xFF for s in (0, 8, 16, 24)), bool(w[2] & 0x80)
+            colours, double, bias = tuple((w[1] >> s) & 0xFF for s in (0, 8, 16, 24)), bool(w[2] & 0x80), w[2]
+        bias &= 0x7F
+        bias -= 0x80 if bias & 0x40 else 0
         uv_words = (t[0] & 0xFFFF, t[1] & 0xFFFF, t[2] & 0xFFFF) + ((t[2] >> 16,) if quad else ())
-        faces.append(Face(group, verts, colours, double, CLUT_BASE + (t[0] >> 16), TPAGE_BASE + (t[1] >> 16),
+        faces.append(Face(group, verts, colours, double, bias, CLUT_BASE + (t[0] >> 16), TPAGE_BASE + (t[1] >> 16),
                           tuple((uv & 0xFF, uv >> 8) for uv in uv_words)))
     return faces
 

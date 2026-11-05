@@ -157,6 +157,16 @@ Colour and flag fields:
 
 In the flags word, bit 24 marks a **double-sided** face (878 faces) — the NCLIP sign is then used only to choose the Z bias sign — and bits 25–31 are a signed **ordering-table bias**. The OT index is `(Z[a] + Z[b] − bias)` with `Z = SZ/32`, masked to 11 bits; biases observed are −8…8 in steps of 2.
 
+### Drawing order
+
+`confirmed` (`DrawSkinnedPart`, decompile `work/decomp/SLPS_013.00.c`; the arcade's `FUN_8019A858` is the same code). The game does not depth-test a model's faces. It files each whole face in the scene's ordering table, which is drawn from its last entry back to the first:
+
+- `NCLIP` of the face's corners 0, 1, 2 (their screen positions) gives its facing. A single-sided face is filed only when `NCLIP > 0`. A double-sided face is always filed; when `NCLIP ≤ 0` its bias is negated.
+- The entry is `((Z[a] + Z[b] − bias) & 0x7FE) >> 1`, where `Z` is the corner's `SZ >> 5` (32 units = 3.2 cm of depth; 1,024 entries reach 32.7 m, then the index wraps), `a` is corner 0 and `b` corner 2 of a triangle or corner 3 of a quad. A quad's two halves are one face, one entry.
+- Insertion is at the head of the entry's list, so of the faces in one entry the one filed first is drawn last, over the others. The faces are filed in the part's order: the four groups (FT3, FT4, GT3, GT4) of the part's face block, one part after the other.
+
+Consequence: a face is as near as its two corners say, not as near as its pixels. A leg's face whose corners lie farther than a skirt's is drawn under the skirt's even where the leg is nearer in some pixel (issue n0madic/Tekken3Remake#14, Heihachi's thigh through the jacket skirt). The remake reproduces this with a depth per face: [`remake-plan.md`](../../remake-plan.md#graphics-modernisation) (Characters).
+
 ## Texture block (`texmap`)
 
 ```text

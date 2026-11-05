@@ -15,6 +15,9 @@ const CLOSED_SHAPE := 1           ## and the PlayStation's blink (the arcade's s
 const POSITION_FLOATS := [0, 3, 23]
 const POSITION_BYTES := 12          ## a position in the pose tables: three float32
 const REF_BYTES := 12               ## a corner's three vertex numbers in the pose refs: three int32
+## The ints of a triangle's sort key in `Surface.keys` (character.FACE_KEY_INTS): its face's corners
+## 0, 1, 2 and key corner (vertex numbers in the surface), the face's ordering-table bias and its number.
+const FACE_KEY_INTS := 6
 
 class Part:
 	var row: int
@@ -48,6 +51,7 @@ class ArcadeEyes:
 class Surface:
 	var double_sided: bool
 	var vertices: PackedFloat32Array   ## vertex_floats per corner
+	var keys := PackedInt32Array()     ## FACE_KEY_INTS per triangle, empty when the model has no sort keys
 
 ## The faces that use the vertices a posable part moves, once per vertex variant: a hand's
 ## (FighterHandPoses), or the arcade True Ogre's wings and tail (arcade/README.md#true-ogres-wings).
@@ -67,7 +71,9 @@ var costume_slot: int
 var scale_percent: int
 var vertex_floats: int
 var smooth_crease_cos: float     ## the shader joins a smooth normal's halves within this angle
+var face_count := 0              ## the faces of the model (the numbers in the sort keys), 0 when it has no keys
 var curved_cache: RefCounted     ## CurvedMesh's grids of this model, built on first use
+var keys_cache: RefCounted       ## FaceKeys' corner and key textures of this model, built on first use
 var parts: Array[Part] = []
 var surfaces: Array[Surface] = []
 var directory: String
@@ -92,6 +98,7 @@ static func load_from(dir: String) -> CharacterModel:
 	m.costume_slot = data.get("costume_slot", 0)
 	m.scale_percent = data.get("scale_percent", 100)
 	m.vertex_floats = data.get("vertex_floats", 0)
+	m.face_count = data.get("face_count", 0)
 	m.smooth_crease_cos = data.get("smooth_crease_cos", 1.0)
 	m.texture = data.get("texture", "")
 	for p: Dictionary in data.get("parts", []):
@@ -200,6 +207,7 @@ static func _posed(base: Array[Surface], poses: Dictionary, mesh: PackedByteArra
 		for s in base.size():
 			var surface := Surface.new()
 			surface.double_sided = base[s].double_sided
+			surface.keys = base[s].keys
 			surface.vertices = base[s].vertices.duplicate()
 			var found := moving[s]
 			for j in range(0, found.size(), 2):
@@ -220,6 +228,9 @@ static func _surfaces(list: Array, mesh: PackedByteArray, floats: int) -> Array[
 		var start: int = s["offset"]
 		var count: int = s["vertex_count"]
 		surface.vertices = mesh.slice(start, start + count * floats * 4).to_float32_array()
+		if s.has("keys"):
+			var keys_start: int = s["keys"]
+			surface.keys = mesh.slice(keys_start, keys_start + count / 3 * FACE_KEY_INTS * 4).to_int32_array()
 		out.append(surface)
 	return out
 

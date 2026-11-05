@@ -18,7 +18,12 @@ Output (`characters/<name>/`):
   arcade's weigh up to three, arcade_character.py), `s_own` (in joint `bone_n`) and `s_other` (in joint `bone_other`) are the smooth
   normal's two halves (`smooth_normals`) and `curves` is 1 when the triangle's edge from this
   corner to the next may bulge on the curved surfaces (`smooth_edges`); `smooth_crease_cos` in
-  `model.json` is the cosine of the angle the shader joins the halves within;
+  `model.json` is the cosine of the angle the shader joins the halves within; behind each surface's
+  corners (`keys` is their offset) come the sort keys of its triangles, `FACE_KEY_INTS` int32 each:
+  the vertex numbers (in the surface) of the face's corners 0, 1, 2 and of the corner the game files
+  the face under (corner 2, a quad's corner 3), the face's ordering-table bias and its number
+  (`face_count` faces in `model.json`; a quad's two triangles carry one key): the fighter shader
+  draws each face at the depth of its table entry (3dmk-models.md#drawing-order);
 - `texture.png`: an atlas of the used regions of every material (texture page through its CLUT);
 - `texture_closed.png`: the same atlas after the closed-eye rectangle is copied over the eyes
   (the blink's `MoveImage`, animation.md#blinking).
@@ -89,6 +94,7 @@ FORCE_ENEMY_SLOTS = range(FORCE_ENEMY_FIRST_SLOT, FORCE_ENEMY_FIRST_SLOT + FORCE
 ENEMY_SET_STEP = 16                 # VRAM words between them
 EIGHT_BIT = 0x80
 VERTEX_FLOATS = 28
+FACE_KEY_INTS = 6          # per triangle: corners 0, 1, 2 and the key corner (vertex numbers), bias, face number
 POSITION_FLOATS = (0, 3, 23)        # the floats of a corner's pa, pb and pc (the positions a variant moves)
 # Smooth normals: the game's normals at a point within this angle of each other are averaged.
 SMOOTH_CREASE_DEGREES = 80.0
@@ -296,6 +302,20 @@ def move_glyph_atlas(tims: bytes, origin: tuple[int, int]) -> np.ndarray | None:
     return None
 
 
+class FaceList(list):
+    """The faces of a model for `write_model`, (double sided, index in `groups` or −1, corners)
+    each, with the ordering-table bias of each in `biases` (the game sorts a face by the depths of
+    two of its corners minus its bias; `write_model` hands it on)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.biases: list[int] = []
+
+    def add(self, face: tuple, bias: int) -> None:
+        self.append(face)
+        self.biases.append(bias)
+
+
 def convert_model(disc: Disc, out: Output, name: str, slot: int, kmd_data: bytes, vram: Vram) -> dict:
     """Converts one model with its textures uploaded (`load_textures`); returns its summary (name,
     scale, attachments)."""
@@ -315,7 +335,7 @@ def convert_model(disc: Disc, out: Output, name: str, slot: int, kmd_data: bytes
         return unit(model.rows[term.row].normals.coords[term.index])
 
     # Every face with its corners' blend terms; a face using a hand vertex belongs to that hand.
-    faces = []
+    faces = FaceList()
     for part, row_index in order:
         row = model.rows[row_index]
         slots = positions[(part, row_index)]
@@ -328,7 +348,7 @@ def convert_model(disc: Disc, out: Output, name: str, slot: int, kmd_data: bytes
                 colour_offset = face.colors[0 if face.kind in ("ft3", "ft4") else c]
                 u, v = row.tex.uvs[tex.uvs[c]]
                 corners.append((material, terms, colours[colour_offset >> 2], u, v))
-            faces.append((face.double_sided, face_group(corners, groups, name), corners))
+            faces.add((face.double_sided, face_group(corners, groups, name), corners), face.z_bias)
 
     record = {
         "name": name,
@@ -337,7 +357,7 @@ def convert_model(disc: Disc, out: Output, name: str, slot: int, kmd_data: bytes
         "parts": ps1_parts(disc, slot, model, order),
     }
     write_model(out, f"characters/{name}", record, faces, local, normal, lambda part: kmdlib.PART_MATRIX[part],
-                vram, material_page, closed_eyes(vram, eye_rects(disc, slot)), groups=groups,
+                vram, material_page, closed_eyes(vram, eye_rects(disc, slot)), groups=groups, biases=faces.biases,
                 swap=swapped, gaze_strips=gaze_strips(disc, characters, slot, vram, swapped))
     return {"name": name, "scale_percent": model.scale_percent, "attachments": attachments}
 
@@ -540,7 +560,8 @@ def write_model(out: Output, base: str, record: dict, faces: list, local: Callab
                 joint_of: Callable[[int], int], vram: Vram, page_of: Callable, closed: Vram | None,
                 sources: bool = True, eyes: dict[int, Vram] | None = None,
                 groups: Sequence[VariantGroup] = (), swap: Vram | None = None,
-                gaze_strips: tuple[gaze.Layout, dict[bool, Vram]] | None = None) -> None:
+                gaze_strips: tuple[gaze.Layout, dict[bool, Vram]] | None = None,
+                biases: Sequence[int] = ()) -> None:
     """Writes a costume's mesh, texture atlas (and closed-eye atlas, the atlases of the eye
     shapes `eyes`, the atlas of Gon's swapped head palette `swap` and the patches of his eyes'
     look directions `gaze_strips`) and model.json (`record` plus the surfaces).
@@ -549,7 +570,9 @@ def write_model(out: Output, base: str, record: dict, faces: list, local: Callab
     normal term, u, v) with terms ((term, weight), …), at most three. `local(term)` is a term's
     part-local position in its base block (a group's faces take the rows' positions from the
     group, once per variant), `normal(term)` its unit normal, `joint_of` maps a term's part to its
-    joint, `page_of(material)` gives the material's page and CLUT."""
+    joint, `page_of(material)` gives the material's page and CLUT. `biases` holds each face's
+    ordering-table bias (0 where missing); every surface also gets its triangles' sort keys
+    (`FACE_KEY_INTS` each: see `emit`)."""
     used: dict[object, list[tuple[int, int]]] = {}
     for _, _, corners in faces:
         for material, _, _, u, v in corners:
@@ -593,6 +616,9 @@ def write_model(out: Output, base: str, record: dict, faces: list, local: Callab
 
     mesh = bytearray()
 
+    def bias_of(face_index: int) -> int:
+        return biases[face_index] if face_index < len(biases) else 0
+
     def emit(selected: list, group: VariantGroup | None = None, variant: int = 0,
              refs: list[int] | None = None, slot_of: dict[tuple[int, int], int] | None = None) -> list[dict]:
         """Appends the corners of `selected` faces, split by sidedness, with the positions of
@@ -606,11 +632,22 @@ def write_model(out: Output, base: str, record: dict, faces: list, local: Callab
         surfaces = []
         for double_sided in (False, True):
             floats: list[float] = []
+            keys: list[int] = []
             count = 0
             for face_index, (sided, _, corners) in selected:
                 if sided != double_sided:
                     continue
                 tris = [(0, 1, 2)] if len(corners) == 3 else QUAD_TRIANGLES
+                first = count
+                at: dict[int, int] = {}
+                for t, tri in enumerate(tris):
+                    for k, i in enumerate(tri):
+                        at.setdefault(i, first + 3 * t + k)
+                # The face's sort key: the game files it under its corners 0 and 2 (3 for a quad)
+                # by their depths less the bias; every triangle of the face carries the corners
+                # (vertex numbers in this surface) the key and the facing need, and the bias.
+                key = [at[0], at[1], at[2], at[len(corners) - 1], bias_of(face_index), face_index]
+                keys.extend(key * len(tris))
                 for tri in tris:
                     for k, i in enumerate(tri):
                         material, terms, nt, u, v = corners[i]
@@ -628,6 +665,8 @@ def write_model(out: Output, base: str, record: dict, faces: list, local: Callab
             if count:
                 surfaces.append({"double_sided": double_sided, "offset": len(mesh), "vertex_count": count})
                 mesh += struct.pack(f"<{len(floats)}f", *floats)
+                surfaces[-1]["keys"] = len(mesh)
+                mesh += struct.pack(f"<{len(keys)}i", *keys)
         return surfaces
 
     surface_list = emit([(k, f) for k, f in enumerate(faces) if f[1] < 0])
@@ -656,6 +695,7 @@ def write_model(out: Output, base: str, record: dict, faces: list, local: Callab
         **record,
         "vertex_floats": VERTEX_FLOATS,
         "smooth_crease_cos": math.cos(math.radians(SMOOTH_CREASE_DEGREES)),
+        "face_count": len(faces),
         **summary,
         "surfaces": surface_list,
         **lists,

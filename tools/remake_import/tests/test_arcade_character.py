@@ -169,9 +169,10 @@ class ArcadeCharacterTest(unittest.TestCase):
             character.write_model(out, "characters/test", {"name": "test"}, faces, local, normal, lambda j: j,
                                   Vram(arcade_kmd.VRAM_ROWS), arcade_character.material_page, None, sources=False)
             record = json.loads((Path(tmp) / "characters/test/model.json").read_text())
-            floats = struct.unpack(f"<{len(gzip.decompress((Path(tmp) / 'characters/test/mesh.bin.gz').read_bytes())) // 4}f",
-                                   gzip.decompress((Path(tmp) / "characters/test/mesh.bin.gz").read_bytes()))
+            mesh = gzip.decompress((Path(tmp) / "characters/test/mesh.bin.gz").read_bytes())
         stride = record["vertex_floats"]
+        floats = tuple(f for surface in record["surfaces"]
+                       for f in struct.unpack_from(f"<{surface['vertex_count'] * stride}f", mesh, surface["offset"]))
         self.assertEqual(stride, character.VERTEX_FLOATS)
         corners = [floats[i:i + stride] for i in range(0, len(floats), stride)]
         three = [c for c in corners if c[26] > 0.0]
@@ -180,6 +181,51 @@ class ArcadeCharacterTest(unittest.TestCase):
         self.assertEqual((c[0:3], c[12]), ((10.0, 0.0, 0.0), 1.0), "a: the chest")
         self.assertEqual((c[3:6], c[6], c[13]), ((-3.0, 2.0, 1.0), 0.25, 14.0), "b: the foot")
         self.assertEqual((c[23:26], c[26], c[27]), ((0.0, 0.0, -7.0), 0.25, 22.0), "c: the attachment's joint")
+
+
+class SortKeyTest(unittest.TestCase):
+    """The ordering-table bias of a face and the sort keys of its triangles: the game files a face
+    under its corners 0 and 2 (3 for a quad) by their depths less the bias, with a double-sided
+    face's bias flipping when it faces away (FUN_8019A858)."""
+
+    def setUp(self) -> None:
+        # A triangle with bias −6 (bits 24–30 of word 0, bit 31 double-sided) and a flat quad
+        # with bias 8 (bits 8–14 of word 1, bit 15 double-sided).
+        tri = (0, [0 | 1 << 8 | 2 << 16 | (0x7F & -6) << 24 | 1 << 31, 0], [0x0201, 0x0403, 0x0605])
+        quad = (1, [0 | 1 << 8 | 2 << 16 | 3 << 24, 8 << 8 | 1 << 15], [0x0201, 0x0403, 0x0605])
+        self.data = _model({
+            1: (_vertices([(0, 0, 0), (100, 0, 0), (0, 100, 0), (100, 100, 0)]),
+                _vertices([(0, 0, 4096)] * 4), [tri, quad], 0),
+        })
+        self.enable = bytes(arcade_kmd.ROWS)
+
+    def test_bias_is_signed_and_read_from_each_group(self) -> None:
+        model = arcade_kmd.parse(self.data)
+        faces = model.rows[1].faces
+        self.assertEqual([(f.double_sided, f.z_bias) for f in faces], [(True, -6), (True, 8)])
+
+    def test_triangles_carry_their_sort_key(self) -> None:
+        _, _, faces, local, normal, _ = arcade_character.model_faces(self.data, self.enable, {}, SINE, "test", 0)
+        self.assertEqual(faces.biases, [-6, 8])
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Output(Path(tmp))
+            character.write_model(out, "characters/test", {"name": "test"}, faces, local, normal, lambda j: j,
+                                  Vram(arcade_kmd.VRAM_ROWS), arcade_character.material_page, None, sources=False,
+                                  biases=faces.biases)
+            record = json.loads((Path(tmp) / "characters/test/model.json").read_text())
+            mesh = gzip.decompress((Path(tmp) / "characters/test/mesh.bin.gz").read_bytes())
+        self.assertEqual(record["face_count"], 2)
+        (surface,) = record["surfaces"]
+        self.assertTrue(surface["double_sided"])
+        self.assertEqual(surface["vertex_count"], 9, "a triangle and a quad's two triangles")
+        keys = struct.unpack_from(f"<{3 * character.FACE_KEY_INTS}i", mesh, surface["keys"])
+        n = character.FACE_KEY_INTS
+        # The triangle: corners 0, 1, 2 are vertices 0, 1, 2, and the key corner is corner 2.
+        self.assertEqual(keys[:n], (0, 1, 2, 2, -6, 0))
+        # The quad's triangles (0, 1, 2) and (1, 3, 2) are vertices 3–5 and 6–8: corner 0 is vertex 3,
+        # corner 3 is the second triangle's middle vertex 7; both triangles carry the same record.
+        self.assertEqual(keys[n:2 * n], (3, 4, 5, 7, 8, 1))
+        self.assertEqual(keys[2 * n:], keys[n:2 * n])
 
 
 class VariantTest(unittest.TestCase):

@@ -152,7 +152,7 @@ def convert(disc: Disc, out: Output, arc: arcade.ArcadeSet, name: str, slot: int
         record["arcade_eyes"] = eyes
     character.write_model(out, f"characters/{name}", record, faces, local, normal, lambda joint: joint,
                           vram, material_page, None, sources=False, eyes=arcade_eyes.images(arc, slot, vram),
-                          groups=groups)
+                          groups=groups, biases=faces.biases)
 
 
 def model_faces(data: bytes, enable: bytes, turns: dict[int, tuple[int, int, int]], sine: list[int],
@@ -179,7 +179,7 @@ def model_faces(data: bytes, enable: bytes, turns: dict[int, tuple[int, int, int
     def normal(t: character.Term) -> tuple[float, float, float]:
         return character.unit(arcade_kmd.playstation_frame(t.row, model.rows[t.row].normals.coords[t.index]))
 
-    faces = []
+    faces = character.FaceList()
     for row in model.rows:
         if row.index not in drawn:
             continue
@@ -192,7 +192,7 @@ def model_faces(data: bytes, enable: bytes, turns: dict[int, tuple[int, int, int
                 normal_key = max(lit.items(), key=lambda kv: (kv[1], -kv[0][0], -kv[0][1]))[0]
                 u, v = face.uvs[c]
                 corners.append(((face.tpage, face.clut), terms, term(normal_key), u, v))
-            faces.append((face.double_sided, character.face_group(corners, groups, name), corners))
+            faces.add((face.double_sided, character.face_group(corners, groups, name), corners), face.z_bias)
     return model, drawn, faces, local, normal, groups
 
 

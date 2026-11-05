@@ -1,7 +1,7 @@
 extends TestSuite
 ## The curved surfaces' grids (CurvedMesh) and the flat mesh arrays (FighterView._arrays) on a
 ## synthetic model: every triangle becomes a LEVEL × LEVEL grid wound like the triangle, its
-## corners land in the corner texture in order, the grids are built once per model, and the smooth
+## corners land in FaceKeys' corner texture in order, the grids are built once per model, and the smooth
 ## normal's halves reach CUSTOM2 / CUSTOM3 and the third joint's term CUSTOM1.w, UV2 and CUSTOM3.w.
 
 const STRIDE := 28
@@ -63,19 +63,19 @@ func test_grid_per_triangle() -> void:
 func test_corner_texture() -> void:
 	var model := _model()
 	var curved := CurvedMesh.of(model)
-	var image := curved.texture.get_image()
-	expect_equal(image.get_width(), CurvedMesh.DATA_WIDTH, "rows of DATA_WIDTH texels")
+	var image := FaceKeys.of(model).corners.get_image()
+	expect_equal(image.get_width(), FaceKeys.DATA_WIDTH, "rows of DATA_WIDTH texels")
 	# The hand's surface follows the body's two triangles: its triangle is the third.
 	var hand_surface := (model.hands[0].variants[0] as Array)[0] as CharacterModel.Surface
 	var hand_custom0: PackedFloat32Array = curved.arrays(hand_surface)[Mesh.ARRAY_CUSTOM0]
 	expect_equal(hand_custom0[0], 2.0, "the hand's triangles numbered after the body's")
-	var first := 2 * 3 * CurvedMesh.CORNER_TEXELS       # the hand triangle's first corner
+	var first := 2 * 3 * FaceKeys.CORNER_TEXELS       # the hand triangle's first corner
 	expect(image.get_pixel(first, 0).is_equal_approx(Color(0, 0, 0, 9)), "pa and bone_a")
 	expect(image.get_pixel(first + 2, 0).is_equal_approx(Color(0, 2, 0, 2)), "s_own, wb + 2 · curves")
 	expect(image.get_pixel(first + 3, 0).is_equal_approx(Color(0.5, 0.25, 0, 7)), "s_other, bone_other")
 	expect(image.get_pixel(first + 4, 0).is_equal_approx(Color(0, 1, 0, 9)), "the game's normal, bone_n")
 	expect(image.get_pixel(first + 5, 0).is_equal_approx(Color(3, 4, 5, 11.25)), "pc, bone_c + wc")
-	expect(image.get_pixel(first + CurvedMesh.CORNER_TEXELS + 2, 0).a == 0.0, "an edge that stays straight")
+	expect(image.get_pixel(first + FaceKeys.CORNER_TEXELS + 2, 0).a == 0.0, "an edge that stays straight")
 
 
 func test_built_once_per_model() -> void:

@@ -47,7 +47,8 @@ var _back_colour := NO_BACK_COLOUR            ## this frame's back colour (set_b
 var _rows := PackedVector4Array()
 var _previous_rows := PackedVector4Array()
 var _bounds := AABB()
-var _curved: CurvedMesh                       ## the curved grids' corners, null for flat triangles
+var _curved: CurvedMesh                       ## the curved grids, null for flat triangles
+var _keys: FaceKeys                           ## the corner and sort-key textures, null when neither is needed
 var _hand_variants := PackedInt32Array([0, 0])
 var _wing_variants := PackedInt32Array([0, 0])
 var _arcade: ArcadeAttachments                ## an arcade model's attachment joints, else null
@@ -98,6 +99,7 @@ func _build_meshes() -> void:
 	wing_meshes.clear()
 	wing_channels.clear()
 	_curved = CurvedMesh.of(model) if Settings.text("shading") == "curved" else null
+	_keys = FaceKeys.of(model) if _curved != null or model.face_count > 0 else null
 	mesh_instance.mesh = _mesh(model.surfaces)
 	for hand in model.hands:
 		_add_variants(hand, hand_instances, hand_meshes, hand_channels)
@@ -172,7 +174,10 @@ func _mesh(surfaces: Array[CharacterModel.Surface]) -> ArrayMesh:
 			mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _curved.arrays(surface), [], {}, CurvedMesh.format())
 		else:
 			if not array_cache.has(surface):
-				array_cache[surface] = _arrays(surface.vertices, model.vertex_floats)
+				var arrays := _arrays(surface.vertices, model.vertex_floats)
+				if model.face_count > 0:
+					arrays[Mesh.ARRAY_COLOR] = _keys.colors(surface, model.vertex_floats)
+				array_cache[surface] = arrays
 			mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, array_cache[surface] as Array, [], {}, _format())
 		mesh.surface_set_material(mesh.get_surface_count() - 1, materials[1 if surface.double_sided else 0])
 	return mesh
@@ -234,14 +239,20 @@ func _apply_lighting() -> void:
 
 
 ## The Shading setting's uniforms (fighter_skin.gdshaderinc): the game's own normals or the
-## smooth ones, and the curved grids' corners.
+## smooth ones, the curved grids' corners and the faces' sort keys.
 func _apply_shading() -> void:
+	var ordered := model.face_count > 0
 	for material in materials:
 		material.set_shader_parameter("smooth_normals", Settings.text("shading") != "original")
 		material.set_shader_parameter("smooth_crease_cos", model.smooth_crease_cos)
 		material.set_shader_parameter("curved", _curved != null)
-		material.set_shader_parameter("corner_data", _curved.texture if _curved != null else null)
-		material.set_shader_parameter("corner_texels", CurvedMesh.CORNER_TEXELS)
+		material.set_shader_parameter("corner_data", _keys.corners if _keys != null else null)
+		material.set_shader_parameter("corner_texels", FaceKeys.CORNER_TEXELS)
+		material.set_shader_parameter("face_order", ordered)
+		material.set_shader_parameter("face_keys", _keys.keys if ordered else null)
+		material.set_shader_parameter("key_texels", FaceKeys.KEY_TEXELS)
+		material.set_shader_parameter("face_count", model.face_count)
+		material.set_shader_parameter("units_per_metre", WorldSpace.UNITS_PER_METRE)
 
 
 ## The PlayStation's blink: the closed-eye atlas while `closed`.
