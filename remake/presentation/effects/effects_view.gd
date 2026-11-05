@@ -15,6 +15,7 @@ const LIGHT_RANGE := 3.0
 const LIGHT_ENERGY := 1.0
 const HDR_BOOST := 1.6                ## additive sprites are brighter than white for the glow
 const DRIFT := 0x1900                 ## EffectSpawn: the drift speed (position << 7 units a frame)
+const DRIFT_DECAY := 0x76 / 128.0     ## FUN_80077158: the drift speed is multiplied by this before each step
 
 class Sprite:
 	var node: MeshInstance3D
@@ -102,7 +103,8 @@ func clear() -> void:
 	lights.clear()
 
 
-## EffectSpawn's drift: 0x1900 / 128 game units a frame along the hit direction (none without one).
+## EffectSpawn's initial drift: 0x1900 / 128 game units a frame along the hit direction (none without
+## one); `_advance` decays it by DRIFT_DECAY each frame.
 static func drift_of(direction: PackedInt32Array) -> Vector3:
 	if direction.size() < 3:
 		return Vector3.ZERO
@@ -196,6 +198,7 @@ func _advance() -> void:
 				s.frame = 1
 		else:
 			s.frame += 1
+			s.velocity *= DRIFT_DECAY
 			s.node.position += s.velocity
 		if s.frame > s.book.frames:
 			_release(s)

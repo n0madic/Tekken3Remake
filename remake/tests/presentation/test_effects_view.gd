@@ -42,3 +42,26 @@ static func _step(view: EffectsView, events: SimEvents, mode: int) -> void:
 	events.clear()
 	events.add(SimEvents.Kind.EFFECTS_DRAW, -1, mode)
 	view.step(events)
+
+
+func test_drift_fades_each_frame() -> void:
+	var data := EffectData.new()
+	var book := EffectData.Flipbook.new()
+	book.frames = 30
+	data.system.append(book)
+	var view := EffectsView.new()
+	view.setup(data)
+	var events := SimEvents.new()
+	var spark := events.add_at(SimEvents.Kind.HIT_SPARK, 0, PackedInt32Array([0, 0, 0]), 0)
+	spark.vector = PackedInt32Array([0, 0, 4096])
+	events.add(SimEvents.Kind.EFFECTS_DRAW, -1, SimEvents.EFFECTS_ADVANCE)
+	view.step(events)
+	expect_equal(view.sprites.size(), 1, "the hit spark starts")
+	var sprite := view.sprites[0]
+	var start := sprite.node.position
+	var first := sprite.velocity.length()
+	for i in 10:
+		_step(view, events, SimEvents.EFFECTS_ADVANCE)
+	expect_equal(snappedf(sprite.velocity.length() / first, 0.0001), snappedf(pow(EffectsView.DRIFT_DECAY, 10.0), 0.0001), "the speed decays by 0x76/128 a frame")
+	expect((sprite.node.position - start).length() < first * 10.0, "the sprite drifts less than at a constant speed")
+	view.free()
