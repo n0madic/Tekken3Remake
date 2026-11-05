@@ -13,6 +13,9 @@ game frame. The frames are found as the game finds them:
   so each TIM is one frame in playback order, all through the first TIM's CLUT; the frame
   count and light colour come from the character record (`0x80027BAC + 6 · charId`).
 
+Given the arcade's set, the frames of each flipbook are the arcade's 64 × 64 ones instead
+(arcade_effects.py), which cover the same world size; the rest stays the PlayStation's.
+
 Output: `effects/<name>.png` (the frames left to right) and `effects/effects.json` (frame
 count, blending, light colour per flipbook; the landing dust ring's layout).
 """
@@ -21,7 +24,10 @@ from __future__ import annotations
 
 import numpy as np
 
+import arcade
+import arcade_effects
 from common import Disc, Output
+from hud import NAMED_KEYS
 from move_text import arc_members
 from vram import Vram, clut_xy, png_bytes, rgba, tim_sequence, unpack_indices
 import sources
@@ -145,47 +151,62 @@ def _record(disc: Disc, addr: int) -> tuple[int, list[int]]:
     return count, disc.exe_u8(addr + 2, 3)
 
 
-def _character_flipbook(disc: Disc, out: Output, name: str, member: bytes, char_id: int) -> dict:
+def _character_flipbook(disc: Disc, out: Output, arc: arcade.ArcadeSet | None, name: str, member: bytes,
+                        char_id: int, arcade_char: int) -> dict:
     """A character flipbook: one TIM per frame in playback order, all through the first TIM's
-    CLUT (the TIMs have zero rectangles: the uploader places them)."""
-    tims, _ = tim_sequence(member)
+    CLUT (the TIMs have zero rectangles: the uploader places them), or the arcade's set of
+    `arcade_char`."""
     count, colour = _record(disc, CHAR_RECORDS + 6 * char_id)
-    vram = Vram()
-    positions = []
-    for n, tim in enumerate(tims[:count]):
-        x, y = FRAME_WORDS * (n % 2), FRAME * (n // 2)
-        vram.upload_tim(tim, x, y, 0, CLUT_ROW if n == 0 else SPARE_ROW)
-        positions.append((x, y))
-    strip = _frames_4bit(out, f"effects/{name}.png", vram, positions, (0, CLUT_ROW))
+    book = arcade_effects.flipbook_or_none(arc, arcade_effects.character_record(arcade_char), name)
+    if book is not None:
+        strip, count = book
+    else:
+        tims, _ = tim_sequence(member)
+        vram = Vram()
+        positions = []
+        for n, tim in enumerate(tims[:count]):
+            x, y = FRAME_WORDS * (n % 2), FRAME * (n // 2)
+            vram.upload_tim(tim, x, y, 0, CLUT_ROW if n == 0 else SPARE_ROW)
+            positions.append((x, y))
+        strip = _frames_4bit(out, f"effects/{name}.png", vram, positions, (0, CLUT_ROW))
+        count = len(positions)
     out.write(f"effects/{name}.png", png_bytes(strip))
-    return {"name": name, "file": f"{name}.png", "frames": len(positions), "blend": "add", "light": colour}
+    return {"name": name, "file": f"{name}.png", "frames": count, "blend": "add", "light": colour}
 
 
-def convert(disc: Disc, out: Output) -> None:
+def convert(disc: Disc, out: Output, arc: arcade.ArcadeSet | None = None) -> None:
     system = disc.system_vram()
     table = {"system": [], "enbu": []}
     for index, name in enumerate(SYSTEM_NAMES):
         clut_x, clut_y, x, y, page_w, page_h = disc.exe_s16(LAYOUTS + 0x30 * SYSTEM_BLOCK + 12 * index, 6)
         count, _ = _record(disc, SYSTEM_RECORDS + 6 * SYSTEM_RECORD_OF[index])
         own_count, _ = _record(disc, SYSTEM_RECORDS + 6 * index)
-        strip = _frames_4bit(out, f"effects/{name}.png", system, page_walk(x, y, page_w, page_h, own_count),
-                             (clut_x, clut_y))
+        book = arcade_effects.flipbook_or_none(arc, arcade_effects.SYSTEM_RECORDS[index], name)
+        if book is not None:
+            strip, own_count = book
+            count = own_count
+        else:
+            strip = _frames_4bit(out, f"effects/{name}.png", system, page_walk(x, y, page_w, page_h, own_count),
+                                 (clut_x, clut_y))
         out.write(f"effects/{name}.png", png_bytes(strip))
         table["system"].append({"name": name, "file": f"{name}.png", "frames": own_count, "game_frames": count,
                                 "blend": "half" if index in HALF_BLEND else "add"})
     data, offset = disc.source("enbu", ENBU_FLIPBOOKS)
     members = arc_members(data[offset:])
     for player, char_id in enumerate(ENBU_FLIPBOOK_CHARS):
-        table["enbu"].append(_character_flipbook(disc, out, f"enbu_{player}", members[player], char_id))
+        table["enbu"].append(_character_flipbook(disc, out, arc, f"enbu_{player}", members[player], char_id, char_id))
     # The fight's character flipbooks: FighterLoadCharacter uploads the costume ARC's member 1
     # with FighterUploadFlipbook(player, charId), the frame count and light from the charId.
     table["costumes"] = {}
-    for key, byte in enumerate(disc.exe_u8(COSTUME_KEYS, COSTUME_KEY_COUNT)):
-        slot = byte - 256 if byte > 127 else byte
+    slots = [byte - 256 if byte > 127 else byte for byte in disc.exe_u8(COSTUME_KEYS, COSTUME_KEY_COUNT)]
+    # The ARC's own character: slot 36's is Anna's (key 72), though Nina's third costume (key 22) shares it.
+    owners = {slot: key >> 2 for key, slot in enumerate(slots[:NAMED_KEYS])}
+    for key, slot in enumerate(slots):
         if slot < 0 or str(slot) in table["costumes"] or slot in NO_FLIPBOOK_SLOTS:
             continue
         member = arc_members(disc.bns(COSTUME_ARC_FIRST + 4 * slot))[1]
-        table["costumes"][str(slot)] = _character_flipbook(disc, out, f"costume_{slot:02d}", member, key >> 2)
+        table["costumes"][str(slot)] = _character_flipbook(disc, out, arc, f"costume_{slot:02d}", member, key >> 2,
+                                                           owners[slot])
     palettes = {}
     for clut in OBJECT_CLUTS:
         x, y = clut_xy(clut)

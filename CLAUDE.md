@@ -16,7 +16,7 @@ Japan Rev.1 is the baseline: every address in the code and docs is its own. The 
 The root `Makefile` wraps everything (`make help`). `GODOT` may point at the Godot 4.7 binary (default: `/Applications/Godot.app/...`, else `godot`).
 
 ```sh
-make convert            # disc → remake/imported/ (python3 tools/remake_import/convert.py; CONVERT_ARGS='--image X.cue [--image Y.cue] ... [--arcade tekken3.zip]', one image per release, required; `--arcade` adds the arcade stages and character models from MAME's set)
+make convert            # disc → remake/imported/ (python3 tools/remake_import/convert.py; CONVERT_ARGS='--image X.cue [--image Y.cue] ... [--arcade tekken3.zip]', one image per release, required; `--arcade` adds the arcade stages, character models and effect flipbooks from MAME's set)
 make import             # Godot import of the converted assets (needed once before running/testing)
 make run                # the game (godot --path remake)
 make test               # every suite, ~3-4 min, parallel runners (JOBS=<n>)

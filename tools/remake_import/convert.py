@@ -17,7 +17,8 @@ must never be published.
 
 `--arcade` adds the arcade version's polygonal stage scenes, skies and floors from MAME's
 `tekken3` ROM set (arcade.py), which the remake draws instead of the PlayStation's backdrops,
-and replaces the character models of costume slots 0–40 with the arcade's (arcade_character.py).
+replaces the character models of costume slots 0–40 with the arcade's (arcade_character.py), and
+the effect flipbooks with the arcade's 64 × 64 frames (arcade_effects.py).
 """
 
 from __future__ import annotations
@@ -108,7 +109,8 @@ def main() -> int:
                         "the Theora and Vorbis encoders, else the first one; without them music is WAV "
                         "and movies are JPEG frames)")
     parser.add_argument("--arcade", type=Path, help="MAME's tekken3 ROM set (a .zip, World ver. E1): adds "
-                        "the arcade stage scenes, skies and floors (stages 0–12) and character models (costume slots 0–40)")
+                        "the arcade stage scenes, skies and floors (stages 0–12), character models (costume slots 0–40) "
+                        "and 64 × 64 effect flipbooks")
     parser.add_argument("--texture-sources", type=Path, help="also record where each picture's texels come "
                         "from in VRAM, to this file (for tools/remake/texture_pack.py import-duckstation; "
                         "game data: keep it private)")
@@ -173,7 +175,7 @@ def main() -> int:
     enbu_models = enbu.convert(disc, out)
     sounds.convert(disc, out, COSTUME_SLOTS)
     screens.convert(disc, out)
-    effects.convert(disc, out)
+    effects.convert(disc, out, arcade_set)
     hud.convert(disc, out)
     english = usa_disc is not None
     try:

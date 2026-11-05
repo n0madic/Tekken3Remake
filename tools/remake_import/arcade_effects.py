@@ -1,0 +1,95 @@
+"""The arcade's effect flipbooks (MAME's tekken3 set) → strips of 64 × 64 frames.
+
+The arcade draws the same flipbooks as the PlayStation at twice the resolution and the same world
+size (docs/research/arcade/README.md#effect-flipbooks): the PlayStation's 32 × 32 frames are these
+reduced, the character sets frame for frame, the system sets with fewer frames. `FUN_801ac680` loads
+them by a record per character and per system index (the PlayStation's sets 0–1 and 3).
+
+A set is a TIM per frame (category 22, compressed), all through the first TIM's CLUT, whose
+colours `FUN_801af068` multiplies by the record's factors. The same routine can exchange a
+palette's red and green (the record's last word, under the setting `0x8021FBBC`); that is not done
+here: the PlayStation's colours are those of the unchanged palette (`inferred`, by comparison,
+tools/research/compare_arcade_flipbooks.py).
+"""
+
+from __future__ import annotations
+
+import struct
+
+import numpy as np
+
+import arcade
+from common import log
+from vram import rgba, tim_sequence, unpack_indices
+
+CATEGORY = 22
+# Records (0x18 bytes, read as RECORD: set, frames, width, height, additive, R, G, B factors of 128):
+# one per charId, and the system sets hit, hit without damage, guard, dust (FUN_801ac680 loads the
+# dust from its own record, not the fourth of the table).
+CHARACTER_RECORDS = 0x80175510
+CHARACTER_RECORD_BYTES = 0x18
+SYSTEM_RECORDS = (0x80175720, 0x80175738, 0x80175750, 0x80175798)
+RECORD = "<I4h3h"
+FACTOR_SHIFT = 7
+# The PlayStation's charId 19 (costume slots 44, 45) is not the arcade's: its flipbook is the Mishima
+# lightning, as charId 9's; the arcade's record 19 holds another character's set.
+CHARACTER_RECORD_OF = {19: 9}
+FRAME = 64
+FRAME_WORDS = FRAME // 4
+TIM_HEADER = 8
+BLOCK_HEADER = 12
+CLUT_COLOURS = 16
+
+
+def tint(palette: np.ndarray, factors: tuple[int, int, int]) -> np.ndarray:
+    """FUN_801af068's palette: each channel times its factor / 128, clamped; colour 0 (transparent)
+    stays, and a colour that becomes black is kept from turning transparent."""
+    channels = [np.minimum((((palette.astype(np.int32) >> shift) & 0x1F) * factor) >> FACTOR_SHIFT, 0x1F)
+                for shift, factor in zip((0, 5, 10), factors)]
+    out = (palette & 0x8000) | channels[0] | channels[1] << 5 | channels[2] << 10
+    out[out & 0x7FFF == 0] |= 0x400
+    out[palette == 0] = 0
+    return out.astype(np.uint16)
+
+
+def _blocks(tim: bytes) -> tuple[np.ndarray, np.ndarray]:
+    """A frame TIM's CLUT colours and pixel words (the rectangles are the uploader's to place)."""
+    clut_bytes = struct.unpack_from("<I", tim, TIM_HEADER)[0]
+    clut = np.frombuffer(tim, dtype="<u2", count=CLUT_COLOURS, offset=TIM_HEADER + BLOCK_HEADER)
+    image = TIM_HEADER + clut_bytes
+    w, h = struct.unpack_from("<2H", tim, image + 8)
+    if (w, h) != (FRAME_WORDS, FRAME):
+        raise arcade.ArcadeError(f"a flipbook frame of {w} × {h} words")
+    words = np.frombuffer(tim, dtype="<u2", count=w * h, offset=image + BLOCK_HEADER).reshape(h, w)
+    return clut, words
+
+
+def flipbook(arc: arcade.ArcadeSet, record: int) -> tuple[np.ndarray, int]:
+    """The RGBA strip (frames left to right) and frame count of the set a record names."""
+    number, frames, _, _, _, *factors = arc.prog_values(RECORD, record)
+    sets = arc.category(CATEGORY)
+    if number >= len(sets):
+        raise arcade.ArcadeError(f"flipbook set {number} of {len(sets)}")
+    tims, _ = tim_sequence(arcade.decompress(sets[number])[0])
+    if len(tims) < frames:
+        raise arcade.ArcadeError(f"flipbook set {number}: {len(tims)} frames of {frames}")
+    palette = tint(_blocks(tims[0])[0], tuple(factors))
+    strip = np.zeros((FRAME, FRAME * frames, 4), dtype=np.uint8)
+    for n, tim in enumerate(tims[:frames]):
+        strip[:, FRAME * n:FRAME * (n + 1)] = rgba(palette[unpack_indices(_blocks(tim)[1], 4)])
+    return strip, frames
+
+
+def character_record(char_id: int) -> int:
+    return CHARACTER_RECORDS + CHARACTER_RECORD_BYTES * CHARACTER_RECORD_OF.get(char_id, char_id)
+
+
+def flipbook_or_none(arc: arcade.ArcadeSet | None, record: int, name: str) -> tuple[np.ndarray, int] | None:
+    """`flipbook`, or None to keep the PlayStation's: without a set, or with a logged reason."""
+    if arc is None:
+        return None
+    try:
+        return flipbook(arc, record)
+    except (arcade.ArcadeError, struct.error, ValueError, IndexError) as e:
+        log.error("arcade: flipbook %s: %s; the PlayStation's is kept", name, e)
+        return None
