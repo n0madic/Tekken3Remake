@@ -128,6 +128,63 @@ func test_tabs_and_directions() -> void:
 	view.free()
 
 
+## Every row and field of the tab a direction can pick.
+static func _pickable(view: SettingsView) -> Array[int]:
+	var out: Array[int] = []
+	for i in SettingsView.item_count:
+		if view._rects[i].size != Vector2.ZERO and view._selectable(i):
+			out.append(i)
+	return out
+
+
+func test_down_and_up_visit_every_row_of_both_columns() -> void:
+	for window: Vector2 in [Vector2(1280, 720), Vector2(720, 1280)]:
+		var view := _view(window, SettingsView.GAME)
+		var all := _pickable(view)
+		for direction: Vector2 in [Vector2.DOWN, Vector2.UP]:
+			var at := view._first_item(SettingsView.GAME)
+			var start := at
+			var seen: Array[int] = []
+			for n in all.size():
+				seen.append(at)
+				at = view.neighbour(at, direction)
+			var where := "%s at %s" % ["down" if direction == Vector2.DOWN else "up", window]
+			expect_equal(at, start, "%s: comes round to where it began" % where)
+			seen.sort()
+			expect_equal(seen, all, "%s: every row once" % where)
+		view.free()
+
+
+func test_down_leaves_a_column_for_the_other() -> void:
+	var view := _view(Vector2(1280, 720), SettingsView.GAME)
+	var volume := SettingsView.ROWS.find(["volume_system", ""])
+	var top_right := -1
+	for i in range(SettingsView.column_break[SettingsView.GAME], SettingsView.item_count):
+		if view._rects[i].size != Vector2.ZERO and view._selectable(i):
+			top_right = i
+			break
+	expect_equal(view.neighbour(volume, Vector2.DOWN), top_right, "down from the left column's end: the right one's top")
+	expect_equal(view.neighbour(top_right, Vector2.UP), volume, "up from the right column's top: the left one's end")
+	var first := view._first_item(SettingsView.GAME)
+	expect_equal(view.neighbour(first, Vector2.UP), SettingsView.back_row, "up from the first row: the last one")
+	expect_equal(view.neighbour(SettingsView.back_row, Vector2.DOWN), first, "and down from it: the first")
+	view.free()
+
+
+func test_controls_tab_right_column_is_reachable() -> void:
+	var view := _view(Vector2(1280, 720), SettingsView.CONTROLS)
+	var macros := SettingsView.ROWS.find(["touch_macros", "SETTINGS_MACROS_HELP"])
+	var size := SettingsView.ROWS.find(["touch_size", "SETTINGS_TOUCH_SIZE_HELP"])
+	var at := view._first_item(SettingsView.CONTROLS)
+	var visited: Array[int] = []
+	for n in SettingsView.item_count:
+		visited.append(at)
+		at = view.neighbour(at, Vector2.DOWN)
+	expect(macros in visited and size in visited and SettingsView.back_row in visited,
+		"down alone reaches the touch macros, their size and Back")
+	view.free()
+
+
 func test_key_field_takes_the_next_key() -> void:
 	var saved: Variant = Settings.values[GameSettings.KEY_BINDINGS]
 	var layouts := Pads.layouts.duplicate()

@@ -6,7 +6,8 @@ extends Control
 ## ones beside them) and
 ## Controls (vibration, the touch controls and, where a keyboard can be at hand, the keys of the
 ## two keyboard layouts: a pad picture per player with a field beside each button). The
-## directions move between the rows and fields by their places on the screen; on a setting left
+## directions move between the rows and fields by their places on the screen (up and down go on
+## into the other column at a column's end); on a setting left
 ## and right (or Cross and Start) change it, Circle or Select (Esc) close the screen. Cross, Enter
 ## or a click on a field waits for the field's new key (Esc cancels, a gamepad button too). A
 ## click or tap on a row changes it too (on a volume's bar it sets the volume there, and a drag
@@ -369,17 +370,45 @@ func _first_item(t: int) -> int:
 	return back_row
 
 
-## The nearest selectable row or field from `from` in a direction (by their places on the screen);
-## up and down wrap around.
+## The nearest selectable row or field from `from` in a direction (by their places on the screen).
+## Past a column's last row, down goes on at the top of the other column and up at its bottom
+## (left and right change a setting's value, so the columns cannot be left sideways); in one
+## column, or past the last column, they wrap around.
 func neighbour(from: int, direction: Vector2) -> int:
 	if _rects.size() != item_count or _rects[from].size == Vector2.ZERO:
 		return from
 	var origin := _rects[from].get_center()
 	var found := _nearest(from, origin, direction)
 	if found < 0 and direction.y != 0.0:
-		origin.y = _panel.end.y + 1.0 if direction.y < 0.0 else _panel.position.y - 1.0
-		found = _nearest(from, origin, direction)
+		if columns() == 2:
+			found = _end_of_other_column(from, direction.y > 0.0)
+		if found < 0:
+			origin.y = _panel.end.y + 1.0 if direction.y < 0.0 else _panel.position.y - 1.0
+			found = _nearest(from, origin, direction)
 	return found if found >= 0 else from
+
+
+## The top (`top`) or bottom selectable row or field of the panel's other half, the nearest to
+## `from` sideways among those on that line; −1 when that half has none.
+func _end_of_other_column(from: int, top: bool) -> int:
+	var middle := _panel.get_center().x
+	var here := _rects[from].get_center()
+	var best := -1
+	var best_y := 0.0
+	var best_side := 0.0
+	for i in _rects.size():
+		if _rects[i].size == Vector2.ZERO or not _selectable(i):
+			continue
+		var centre := _rects[i].get_center()
+		if (centre.x < middle) == (here.x < middle):
+			continue
+		var y := centre.y if top else -centre.y
+		var side := absf(centre.x - here.x)
+		if best < 0 or y < best_y - 1.0 or (y < best_y + 1.0 and side < best_side):
+			best = i
+			best_y = y
+			best_side = side
+	return best
 
 
 ## The nearest in a direction: first among those facing `from` (across the line of sight from its
