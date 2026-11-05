@@ -346,6 +346,15 @@ func _name_plate(x: int, y: int, w: int, colour: int) -> void:
 	ft4(x, y, w, 10, 0xDC, 0xA8, 2, 10, ram.u16(PLATE_COLOURS + 2 * colour), 0xD)
 
 
+## A name at (x0, y), on a plate in the colour `plate` unless that is negative. The game links the
+## plate into the 2D ordering table's slot 0 and the text into slot 7, and those tables are cleared
+## forwards (ClearOTag), so the text is drawn after the plate: its letters lie over the plate's top.
+func _name(s: String, colour: int, x0: int, y: int, plate: int) -> void:
+	if plate >= 0:
+		_name_plate(x0 - 4, y + 0x12, s.length() * 0xD + 10, plate)
+	text(s, 1, colour, x0, y)
+
+
 ## FUN_8005497C: per side the team size, the name under the cursor, the prompt or the caption.
 func _texts() -> void:
 	for p in 2:
@@ -387,10 +396,7 @@ func _texts() -> void:
 			else:
 				s = ram.string(STR_SOLD_OUT)
 				colour = 5
-			var x0 := x - ((s.length() * 0xD) >> 1)
-			text(s, 1, colour, x0, y)
-			if named:
-				_name_plate(x0 - 4, y + 0x12, s.length() * 0xD + 10, key & 3)
+			_name(s, colour, x - ((s.length() * 0xD) >> 1), y, key & 3 if named else -1)
 		elif kind == 4:
 			coin(p, x, y + 4, 10, frame_count)
 		elif kind == 5:

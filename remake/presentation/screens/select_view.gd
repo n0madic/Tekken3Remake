@@ -172,10 +172,8 @@ func _portraits(kind: Bands) -> void:
 		var rp := rec(p)
 		var key := ram.s32(rp + CharacterSelect.R_SHOWN_KEY)
 		var costume := ram.s32(rp + CharacterSelect.R_SHOWN_COSTUME)
-		if key >= CharacterSelect.NO_CELL:
-			continue
-		var attr := select.g.data.attribute(key, costume) & 0xFF
-		if (attr & 0x1F) >= portraits.size():
+		var attr := side_attribute(select.g.data, key, costume, portraits.size())
+		if attr < 0:
 			continue
 		var subtracted := attr == SUBTRACTED_PORTRAIT
 		if subtracted != (kind == Bands.SUBTRACTED):
@@ -200,6 +198,15 @@ func _portraits(kind: Bands) -> void:
 				_band(tex, x, y, h, row, flip, _band_shade(b0, opaque), _band_shade(b1, opaque))
 			y += h
 			row += h
+
+
+## The attribute byte of the portrait a side shows, or −1 when `count` pictures do not have it. A side
+## with nothing chosen (key NO_CELL: the second side while one player chooses, and each side until its
+## first portrait is shown) is drawn like any other: the game takes the attribute of the out-of-range
+## key, 0x15, the silhouette picture (the one the converter lists last), drawn subtracted.
+static func side_attribute(data: FlowData, key: int, costume: int, count: int) -> int:
+	var attr := data.attribute(key, costume) & 0xFF
+	return attr if (attr & 0x1F) < count else -1
 
 
 ## A band edge's colour: FUN_8004E254 scales 0x7F7F7F by the brightness (/0x100), a texture
