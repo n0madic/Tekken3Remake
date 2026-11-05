@@ -5,6 +5,9 @@ shader_type spatial;
 // shows the arena, not the outside of the wall or sky in front of the camera.
 // The camera rig's coverage (tools/remake_import/stage.py) counts only these faces too.
 render_mode unshaded, cull_back, depth_draw_opaque;
+// Drawn in the stage's depth band behind everything, as the game's farthest table entries.
+
+#include "res://presentation/stage/stage_depth.gdshaderinc"
 
 #ifdef CRISP
 uniform sampler2D atlas : source_color, filter_nearest, repeat_disable;
@@ -12,10 +15,15 @@ uniform sampler2D atlas : source_color, filter_nearest, repeat_disable;
 uniform sampler2D atlas : source_color, filter_linear, repeat_disable;
 #endif
 
+void vertex() {
+	STAGE_DEPTH_VERTEX
+}
+
 void fragment() {
 	vec4 texel = texture(atlas, UV);
 	if (texel.a < 0.5) {
 		discard;
 	}
 	ALBEDO = texel.rgb * COLOR.rgb * 2.0;
+	STAGE_DEPTH_FRAGMENT
 }

@@ -4,6 +4,9 @@ shader_type spatial;
 // u = x / size + 0.5, v = z / size + 0.5 in Godot space (the pattern's rows run towards
 // the game's −z), so the tiles show no seams. Texels of value 0 are transparent on the GPU
 // (alpha 0 in the converted pattern): stage 11's grates show what lies below through them.
+// Drawn in the stage's depth band behind everything, as the game's farthest table entries.
+
+#include "res://presentation/stage/stage_depth.gdshaderinc"
 
 #ifdef CRISP
 uniform sampler2D pattern : source_color, filter_nearest_mipmap, repeat_enable;
@@ -37,6 +40,7 @@ varying vec3 world_position;
 
 void vertex() {
 	world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	STAGE_DEPTH_VERTEX
 }
 
 void fragment() {
@@ -65,4 +69,5 @@ void fragment() {
 		ALBEDO *= level / 128.0;
 	}
 	ROUGHNESS = 0.9;
+	STAGE_DEPTH_FRAGMENT
 }

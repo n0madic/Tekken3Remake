@@ -9,6 +9,9 @@ shader_type spatial;
 // come from that frame of `frames` (the frames one below the other), also in the atlas gutter
 // around it.
 render_mode unshaded, cull_back, depth_draw_opaque;
+// Drawn in the stage's depth band behind everything, as the game's farthest table entries.
+
+#include "res://presentation/stage/stage_depth.gdshaderinc"
 
 #ifdef CRISP
 uniform sampler2D atlas : source_color, filter_nearest, repeat_disable;
@@ -31,6 +34,7 @@ varying vec3 factor;
 void vertex() {
 	window = CUSTOM0;
 	factor = CUSTOM1.rgb;
+	STAGE_DEPTH_VERTEX
 }
 
 void fragment() {
@@ -48,4 +52,5 @@ void fragment() {
 		discard;
 	}
 	ALBEDO = colour.rgb * factor;
+	STAGE_DEPTH_FRAGMENT
 }
