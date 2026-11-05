@@ -38,6 +38,7 @@ var _previous := Transform3D()
 var _current := Transform3D()
 var _court_z := PackedFloat32Array([0, 0])
 var _type := -1
+var _zone := -1                         ## the neutral zone the court was built for
 var _snap := true                       ## the next step's pose is not interpolated into (the first, a return)
 
 
@@ -158,6 +159,16 @@ func _court_mesh(zone: int) -> ArrayMesh:
 	return mesh
 
 
+## The court for a neutral zone, built again when the zone changes: the game sets it from the
+## ball type when a fight starts, after the view's first step (and the next match may have
+## another type).
+func _set_zone(zone: int) -> void:
+	if zone == _zone:
+		return
+	_zone = zone
+	_court.mesh = _court_mesh(zone)
+
+
 ## After a simulation step.
 func apply(sim: FightSimulation) -> void:
 	var tb := sim.fight.ball
@@ -166,8 +177,7 @@ func apply(sim: FightSimulation) -> void:
 		_snap = true
 		return
 	visible = true
-	if _court.mesh == null:
-		_court.mesh = _court_mesh(tb.neutral_zone())
+	_set_zone(tb.neutral_zone())
 	var b := tb.b
 	var t := sim.fight.region.ctx8(TekkenBall.BALL_TYPE) % 3
 	if t != _type:
