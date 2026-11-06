@@ -302,18 +302,25 @@ def move_glyph_atlas(tims: bytes, origin: tuple[int, int]) -> np.ndarray | None:
     return None
 
 
-class FaceList(list):
+class FaceList(Sequence):
     """The faces of a model for `write_model`, (double sided, index in `groups` or −1, corners)
     each, with the ordering-table bias of each in `biases` (the game sorts a face by the depths of
-    two of its corners minus its bias; `write_model` hands it on)."""
+    two of its corners minus its bias; `write_model` hands it on). Faces only come in through
+    `add`, so a face and its bias cannot get out of step."""
 
     def __init__(self) -> None:
-        super().__init__()
+        self._faces: list[tuple] = []
         self.biases: list[int] = []
 
     def add(self, face: tuple, bias: int) -> None:
-        self.append(face)
+        self._faces.append(face)
         self.biases.append(bias)
+
+    def __len__(self) -> int:
+        return len(self._faces)
+
+    def __getitem__(self, index):
+        return self._faces[index]
 
 
 def convert_model(disc: Disc, out: Output, name: str, slot: int, kmd_data: bytes, vram: Vram) -> dict:
@@ -357,7 +364,7 @@ def convert_model(disc: Disc, out: Output, name: str, slot: int, kmd_data: bytes
         "parts": ps1_parts(disc, slot, model, order),
     }
     write_model(out, f"characters/{name}", record, faces, local, normal, lambda part: kmdlib.PART_MATRIX[part],
-                vram, material_page, closed_eyes(vram, eye_rects(disc, slot)), groups=groups, biases=faces.biases,
+                vram, material_page, closed_eyes(vram, eye_rects(disc, slot)), groups=groups,
                 swap=swapped, gaze_strips=gaze_strips(disc, characters, slot, vram, swapped))
     return {"name": name, "scale_percent": model.scale_percent, "attachments": attachments}
 
@@ -556,12 +563,11 @@ def ps1_parts(disc: Disc, slot: int, model: kmdlib.Kmd, order: list[tuple[int, i
     return parts
 
 
-def write_model(out: Output, base: str, record: dict, faces: list, local: Callable, normal: Callable,
+def write_model(out: Output, base: str, record: dict, faces: Sequence, local: Callable, normal: Callable,
                 joint_of: Callable[[int], int], vram: Vram, page_of: Callable, closed: Vram | None,
                 sources: bool = True, eyes: dict[int, Vram] | None = None,
                 groups: Sequence[VariantGroup] = (), swap: Vram | None = None,
-                gaze_strips: tuple[gaze.Layout, dict[bool, Vram]] | None = None,
-                biases: Sequence[int] = ()) -> None:
+                gaze_strips: tuple[gaze.Layout, dict[bool, Vram]] | None = None) -> None:
     """Writes a costume's mesh, texture atlas (and closed-eye atlas, the atlases of the eye
     shapes `eyes`, the atlas of Gon's swapped head palette `swap` and the patches of his eyes'
     look directions `gaze_strips`) and model.json (`record` plus the surfaces).
@@ -570,9 +576,9 @@ def write_model(out: Output, base: str, record: dict, faces: list, local: Callab
     normal term, u, v) with terms ((term, weight), …), at most three. `local(term)` is a term's
     part-local position in its base block (a group's faces take the rows' positions from the
     group, once per variant), `normal(term)` its unit normal, `joint_of` maps a term's part to its
-    joint, `page_of(material)` gives the material's page and CLUT. `biases` holds each face's
-    ordering-table bias (0 where missing); every surface also gets its triangles' sort keys
-    (`FACE_KEY_INTS` each: see `emit`)."""
+    joint, `page_of(material)` gives the material's page and CLUT. A `FaceList` also gives each
+    face's ordering-table bias (any other sequence of faces has bias 0); every surface also gets its
+    triangles' sort keys (`FACE_KEY_INTS` each: see `emit`)."""
     used: dict[object, list[tuple[int, int]]] = {}
     for _, _, corners in faces:
         for material, _, _, u, v in corners:
@@ -616,8 +622,7 @@ def write_model(out: Output, base: str, record: dict, faces: list, local: Callab
 
     mesh = bytearray()
 
-    def bias_of(face_index: int) -> int:
-        return biases[face_index] if face_index < len(biases) else 0
+    biases = faces.biases if isinstance(faces, FaceList) else [0] * len(faces)
 
     def emit(selected: list, group: VariantGroup | None = None, variant: int = 0,
              refs: list[int] | None = None, slot_of: dict[tuple[int, int], int] | None = None) -> list[dict]:
@@ -646,7 +651,7 @@ def write_model(out: Output, base: str, record: dict, faces: list, local: Callab
                 # The face's sort key: the game files it under its corners 0 and 2 (3 for a quad)
                 # by their depths less the bias; every triangle of the face carries the corners
                 # (vertex numbers in this surface) the key and the facing need, and the bias.
-                key = [at[0], at[1], at[2], at[len(corners) - 1], bias_of(face_index), face_index]
+                key = [at[0], at[1], at[2], at[len(corners) - 1], biases[face_index], face_index]
                 keys.extend(key * len(tris))
                 for tri in tris:
                     for k, i in enumerate(tri):
@@ -702,7 +707,7 @@ def write_model(out: Output, base: str, record: dict, faces: list, local: Callab
     })
 
 
-def smooth_normals(faces: list, position: Callable[[Term], tuple[int, int, int]],
+def smooth_normals(faces: Sequence, position: Callable[[Term], tuple[int, int, int]],
                    normal: Callable[[Term], tuple[float, float, float]]) -> tuple[dict, dict]:
     """The smooth normal of every face corner, (face, corner) → (s_own, part_own, s_other,
     part_other), and the point every corner is at, (face, corner) → key.
@@ -770,7 +775,7 @@ def face_edges(corner_count: int) -> tuple[tuple[int, int], ...]:
     return ((0, 1), (1, 2), (2, 0)) if corner_count == 3 else ((0, 1), (1, 3), (3, 2), (2, 0))
 
 
-def smooth_edges(faces: list, keys: dict, smooth: dict) -> set[frozenset]:
+def smooth_edges(faces: Sequence, keys: dict, smooth: dict) -> set[frozenset]:
     """The edges (pairs of point keys) the curved surfaces may bulge along: shared by two faces
     or more that all give both ends the same smooth normal. Every other edge stays straight, so
     the faces on both sides of a crease or an open border still meet (fighter_skin.gdshaderinc).

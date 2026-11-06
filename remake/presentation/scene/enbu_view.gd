@@ -79,6 +79,7 @@ func _view(fighter: int, slot: int) -> FighterView:
 	var per_fighter := views[fighter]
 	if not per_fighter.has(slot):
 		var view := FighterView.new()
+		view.draw_rank = fighter
 		view.setup(models[slot] as CharacterModel)
 		view.set_lighting(_fighter_lighting)
 		view.visible = false

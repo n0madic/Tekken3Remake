@@ -19,11 +19,17 @@ extends RefCounted
 const DATA_WIDTH := 1024                ## texels per row of both textures
 const CORNER_TEXELS := 6
 const KEY_TEXELS := 2
+## The fighter records the game draws in one frame, in this order (FighterSkeletonUpdate: the two
+## players, then Tekken Force's third): of the faces in one table entry the earlier-drawn fighter's
+## are on top (FighterView.draw_rank).
+const FIGHTER_SLOTS := 3
+## A face is never drawn nearer than this (metres): just in front of the camera's near plane.
+const NEAR_CLAMP := CameraRig.NEAR * 1.2
 
 var corners: ImageTexture               ## the corners of every surface
 var keys: ImageTexture                  ## the triangles' sort keys, null when the model has none
-var has_keys := false
 var triangles := 0
+var _stride: int                        ## floats per converter corner (CharacterModel.vertex_floats)
 var _first: Dictionary = {}             ## CharacterModel.Surface → the number of its first triangle
 var _colors: Dictionary = {}            ## CharacterModel.Surface → its corners' triangle numbers as colours
 var _corner_data := PackedFloat32Array()     ## RGBA per texel
@@ -38,15 +44,16 @@ static func of(model: CharacterModel) -> FaceKeys:
 
 
 func _init(model: CharacterModel) -> void:
-	has_keys = model.face_count > 0
+	_stride = model.vertex_floats
+	var with_keys := model.face_count > 0
 	for surface in model.surfaces:
-		_add(surface, model.vertex_floats)
+		_add(surface, with_keys)
 	for group in model.variant_groups():
 		for variant: Array in group.variants:
 			for surface: CharacterModel.Surface in variant:
-				_add(surface, model.vertex_floats)
+				_add(surface, with_keys)
 	corners = _texture(_corner_data)
-	keys = _texture(_key_data) if has_keys else null
+	keys = _texture(_key_data) if with_keys else null
 	_corner_data = PackedFloat32Array()
 	_key_data = PackedFloat32Array()
 
@@ -56,46 +63,53 @@ func first(surface: CharacterModel.Surface) -> int:
 	return _first[surface]
 
 
-## The vertex colours of a flat `surface`'s corners, which hold the number of their triangle in
-## the colour's bytes (red the lowest).
-func colors(surface: CharacterModel.Surface, stride: int) -> PackedColorArray:
+## The vertex colours of a flat `surface`'s corners, which hold the number of their triangle.
+func colors(surface: CharacterModel.Surface) -> PackedColorArray:
 	if not _colors.has(surface):
 		var out := PackedColorArray()
 		var base := first(surface)
-		for i in surface.vertices.size() / stride:
-			var n := base + i / 3
-			out.append(Color8(n & 0xFF, (n >> 8) & 0xFF, (n >> 16) & 0xFF))
+		for i in surface.vertices.size() / _stride:
+			out.append(triangle_colour(base + i / 3))
 		_colors[surface] = out
 	return _colors[surface]
 
 
-## Stores a surface's corners (converter corners of `stride` floats) and keys.
-func _add(surface: CharacterModel.Surface, stride: int) -> void:
+## The colour that carries triangle `n` to the vertex shader: its three bytes, red the lowest.
+static func triangle_colour(n: int) -> Color:
+	return Color8(n & 0xFF, (n >> 8) & 0xFF, (n >> 16) & 0xFF)
+
+
+## Stores a surface's corners and, with `with_keys`, the keys of its triangles.
+func _add(surface: CharacterModel.Surface, with_keys: bool) -> void:
 	var v := surface.vertices
-	var count := v.size() / stride / 3
+	var count := v.size() / _stride / 3
 	_first[surface] = triangles
-	for t in count:
-		for k in 3:
-			var o := (3 * t + k) * stride
-			# pa, bone_a | pb, bone_b | s_own, wb + 2 · curves | s_other, bone_other | the game's n,
-			# bone_n | pc, bone_c + wc
-			_corner_data.append_array([v[o], v[o + 1], v[o + 2], v[o + 12],
-				v[o + 3], v[o + 4], v[o + 5], v[o + 13],
-				v[o + 15], v[o + 16], v[o + 17], v[o + 6] + 2.0 * v[o + 22],
-				v[o + 18], v[o + 19], v[o + 20], v[o + 21],
-				v[o + 7], v[o + 8], v[o + 9], v[o + 14],
-				v[o + 23], v[o + 24], v[o + 25], v[o + 27] + v[o + 26]])
-	if has_keys:
+	for c in count * 3:
+		var o := c * _stride
+		# pa, bone_a | pb, bone_b | s_own, wb + 2 · curves | s_other, bone_other | the game's n,
+		# bone_n | pc, bone_c + wc
+		_corner_data.append_array([v[o], v[o + 1], v[o + 2], v[o + 12],
+			v[o + 3], v[o + 4], v[o + 5], v[o + 13],
+			v[o + 15], v[o + 16], v[o + 17], v[o + 6] + 2.0 * v[o + 22],
+			v[o + 18], v[o + 19], v[o + 20], v[o + 21],
+			v[o + 7], v[o + 8], v[o + 9], v[o + 14],
+			v[o + 23], v[o + 24], v[o + 25], v[o + 27] + v[o + 26]])
+	if with_keys:
 		var corner_base := 3 * triangles
-		for t in count:
-			var o := t * CharacterModel.FACE_KEY_INTS
-			if surface.keys.is_empty():
-				_key_data.append_array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-				continue
-			# The key's corners are vertex numbers in the surface: here they are corner numbers.
-			_key_data.append_array([corner_base + surface.keys[o], corner_base + surface.keys[o + 1],
-				corner_base + surface.keys[o + 2], corner_base + surface.keys[o + 3],
-				surface.keys[o + 4], surface.keys[o + 5], 0.0, 0.0])
+		var key_at := _key_data.size()
+		var key_width := KEY_TEXELS * 4
+		_key_data.resize(key_at + count * key_width)
+		if not surface.keys.is_empty():
+			for t in count:
+				var o := t * CharacterModel.FACE_KEY_INTS
+				var w := key_at + t * key_width
+				# The key's corners are vertex numbers in the surface: here they are corner numbers.
+				_key_data[w] = corner_base + surface.keys[o]
+				_key_data[w + 1] = corner_base + surface.keys[o + 1]
+				_key_data[w + 2] = corner_base + surface.keys[o + 2]
+				_key_data[w + 3] = corner_base + surface.keys[o + 3]
+				_key_data[w + 4] = surface.keys[o + 4]
+				_key_data[w + 5] = surface.keys[o + 5]
 	triangles += count
 
 

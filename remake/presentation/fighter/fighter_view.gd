@@ -21,6 +21,13 @@ const HALF_RGBA_BYTES := 8          ## a CUSTOM_RGBA_HALF attribute per vertex
 const NO_BACK_COLOUR := Vector3(-1.0, -1.0, -1.0)   ## set_back_colour not called yet: the stage's
 
 var model: CharacterModel
+## The fighter's place in the game's drawing order (0: the first player, which FighterSkeletonUpdate
+## draws first, so of the faces in one ordering-table entry its are on top); see FaceKeys.FIGHTER_SLOTS.
+var draw_rank := 0:
+	set(value):
+		draw_rank = value
+		if not materials.is_empty():
+			_apply_shading()
 var materials: Array[ShaderMaterial] = []     ## single-sided, double-sided
 var mesh_instance := MeshInstance3D.new()
 var hand_instances: Array[MeshInstance3D] = []
@@ -176,7 +183,7 @@ func _mesh(surfaces: Array[CharacterModel.Surface]) -> ArrayMesh:
 			if not array_cache.has(surface):
 				var arrays := _arrays(surface.vertices, model.vertex_floats)
 				if model.face_count > 0:
-					arrays[Mesh.ARRAY_COLOR] = _keys.colors(surface, model.vertex_floats)
+					arrays[Mesh.ARRAY_COLOR] = _keys.colors(surface)
 				array_cache[surface] = arrays
 			mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, array_cache[surface] as Array, [], {}, _format())
 		mesh.surface_set_material(mesh.get_surface_count() - 1, materials[1 if surface.double_sided else 0])
@@ -252,6 +259,9 @@ func _apply_shading() -> void:
 		material.set_shader_parameter("face_keys", _keys.keys if ordered else null)
 		material.set_shader_parameter("key_texels", FaceKeys.KEY_TEXELS)
 		material.set_shader_parameter("face_count", model.face_count)
+		material.set_shader_parameter("fighter_rank", draw_rank)
+		material.set_shader_parameter("fighter_slots", FaceKeys.FIGHTER_SLOTS)
+		material.set_shader_parameter("face_near", FaceKeys.NEAR_CLAMP)
 		material.set_shader_parameter("units_per_metre", WorldSpace.UNITS_PER_METRE)
 
 

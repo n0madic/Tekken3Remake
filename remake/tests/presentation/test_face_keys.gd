@@ -1,10 +1,9 @@
 extends TestSuite
 ## The fighters' sort keys (FaceKeys, fighter_skin.gdshaderinc): the converter's per-triangle keys
-## reach the key texture with corner numbers over the whole model, the flat meshes name their
-## triangles in the vertex colour, and the shader draws a face at one depth.
+## reach the key texture with corner numbers over the whole model, and the flat meshes name their
+## triangles in the vertex colour (the shader's side: test_face_depth.gd).
 
 const STRIDE := 28
-const SHADER_INCLUDE := "res://presentation/fighter/fighter_skin.gdshaderinc"
 
 
 func _corner(bone: int) -> PackedFloat32Array:
@@ -77,21 +76,25 @@ func test_corner_texture_is_shared_with_the_curved_grids() -> void:
 func test_flat_corners_name_their_triangle_in_the_colour() -> void:
 	var model := _model()
 	var keys := FaceKeys.of(model)
-	var colours := keys.colors(model.surfaces[0], STRIDE)
+	var colours := keys.colors(model.surfaces[0])
 	expect_equal(colours.size(), 6, "a colour per corner")
 	expect_equal([colours[0], colours[2], colours[3], colours[5]], [Color8(0, 0, 0), Color8(0, 0, 0), Color8(1, 0, 0), Color8(1, 0, 0)],
 		"three corners to a triangle")
 	var hand_surface := (model.hands[0].variants[0] as Array)[0] as CharacterModel.Surface
-	expect_equal(keys.colors(hand_surface, STRIDE)[1], Color8(2, 0, 0), "the hand's triangle after the body's")
+	expect_equal(keys.colors(hand_surface)[1], Color8(2, 0, 0), "the hand's triangle after the body's")
 
 
 func test_triangle_numbers_beyond_a_byte() -> void:
+	# A second surface that starts at triangle 300: the number's second byte is 1.
 	var model := CharacterModel.new()
 	model.vertex_floats = STRIDE
-	model.surfaces.append(_surface(70000))
-	var colours := FaceKeys.of(model).colors(model.surfaces[0], STRIDE)
+	model.surfaces.append(_surface(300))
+	model.surfaces.append(_surface(2))
+	var keys := FaceKeys.of(model)
+	expect_equal(keys.colors(model.surfaces[1])[0], Color8(44, 1, 0), "the number 300 in two bytes")
+	expect_equal(keys.colors(model.surfaces[1])[5], Color8(45, 1, 0), "and the next triangle's")
 	var last := 70000 - 1
-	expect_equal(colours[3 * last + 1], Color8(last & 0xFF, (last >> 8) & 0xFF, last >> 16), "three bytes of the number")
+	expect_equal(FaceKeys.triangle_colour(last), Color8(last & 0xFF, (last >> 8) & 0xFF, last >> 16), "three bytes of the number")
 
 
 func test_model_without_keys_has_no_key_texture() -> void:
@@ -99,7 +102,7 @@ func test_model_without_keys_has_no_key_texture() -> void:
 	model.vertex_floats = STRIDE
 	model.surfaces.append(_surface(1))
 	var keys := FaceKeys.of(model)
-	expect(not keys.has_keys and keys.keys == null, "no keys, no texture")
+	expect(keys.keys == null, "no keys, no texture")
 	expect(keys.corners != null, "the corners are still there for the curved grids")
 
 
@@ -113,12 +116,3 @@ func test_surfaces_load_their_keys() -> void:
 		{"double_sided": false, "offset": 0, "vertex_count": 3}], blob, STRIDE)
 	expect_equal(surfaces[0].keys, PackedInt32Array([0, 1, 2, 2, -4, 7]), "the triangle's six ints")
 	expect(surfaces[1].keys.is_empty(), "a surface of an older conversion has none")
-
-
-func test_shader_draws_a_face_at_one_depth() -> void:
-	var code := FileAccess.get_file_as_string(SHADER_INCLUDE)
-	expect(code.contains("float face_key_depth("), "the key's depth")
-	expect(code.contains("POSITION.z = face_depth * POSITION.w;"), "clip-space depth shifted to the face's, constant over it")
-	expect(code.contains("PROJECTION_MATRIX[3][3] == 0.0"), "not in the orthographic shadow pass")
-	expect(code.contains("DEPTH = face_depth >= 0.0 ? face_depth : FRAGCOORD.z;"), "the Compatibility renderer writes it from the fragment")
-	expect(code.contains("#if CURRENT_RENDERER == RENDERER_COMPATIBILITY"), "chosen by the renderer")

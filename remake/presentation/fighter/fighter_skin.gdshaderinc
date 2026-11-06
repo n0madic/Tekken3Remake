@@ -13,7 +13,8 @@
 // under the depths of two of its corners (face_key_depth()), so a thigh that pokes through a skirt
 // is covered by it when the skirt's entry is nearer. With `face_order` every face is drawn at one
 // depth in the camera's projection, the one its entry stands for, so the depth test reproduces the
-// painter's order; the tie within an entry goes by face number. The sort keys are in `face_keys`.
+// painter's order; the tie within an entry goes by fighter (the first player's are on top) and then
+// by face number. The sort keys are in `face_keys`.
 
 const int JOINT_ROWS = 84;                    // 3 × CharacterModel.JOINT_COUNT
 // A smooth normal's half shorter than this (squared, in part-local units: sums of unit normals)
@@ -43,13 +44,14 @@ uniform bool face_order = false;
 uniform sampler2D face_keys : filter_nearest, repeat_disable;
 uniform int key_texels = 2;                     // FaceKeys.KEY_TEXELS
 uniform int face_count = 1;
+uniform int fighter_rank = 0;                   // FighterView.draw_rank
+uniform int fighter_slots = 3;                  // FaceKeys.FIGHTER_SLOTS
+uniform float face_near = 0.06;                 // FaceKeys.NEAR_CLAMP: no face is drawn nearer, in metres
 uniform float units_per_metre = 1000.0;         // WorldSpace.UNITS_PER_METRE
 // The ordering table has 1024 entries of 32 game units of depth each (a corner's depth is its
-// screen Z >> 5, a face's entry the mean of two). Nearer than this the face is kept in front of
-// the camera's near plane (CameraRig.NEAR is 0.05 m).
+// screen Z >> 5, a face's entry the mean of two).
 const float TABLE_ENTRIES = 1024.0;
 const float ENTRY_UNITS = 32.0;
-const float FACE_NEAR = 0.06;
 // Bit per joint: faces skinned to it collapse to a point (parts the game does not draw).
 uniform int hidden_joints = 0;
 // The Textures setting: smooth (bilinear; the atlas keeps a 2-texel gutter around each region)
@@ -199,27 +201,38 @@ vec3 view_corner(int c, mat4 modelview) {
 
 // The depth, in the camera's projection, of the ordering-table entry the game files `triangle`'s
 // face under (DrawSkinnedPart, the arcade's FUN_8019A858: ((Z[corner 0] + Z[key corner] − bias) &
-// 0x7FE) >> 1 with Z the screen Z >> 5; the bias is negated for a double-sided face seen from behind,
-// and of the faces in one entry the one filed first is drawn last, over the others: the lower face
-// number is the nearer depth). −1: the entry is out of the table, the face keeps its own depth.
+// 0x7FE) >> 1 with Z the screen Z >> 5; the bias is negated for a face seen from behind). Of the
+// faces in one entry the one filed first is drawn last, over the others: the first player's before
+// the second's (FighterSkeletonUpdate), then the lower face number, so those are the nearer depths.
+// A bias can push the sum below the table's first entry (a close-up): the game's mask would wrap it
+// to the far end, behind its neighbours, and the face takes the first entry instead. Past the last
+// entry (a fighter more than 32 m away) it keeps its own depth: −1.
 float face_key_depth(int triangle, mat4 modelview, mat4 projection) {
 	vec4 corners = key_texel(triangle, 0);
 	vec4 info = key_texel(triangle, 1);
-	vec3 v0 = view_corner(int(corners.x + 0.5), modelview);
-	vec3 v1 = view_corner(int(corners.y + 0.5), modelview);
-	vec3 v2 = view_corner(int(corners.z + 0.5), modelview);
-	vec3 vk = view_corner(int(corners.w + 0.5), modelview);
-	// The face's screen winding (NCLIP > 0): clockwise, as Godot's front faces are, so its normal
-	// (v1 − v0) × (v2 − v0) points away from the camera.
-	bool front = dot(cross(v1 - v0, v2 - v0), v0) > 0.0;
 	int bias = int(round(info.x));
-	int sum = (int(max(-v0.z * units_per_metre, 0.0)) >> 5) + (int(max(-vk.z * units_per_metre, 0.0)) >> 5)
-		- (front ? bias : -bias);
-	if (sum < 0 || sum >= 2 * int(TABLE_ENTRIES)) {
+	int key_corner = int(corners.w + 0.5);
+	vec3 v0 = view_corner(int(corners.x + 0.5), modelview);
+	vec3 vk = view_corner(key_corner, modelview);
+	if (bias != 0) {
+		// The face's screen winding (NCLIP > 0) decides the bias's sign: clockwise, as Godot's front
+		// faces are, so its normal (v1 − v0) × (v2 − v0) points away from the camera. A triangle's
+		// key corner is its corner 2.
+		int corner2 = int(corners.z + 0.5);
+		vec3 v1 = view_corner(int(corners.y + 0.5), modelview);
+		vec3 v2 = corner2 == key_corner ? vk : view_corner(corner2, modelview);
+		if (dot(cross(v1 - v0, v2 - v0), v0) <= 0.0) {
+			bias = -bias;
+		}
+	}
+	int sum = (int(max(-v0.z * units_per_metre, 0.0)) >> 5) + (int(max(-vk.z * units_per_metre, 0.0)) >> 5) - bias;
+	if (sum >= 2 * int(TABLE_ENTRIES)) {
 		return -1.0;
 	}
-	float entry = float(sum >> 1) + (info.y + 0.5) / float(face_count);
-	float z = max(entry * ENTRY_UNITS / units_per_metre, FACE_NEAR);
+	float within = (info.y + 0.5) / float(face_count);
+	float rank = (float(min(fighter_rank, fighter_slots - 1)) + within) / float(fighter_slots);
+	float entry = float(max(sum, 0) >> 1) + rank;
+	float z = max(entry * ENTRY_UNITS / units_per_metre, face_near);
 	vec4 c = projection * vec4(0.0, 0.0, -z, 1.0);
 #if CURRENT_RENDERER == RENDERER_COMPATIBILITY
 	// OpenGL's clip space runs from −1 to 1; the window depth the fragment writes from 0 to 1.

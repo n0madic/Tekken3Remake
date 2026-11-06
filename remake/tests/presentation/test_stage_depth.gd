@@ -9,9 +9,8 @@ const STAGE_SHADERS := [
 	"res://presentation/stage/panorama.gdshader",
 	"res://presentation/stage/arcade_scene.gdshader",
 ]
-## Everything that is not the stage (fighters, effects, the ball, the items) lies within this
-## distance of the camera, in metres.
-const DYNAMIC_RANGE := 100.0
+## The depth step of a 24-bit buffer.
+const STEP_24_BIT := 1.0 / 16777216.0
 
 
 ## The include's constant `name`.
@@ -35,9 +34,25 @@ func test_band_is_inside_the_depth_range() -> void:
 
 
 func test_band_lies_behind_everything_dynamic() -> void:
+	# Everything that is not the stage (fighters, effects, the ball, the items) lies within the
+	# include's STAGE_DEPTH_RANGE of the camera, in metres.
 	var top := _constant("STAGE_DEPTH_BASE") + _constant("STAGE_DEPTH_SPAN")
-	expect(_depth_at(DYNAMIC_RANGE) > top, "a point %d m ahead is nearer than the whole stage" % int(DYNAMIC_RANGE))
+	var range_m := _constant("STAGE_DEPTH_RANGE")
+	expect(_depth_at(range_m) > top, "a point %d m ahead is nearer than the whole stage" % int(range_m))
 	expect(_depth_at(1.0) > top, "so is one at the fighters' distance")
+	expect(range_m >= 32.768 + 5.0, "the ordering table's last entry (32.8 m) and the biases beyond it are within")
+
+
+## What the squeeze costs a 24-bit depth buffer: the distance one step of it covers inside the band.
+func test_band_keeps_the_stage_resolved_on_a_24_bit_buffer() -> void:
+	var span := _constant("STAGE_DEPTH_SPAN")
+	for case: Array in [[3.0, 0.02], [10.0, 0.2]]:
+		var z: float = case[0]
+		var limit: float = case[1]
+		# d(z) = near (far − z) / (z (far − near)), so a step of the band is a depth step of
+		# STEP / span, which covers z² (far − near) / (near · far) times that many metres.
+		var step := STEP_24_BIT / span * z * z * (CameraRig.FAR - CameraRig.NEAR) / (CameraRig.NEAR * CameraRig.FAR)
+		expect(step <= limit, "at %d m one step covers %.3f m, at most %.2f" % [int(z), step, limit])
 
 
 func test_backdrop_quad_lies_behind_the_band() -> void:
@@ -57,5 +72,12 @@ func test_compatibility_writes_the_depth_from_the_fragment() -> void:
 	var include := FileAccess.get_file_as_string(INCLUDE)
 	expect(include.contains("#if CURRENT_RENDERER == RENDERER_COMPATIBILITY"),
 		"Compatibility has no depth pre-pass: it writes DEPTH, the others shift the vertices")
-	expect(include.contains("DEPTH = STAGE_DEPTH_BASE"), "its fragment write is the band's")
+	expect(include.contains("? STAGE_DEPTH_BASE + FRAGCOORD.z * STAGE_DEPTH_SPAN : FRAGCOORD.z;"), "its fragment write is the band's")
 	expect(include.contains("POSITION.z = POSITION.z * STAGE_DEPTH_SPAN"), "theirs shifts the clip-space depth")
+
+
+func test_only_the_cameras_perspective_pass_is_shifted() -> void:
+	var include := FileAccess.get_file_as_string(INCLUDE)
+	expect(include.count("PROJECTION_MATRIX[3][3] == 0.0") == 2, "both paths leave the orthographic shadow passes alone")
+	expect(include.contains("POSITION = PROJECTION_MATRIX * (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)); if ("),
+		"POSITION is written first on every path")

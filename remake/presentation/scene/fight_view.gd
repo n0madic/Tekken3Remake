@@ -81,11 +81,12 @@ func setup(stage: StageData, effect_data: EffectData, models: Array[CharacterMod
 	_fighter_lighting = StageLighting.fighter_parameters(lights)
 	_costume_slots = costume_slots.duplicate()
 	for model in models:
-		fighters.append(_new_fighter(model))
+		fighters.append(_new_fighter(model, fighters.size()))
 
 
-func _new_fighter(model: CharacterModel) -> FighterView:
+func _new_fighter(model: CharacterModel, rank: int) -> FighterView:
 	var view := FighterView.new()
+	view.draw_rank = rank
 	view.array_cache = _array_cache
 	view.setup(model)
 	view.set_lighting(_fighter_lighting)
@@ -97,7 +98,7 @@ func _new_fighter(model: CharacterModel) -> FighterView:
 ## only its view is built again; it shows from the next step.
 func replace_fighter(i: int, model: CharacterModel, costume_slot: int) -> void:
 	var old := fighters[i]
-	var view := _new_fighter(model)
+	var view := _new_fighter(model, i)
 	view.visible = false
 	move_child(view, old.get_index())
 	fighters[i] = view

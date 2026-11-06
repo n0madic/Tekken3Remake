@@ -210,8 +210,7 @@ class SortKeyTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             out = Output(Path(tmp))
             character.write_model(out, "characters/test", {"name": "test"}, faces, local, normal, lambda j: j,
-                                  Vram(arcade_kmd.VRAM_ROWS), arcade_character.material_page, None, sources=False,
-                                  biases=faces.biases)
+                                  Vram(arcade_kmd.VRAM_ROWS), arcade_character.material_page, None, sources=False)
             record = json.loads((Path(tmp) / "characters/test/model.json").read_text())
             mesh = gzip.decompress((Path(tmp) / "characters/test/mesh.bin.gz").read_bytes())
         self.assertEqual(record["face_count"], 2)
@@ -226,6 +225,21 @@ class SortKeyTest(unittest.TestCase):
         # corner 3 is the second triangle's middle vertex 7; both triangles carry the same record.
         self.assertEqual(keys[n:2 * n], (3, 4, 5, 7, 8, 1))
         self.assertEqual(keys[2 * n:], keys[n:2 * n])
+
+
+    def test_faces_that_are_not_a_face_list_have_bias_zero(self) -> None:
+        _, _, faces, local, normal, _ = arcade_character.model_faces(self.data, self.enable, {}, SINE, "test", 0)
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Output(Path(tmp))
+            character.write_model(out, "characters/test", {"name": "test"}, list(faces), local, normal, lambda j: j,
+                                  Vram(arcade_kmd.VRAM_ROWS), arcade_character.material_page, None, sources=False)
+            record = json.loads((Path(tmp) / "characters/test/model.json").read_text())
+            mesh = gzip.decompress((Path(tmp) / "characters/test/mesh.bin.gz").read_bytes())
+        (surface,) = record["surfaces"]
+        n = character.FACE_KEY_INTS
+        keys = struct.unpack_from(f"<{3 * n}i", mesh, surface["keys"])
+        self.assertEqual((keys[4], keys[n + 4]), (0, 0), "the biases of the two faces")
+        self.assertEqual((keys[5], keys[n + 5]), (0, 1), "their numbers are still there")
 
 
 class VariantTest(unittest.TestCase):

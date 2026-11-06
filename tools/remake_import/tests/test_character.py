@@ -98,6 +98,38 @@ class PoseGroupTest(unittest.TestCase):
         self.assertEqual((hand.channel, hand.part), (0, 16))
 
 
+class FaceBiasTest(unittest.TestCase):
+    """The ordering-table bias and sidedness of the PlayStation's faces (kmd.parse_faces): bits 25–31
+    of the flags word (word 0 of a triangle, word 1 of a quad), bit 24 double-sided; the bias is
+    signed. The faces' sort keys come from these (character.write_model)."""
+
+    @staticmethod
+    def _faces(ft3: int, ft4: int, gt3: int, gt4: int) -> list[kmdlib.Face]:
+        """One face per group; each argument is its flags word (bias << 25 | double << 24)."""
+        tri = 0 | 1 << 9 | 2 << 16
+        quad = 0 | 1 << 9 | 2 << 16
+        data = struct.pack("<I", 1) + struct.pack("<2I", tri | ft3, 0)
+        data += struct.pack("<I", 1) + struct.pack("<2I", quad, ft4)
+        data += struct.pack("<I", 1) + struct.pack("<2I", tri | gt3, 0)
+        data += struct.pack("<I", 1) + struct.pack("<3I", quad, gt4, 0)
+        return kmdlib.parse_faces(data, 0, len(data))
+
+    def test_bias_is_signed_and_read_from_each_groups_flags_word(self) -> None:
+        def flags(bias: int, double: bool) -> int:
+            return (bias & 0x7F) << 25 | (1 << 24 if double else 0)
+
+        faces = self._faces(flags(-6, True), flags(8, False), flags(63, True), flags(-64, False))
+        self.assertEqual([(f.kind, f.double_sided, f.z_bias) for f in faces],
+                         [("ft3", True, -6), ("ft4", False, 8), ("gt3", True, 63), ("gt4", False, -64)])
+
+    def test_a_face_list_cannot_lose_a_bias(self) -> None:
+        faces = character.FaceList()
+        faces.add((False, -1, []), 5)
+        faces.add((True, -1, []), -3)
+        self.assertEqual((len(faces), faces.biases, faces[1][0]), (2, [5, -3], True))
+        self.assertFalse(hasattr(faces, "append"), "faces come in through add() with their bias")
+
+
 class JawCostumeTest(unittest.TestCase):
     def keys(self, **by_character: tuple[int, ...]) -> list[int]:
         """A key table (charId · 4 + costume) with the slots of the given characters (by id)."""

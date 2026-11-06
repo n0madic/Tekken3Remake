@@ -152,11 +152,11 @@ def convert(disc: Disc, out: Output, arc: arcade.ArcadeSet, name: str, slot: int
         record["arcade_eyes"] = eyes
     character.write_model(out, f"characters/{name}", record, faces, local, normal, lambda joint: joint,
                           vram, material_page, None, sources=False, eyes=arcade_eyes.images(arc, slot, vram),
-                          groups=groups, biases=faces.biases)
+                          groups=groups)
 
 
 def model_faces(data: bytes, enable: bytes, turns: dict[int, tuple[int, int, int]], sine: list[int],
-                name: str, slot: int) -> tuple[arcade_kmd.Model, set[int], list, Callable, Callable,
+                name: str, slot: int) -> tuple[arcade_kmd.Model, set[int], character.FaceList, Callable, Callable,
                                                 list[character.VariantGroup]]:
     """A model's drawn rows and its faces for character.write_model, with `local` and `normal`
     and the variant groups the faces belong to (`pose_groups`): the swinging attachments turned
