@@ -870,6 +870,10 @@ static func _ball_glow_start(fight: FightState, o: Obj) -> void:
 	o.c = -1
 	if o.d == 1:
 		o.flags |= SEGMENT
+		# The flame's primitives take the page's fire CLUT and the additive page (DAT_800ae250 and
+		# DAT_800ae338, set at the game's start); the update routines only move their UVs.
+		o.clut = CLUT_FIRE
+		o.tpage = TPAGE_ADD
 	var r := _rand2(fight)
 	var u := r.y
 	o.speed = 0
