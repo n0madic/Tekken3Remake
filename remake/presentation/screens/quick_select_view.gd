@@ -355,6 +355,12 @@ func _name(s: String, colour: int, x0: int, y: int, plate: int) -> void:
 	text(s, 1, colour, x0, y)
 
 
+## The name of a costume key (FUN_8004F2B0: character · 4 + costume). A costume can carry a name of
+## its own (Kuma's second is PANDA, Eddy's TIGER, Nina's ANNA), so the key's costume bits count.
+static func character_name(tables: FightTables, key: int) -> String:
+	return str(tables.character(key)["name"]) if key >= 0 else ""
+
+
 ## FUN_8005497C: per side the team size, the name under the cursor, the prompt or the caption.
 func _texts() -> void:
 	for p in 2:
@@ -389,7 +395,7 @@ func _texts() -> void:
 			var named := false
 			if key < 0x58:
 				named = true
-				s = str(flow.fight.tables.character(key & ~3)["name"]) if key >= 0 else ""
+				s = character_name(flow.fight.tables, key)
 			elif key == 0x58:
 				s = ram.string(STR_NO_ENTRY)
 				colour = 9

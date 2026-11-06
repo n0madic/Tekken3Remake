@@ -28,6 +28,19 @@ func test_a_side_with_no_choice_shows_the_silhouette() -> void:
 		"no picture for it: nothing is drawn")
 
 
+func test_a_costume_with_a_name_of_its_own_shows_it() -> void:
+	var game := imported_flow()
+	if game == null:
+		return
+	var tables := game.fight.tables
+	expect_equal(QuickSelectView.character_name(tables, 11 * 4), "KUMA", "Kuma's first costume")
+	expect_equal(QuickSelectView.character_name(tables, 11 * 4 + 1), "PANDA", "Kuma's second is Panda")
+	expect_equal(QuickSelectView.character_name(tables, 8 * 4 + 2), "TIGER", "Eddy's third is Tiger")
+	expect_equal(QuickSelectView.character_name(tables, 5 * 4 + 2), "ANNA", "Nina's third is Anna")
+	expect_equal(QuickSelectView.character_name(tables, 3), "PAUL", "a costume without a name of its own keeps the character's")
+	expect_equal(QuickSelectView.character_name(tables, -1), "", "no key, no name")
+
+
 func test_quick_select_name_is_drawn_over_its_plate() -> void:
 	var view := Recorder.new()
 	view._name("XIAOYU", 6, 100, 50, 2)
