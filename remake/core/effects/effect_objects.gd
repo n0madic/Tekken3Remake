@@ -1176,9 +1176,23 @@ static func voice_echo(fight: FightState, player: int, code: int, replayed: bool
 		o.b = code & 0xFFFF
 
 
+## Whether a flipbook started at `point` (EffectSpawn, FUN_80076B6C) is drawn mirrored: the game
+## stores the sign of the hit `direction`'s cross product with the ray from the camera `view` to the
+## point, in the ground plane, in the record's +0x3C, and FUN_80077158 swaps the quad's left and
+## right texels when it is set. A spark's streaks then lean the same way on the screen whichever
+## way the hit goes (`confirmed`, decompile). The sum is the game's own 32-bit one; a spawn with no
+## direction (a move event's flipbook) is never mirrored.
+static func spawn_mirrored(point: PackedInt32Array, direction: PackedInt32Array, view: CameraView) -> bool:
+	if direction.size() < 3 or view == null:
+		return false
+	var behind := Fx.w32((point[2] - direction[2] - view.z) * (point[0] - view.x))
+	var across := Fx.w32((view.x - (point[0] - direction[0])) * (point[2] - view.z))
+	return Fx.w32(behind + across) < 0
+
+
 ## FUN_8004A954: the replay plays the effect log's entries of the frame: flipbooks (sets
 ## 0x80+ re-create effect objects) and dust rings.
-static func play_log(fight: FightState, events: SimEvents) -> void:
+static func play_log(fight: FightState, events: SimEvents, view: CameraView) -> void:
 	for e in fight.replay.log_take():
 		if e.mode == 1:
 			events.add_at(SimEvents.Kind.DUST, -1, e.point.duplicate())
@@ -1186,10 +1200,12 @@ static func play_log(fight: FightState, events: SimEvents) -> void:
 		if e.mode != 0:
 			continue
 		if e.index & 0x80 == 0:
+			var spark: SimEvents.Event
 			if e.set == 3:
-				events.add_at(SimEvents.Kind.SPARK, -1, e.point.duplicate(), e.index)
+				spark = events.add_at(SimEvents.Kind.SPARK, -1, e.point.duplicate(), e.index)
 			else:
-				events.add_at(SimEvents.Kind.EFFECT, -1, e.point.duplicate(), e.set)
+				spark = events.add_at(SimEvents.Kind.EFFECT, -1, e.point.duplicate(), e.set)
+			spark.mirrored = spawn_mirrored(e.point, e.direction, view)
 			continue
 		var d := Vector2i(e.direction[0], e.direction[1])
 		match e.index & 0x7F:

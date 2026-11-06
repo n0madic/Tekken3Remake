@@ -67,6 +67,35 @@ func test_drift_fades_each_frame() -> void:
 	view.free()
 
 
+func test_a_mirrored_spark_is_read_from_the_right_edge_of_its_frame() -> void:
+	var data := EffectData.new()
+	var book := EffectData.Flipbook.new()
+	book.frames = 4
+	data.system.append(book)
+	var view := EffectsView.new()
+	view.setup(data)
+	var events := SimEvents.new()
+	var plain := events.add_at(SimEvents.Kind.HIT_SPARK, 0, PackedInt32Array([0, 0, 0]), 0)
+	plain.vector = PackedInt32Array([100, 0, 0])
+	var flipped := events.add_at(SimEvents.Kind.HIT_SPARK, 1, PackedInt32Array([0, 0, 0]), 0)
+	flipped.vector = PackedInt32Array([100, 0, 0])
+	flipped.mirrored = true
+	events.add(SimEvents.Kind.EFFECTS_DRAW, -1, SimEvents.EFFECTS_ADVANCE)
+	view.step(events)
+	var a := view.sprites[0].material
+	var b := view.sprites[1].material
+	# The first frame is the texture's first quarter: the plain sprite reads u 0 → 1/4 over it,
+	# the mirrored one 1/4 → 0.
+	expect_equal(a.uv1_scale.x, 0.25, "a plain sprite spans a frame left to right")
+	expect_equal(a.uv1_offset.x, 0.0, "from the frame's left edge")
+	expect_equal(b.uv1_scale.x, -0.25, "a mirrored sprite spans it right to left")
+	expect_equal(b.uv1_offset.x, 0.25, "from the frame's right edge")
+	_step(view, events, SimEvents.EFFECTS_ADVANCE)
+	expect_equal(a.uv1_offset.x, 0.25, "the second frame, plain")
+	expect_equal(b.uv1_offset.x, 0.5, "and mirrored: the same frame, read the other way")
+	view.free()
+
+
 func test_sparks_the_game_draws_over_the_ball_are_placed_clear_of_it() -> void:
 	var eye := Vector3.ZERO
 	var forward := Vector3(0, 0, -1)

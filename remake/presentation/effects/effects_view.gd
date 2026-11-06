@@ -32,6 +32,7 @@ class Sprite:
 	var book: EffectData.Flipbook
 	var frame := 0                    ## 1-based once running; 0 before its start delay ends
 	var delay := 0
+	var mirrored := false             ## the frame's left and right swapped (FUN_80077158's record +0x3C)
 	var velocity := Vector3.ZERO      ## the drift per frame (Godot units)
 	var at := Vector3.ZERO            ## where the effect is; the node is there unless `place` pulls it toward the camera
 
@@ -83,19 +84,19 @@ func step(events: SimEvents) -> void:
 		var at := WorldSpace.point_i(e.point)
 		match e.kind:
 			SimEvents.Kind.EFFECT:
-				_character(e.a, at)
+				_character(e.a, at, Vector3.ZERO, e.mirrored)
 			SimEvents.Kind.SPARK:
 				if e.a < data.system.size():
-					_spawn(data.system[e.a], at, 0)
+					_spawn(data.system[e.a], at, 0, Vector3.ZERO, e.mirrored)
 			SimEvents.Kind.HIT_SPARK:
 				# HitSpawnEffect: set 3 index 0 (hit), 1 (no damage) or 2 (guard); a damaging
 				# hit from 21 on adds the attacker's character flipbook. Both drift along the hit
-				# direction (EffectSpawn).
+				# direction (EffectSpawn) and are mirrored by which way it goes on the screen.
 				var drift := drift_of(e.vector)
 				if e.a < data.system.size():
-					_spawn(data.system[e.a], at, 0, drift)
+					_spawn(data.system[e.a], at, 0, drift, e.mirrored)
 				if e.a == 0 and e.b >= EffectObjects.SPARK_DAMAGE:
-					_character(e.c, at, drift)
+					_character(e.c, at, drift, e.mirrored)
 			SimEvents.Kind.DUST, SimEvents.Kind.LANDING_DUST:
 				for i in data.dust_offsets.size():
 					var o := data.dust_offsets[i]
@@ -154,26 +155,27 @@ static func drift_of(direction: PackedInt32Array) -> Vector3:
 	return WorldSpace.point(d.x, d.y, d.z) * (DRIFT / 128.0 / length)
 
 
-func _character(set_index: int, at: Vector3, drift := Vector3.ZERO) -> void:
+func _character(set_index: int, at: Vector3, drift := Vector3.ZERO, mirrored := false) -> void:
 	if set_index < 0 or set_index >= character.size():
 		return
 	var book := character[set_index]
 	if book != null:
-		_spawn(book, at, 0, drift)
+		_spawn(book, at, 0, drift, mirrored)
 		_light(at, book.light)
 
 
-func _spawn(book: EffectData.Flipbook, at: Vector3, delay: int, drift := Vector3.ZERO) -> void:
+func _spawn(book: EffectData.Flipbook, at: Vector3, delay: int, drift := Vector3.ZERO, mirrored := false) -> void:
 	if book == null:
 		return
 	var s: Sprite = _free.pop_back() if not _free.is_empty() else _new_sprite()
 	s.book = book
 	s.delay = delay
+	s.mirrored = mirrored
 	s.velocity = drift
 	s.frame = 0 if delay > 0 else 1
 	s.material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD if book.additive else BaseMaterial3D.BLEND_MODE_MIX
 	s.material.albedo_texture = book.texture
-	s.material.uv1_scale = Vector3(1.0 / book.frames, 1, 1)
+	s.material.uv1_scale = Vector3((-1.0 if mirrored else 1.0) / book.frames, 1, 1)
 	s.at = at
 	s.node.position = at
 	s.node.scale = Vector3.ONE
@@ -267,7 +269,8 @@ func _paint(s: Sprite) -> void:
 	s.node.visible = s.frame > 0
 	if s.frame <= 0:
 		return
-	s.material.uv1_offset = Vector3(float(s.frame - 1) / s.book.frames, 0, 0)
+	# A mirrored frame is read from its right edge to its left: the offset is the frame's end.
+	s.material.uv1_offset = Vector3(float(s.frame if s.mirrored else s.frame - 1) / s.book.frames, 0, 0)
 	var level := 1.0
 	if s.book.additive:
 		var into_fade := s.frame - s.book.frames + FADE_FRAMES

@@ -51,6 +51,7 @@ class Event:
 	var c := 0
 	var point := PackedInt32Array()   ## world position (game units) where the event happens
 	var vector := PackedInt32Array()  ## HIT_SPARK: the hit direction (the hit slot's), for the drift
+	var mirrored := false             ## HIT_SPARK, EFFECT, SPARK: the flipbook is drawn mirrored (EffectObjects.spawn_mirrored)
 
 	func _init(event_kind: int, owner: int, first: int, second: int) -> void:
 		kind = event_kind

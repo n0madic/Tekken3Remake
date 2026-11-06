@@ -73,6 +73,7 @@ func _init(fight_content: FightContent, fight_setup: FightSetup, rules: RuleSet)
 	combat = Combat.new(fight, moves, physics)
 	animation = FighterAnimation.new(fight)
 	camera = CameraDirector.new(fight)
+	combat.camera = camera
 	animation.camera = camera
 	round_flow = RoundFlow.new(fight)
 	ai = CpuOpponent.new(fight, moves)
@@ -978,7 +979,7 @@ func _replay_frame() -> void:
 	# FUN_8004A954 replays the log, then draws the dust rings and flipbooks (FUN_8004AEBC,
 	# FUN_80077744), stepping them with the same flag.
 	if enabled:
-		EffectObjects.play_log(fight, events)
+		EffectObjects.play_log(fight, events, camera.view)
 	events.add(SimEvents.Kind.EFFECTS_DRAW, -1, SimEvents.EFFECTS_ADVANCE if enabled else SimEvents.EFFECTS_HOLD)
 	if fight.mode == GameMode.BALL:
 		_ball_frame()

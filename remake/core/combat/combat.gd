@@ -40,6 +40,7 @@ var fight: FightState
 var t: FightTables
 var moves: MoveSystem
 var physics: FighterPhysics
+var camera: CameraDirector        ## whose eye mirrors a hit spark (EffectObjects.spawn_mirrored); none: never mirrored
 
 
 func _init(fight_state: FightState, move_system: MoveSystem, fighter_physics: FighterPhysics) -> void:
@@ -902,6 +903,7 @@ func _spark_event(events: SimEvents, f: FighterState, slot: HitSlot, kind: int, 
 	var e := events.add_at(SimEvents.Kind.HIT_SPARK, f.index, slot.point.duplicate(), kind, damage)
 	e.c = side
 	e.vector = slot.direction.duplicate()
+	e.mirrored = camera != null and EffectObjects.spawn_mirrored(slot.point, slot.direction, camera.view)
 
 
 ## HitSpawnEffect (0x80044B78): the guard or hit flash and spark at the contact point.
