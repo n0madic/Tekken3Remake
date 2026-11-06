@@ -86,13 +86,38 @@ func test_a_mirrored_spark_is_read_from_the_right_edge_of_its_frame() -> void:
 	var b := view.sprites[1].material
 	# The first frame is the texture's first quarter: the plain sprite reads u 0 → 1/4 over it,
 	# the mirrored one 1/4 → 0.
-	expect_equal(a.uv1_scale.x, 0.25, "a plain sprite spans a frame left to right")
-	expect_equal(a.uv1_offset.x, 0.0, "from the frame's left edge")
-	expect_equal(b.uv1_scale.x, -0.25, "a mirrored sprite spans it right to left")
-	expect_equal(b.uv1_offset.x, 0.25, "from the frame's right edge")
+	expect_equal(a.get_shader_parameter("frame_scale"), 0.25, "a plain sprite spans a frame left to right")
+	expect_equal(a.get_shader_parameter("frame_offset"), 0.0, "from the frame's left edge")
+	expect_equal(b.get_shader_parameter("frame_scale"), -0.25, "a mirrored sprite spans it right to left")
+	expect_equal(b.get_shader_parameter("frame_offset"), 0.25, "from the frame's right edge")
 	_step(view, events, SimEvents.EFFECTS_ADVANCE)
-	expect_equal(a.uv1_offset.x, 0.25, "the second frame, plain")
-	expect_equal(b.uv1_offset.x, 0.5, "and mirrored: the same frame, read the other way")
+	expect_equal(a.get_shader_parameter("frame_offset"), 0.25, "the second frame, plain")
+	expect_equal(b.get_shader_parameter("frame_offset"), 0.5, "and mirrored: the same frame, read the other way")
+	view.free()
+
+
+func test_only_the_dust_ring_is_filed_over_everything() -> void:
+	var data := EffectData.new()
+	var spark := EffectData.Flipbook.new()
+	spark.frames = 5
+	spark.additive = true
+	data.system.append(spark)
+	data.dust = EffectData.Flipbook.new()
+	data.dust.frames = 5
+	data.dust_offsets = [Vector3i.ZERO]
+	var view := EffectsView.new()
+	view.setup(data)
+	var events := SimEvents.new()
+	events.add_at(SimEvents.Kind.SPARK, -1, PackedInt32Array([0, 0, 0]), 0)
+	events.add_at(SimEvents.Kind.LANDING_DUST, -1, PackedInt32Array([0, 0, 0]))
+	view.step(events)
+	expect_equal(view.sprites.size(), 2, "a spark and a puff")
+	var puff := view.sprites[1]
+	expect(not (view.sprites[0].material.get_shader_parameter("over_all") as bool), "a spark is filed 440 units nearer than its centre")
+	expect(puff.material.get_shader_parameter("over_all") as bool, "the dust ring, a call with flag 2, in the nearest slot")
+	expect(view.sprites[0].material.shader == EffectsView.ADD_SHADER, "a glowing flipbook adds")
+	expect(puff.material.shader == EffectsView.HALF_SHADER, "the dust is drawn at 50 %")
+	expect(view.sprites[0].node.material_override == view.sprites[0].material, "and the node draws with the one in use")
 	view.free()
 
 

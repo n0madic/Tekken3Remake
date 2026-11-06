@@ -8,12 +8,19 @@ extends Node3D
 ## Sizes follow FUN_80077158: a 32-texel frame covers 32·0x2E0B/H world units at the game's
 ## projection distance H = 500 (754 units). Additive sprites fade over their last 10 frames.
 ##
+## Depth: the game files a sprite in the ordering table 440 units nearer than its centre (the dust
+## ring: nearest of all), so it is drawn over the fighter it hits; the fighters' faces stand at their
+## own entries, and flipbook.gdshaderinc draws a sprite at the depth of its entry for the depth test
+## to give the same order.
+##
 ## Tekken Ball: the game files a whole sprite in the ordering table 0x6E depth units (OTZ, a quarter
 ## of the world depth) nearer than its centre, and the ball as one entry at its centre, so a spark
 ## near the ball is drawn over all of it. The remake's ball is a solid sphere that would cut the
 ## spark where it passes through, so `place` draws such a spark in front of the sphere, along the
 ## same view ray and scaled to match: it looks the same, but is not cut.
 
+const ADD_SHADER := preload("res://presentation/effects/flipbook.gdshader")
+const HALF_SHADER := preload("res://presentation/effects/flipbook_half.gdshader")
 const SPRITE_UNITS := 32.0 * 0x2E0B / 500.0
 const SORT_BIAS := 0x6E * 4.0 / WorldSpace.UNITS_PER_METRE   ## FUN_80077158's `(otz − 0x6E) >> 3`, in metres of depth
 const BALL_MARGIN := 8.0 / WorldSpace.UNITS_PER_METRE        ## clearance in front of the ball's surface
@@ -28,7 +35,9 @@ const DRIFT_DECAY := 0x76 / 128.0     ## FUN_80077158: the drift speed is multip
 
 class Sprite:
 	var node: MeshInstance3D
-	var material: StandardMaterial3D
+	var additive_material: ShaderMaterial
+	var half_material: ShaderMaterial
+	var material: ShaderMaterial          ## the one of the two the flipbook's blending uses
 	var book: EffectData.Flipbook
 	var frame := 0                    ## 1-based once running; 0 before its start delay ends
 	var delay := 0
@@ -101,7 +110,7 @@ func step(events: SimEvents) -> void:
 				for i in data.dust_offsets.size():
 					var o := data.dust_offsets[i]
 					var p := WorldSpace.point(e.point[0] + o.x, data.dust_y + o.y, e.point[2] + o.z)
-					_spawn(data.dust, p, i * data.dust_interval)
+					_spawn(data.dust, p, i * data.dust_interval, Vector3.ZERO, false, true)
 
 
 ## Every rendered frame, with the camera's position and viewing direction and Tekken Ball's solid
@@ -164,7 +173,7 @@ func _character(set_index: int, at: Vector3, drift := Vector3.ZERO, mirrored := 
 		_light(at, book.light)
 
 
-func _spawn(book: EffectData.Flipbook, at: Vector3, delay: int, drift := Vector3.ZERO, mirrored := false) -> void:
+func _spawn(book: EffectData.Flipbook, at: Vector3, delay: int, drift := Vector3.ZERO, mirrored := false, over_all := false) -> void:
 	if book == null:
 		return
 	var s: Sprite = _free.pop_back() if not _free.is_empty() else _new_sprite()
@@ -173,9 +182,11 @@ func _spawn(book: EffectData.Flipbook, at: Vector3, delay: int, drift := Vector3
 	s.mirrored = mirrored
 	s.velocity = drift
 	s.frame = 0 if delay > 0 else 1
-	s.material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD if book.additive else BaseMaterial3D.BLEND_MODE_MIX
-	s.material.albedo_texture = book.texture
-	s.material.uv1_scale = Vector3((-1.0 if mirrored else 1.0) / book.frames, 1, 1)
+	s.material = s.additive_material if book.additive else s.half_material
+	s.node.material_override = s.material
+	s.material.set_shader_parameter("albedo_texture", book.texture)
+	s.material.set_shader_parameter("frame_scale", (-1.0 if mirrored else 1.0) / book.frames)
+	s.material.set_shader_parameter("over_all", over_all)
 	s.at = at
 	s.node.position = at
 	s.node.scale = Vector3.ONE
@@ -185,19 +196,23 @@ func _spawn(book: EffectData.Flipbook, at: Vector3, delay: int, drift := Vector3
 
 func _new_sprite() -> Sprite:
 	var s := Sprite.new()
-	s.material = StandardMaterial3D.new()
-	s.material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	s.material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	s.material.billboard_keep_scale = true     # `place` scales a sprite it pulls toward the camera
-	s.material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	s.material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
-	s.material.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	s.additive_material = _new_material(ADD_SHADER)
+	s.half_material = _new_material(HALF_SHADER)
 	s.node = MeshInstance3D.new()
 	s.node.mesh = _quad
-	s.node.material_override = s.material
 	s.node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	flipbooks.add_child(s.node)
 	return s
+
+
+## A sprite's material: the shader keeps the quad facing the camera (scaled by the node's, which
+## `place` changes near the ball) and sets its depth (flipbook.gdshaderinc).
+static func _new_material(shader: Shader) -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader = shader
+	material.set_shader_parameter("units_per_metre", WorldSpace.UNITS_PER_METRE)
+	material.set_shader_parameter("depth_near", FaceKeys.NEAR_CLAMP)
+	return material
 
 
 ## An ended sprite goes back to the pool, hidden.
@@ -270,15 +285,15 @@ func _paint(s: Sprite) -> void:
 	if s.frame <= 0:
 		return
 	# A mirrored frame is read from its right edge to its left: the offset is the frame's end.
-	s.material.uv1_offset = Vector3(float(s.frame if s.mirrored else s.frame - 1) / s.book.frames, 0, 0)
+	s.material.set_shader_parameter("frame_offset", float(s.frame if s.mirrored else s.frame - 1) / s.book.frames)
 	var level := 1.0
 	if s.book.additive:
 		var into_fade := s.frame - s.book.frames + FADE_FRAMES
 		if into_fade > 0:
 			level = (128.0 - (into_fade * 0x9999 >> 12)) / 128.0
-		s.material.albedo_color = Color(level, level, level) * HDR_BOOST
+		s.material.set_shader_parameter("tint", Color(level, level, level) * HDR_BOOST)
 	else:
-		s.material.albedo_color = Color(1, 1, 1, 0.5)
+		s.material.set_shader_parameter("tint", Color(1, 1, 1, 0.5))
 
 
 func _paint_light(l: Light) -> void:
