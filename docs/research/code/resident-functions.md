@@ -405,7 +405,7 @@ The groups follow the documents: `FightFrame` and its steps ([fight-frame.md](fi
 
 | Routine | Bytes | Callers (documented) | Library calls | Note |
 |---|---:|---|---|---|
-| `0x8003161C` | 868 | `FighterSetupParts` | `GetTPage`, `SetPolyGT4` | FighterSetupParts: builds the `POLY_GT4` packets of a fighter's textured parts (texture pages per part). |
+| `0x8003161C` | 868 | `FighterSetupParts` | `GetTPage`, `SetPolyGT4` | Yoshimitsu's sword glow, set-up (charId 4 and 15 only): the two display buffers' ten `POLY_GT4` quads per player ([effects.md](effects.md#sword-glow)). |
 | `0x80034010` | 12 | `FighterSetupParts` |  | Helper of FighterSetupParts. |
 | `0x80035008` | 96 | `FighterSetupParts` |  | Helper of FighterSetupParts. |
 | `0x80035068` | 40 | `FighterSetupParts` |  | Helper of FighterSetupParts. |
@@ -425,7 +425,7 @@ The groups follow the documents: `FightFrame` and its steps ([fight-frame.md](fi
 
 | Routine | Bytes | Callers (documented) | Library calls | Note |
 |---|---:|---|---|---|
-| `0x80031980` | 1232 | `FighterAnimate` |  | Bank type 4 (Yoshimitsu, or Mokujin as type 4): projects four points of the sword joint (`+0xB9C`) and sizes a trail by depth. |
+| `0x80031980` | 1232 | `FUN_8003B74C` |  | Yoshimitsu's sword glow, every frame (charId 4, or 15 with bank type 4): projects four points of the sword joint (`+0xB9C`) and files the glow's ten quads by depth ([effects.md](effects.md#sword-glow)). |
 | `0x80038B60` | 100 | `FighterAnimate` |  | Helper of FighterAnimate. |
 | `0x8003B74C` | 192 | `FighterAnimate` | `FighterDrawParts`, `ShadowBuildPrims` | Helper of FighterAnimate. |
 | `0x800797DC` | 1452 | `FighterAnimate` | `ApplyRotMatrixLV`, `CONCAT22`, `SetRotMatrix`, `SetTransMatrix` | Draws a primitive spanning two joint positions (`+0xCC0`, `+0xD8C`) through the view matrix. |

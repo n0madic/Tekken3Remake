@@ -33,6 +33,7 @@ var _backdrop_viewport: SubViewport
 var _backdrop: MeshInstance3D
 var ball: BallView                     ## Tekken Ball's ball and court
 var items: ForceItemsView              ## Tekken Force's items
+var sword_glow := SwordGlowView.new()  ## Yoshimitsu's sword glow, in the camera's view space
 var _last_view: CameraView
 var _overhead := false                 ## the overhead KO camera: fighters drawn closer to it
 var _floor_kind := 0                   ## the stage's floor kind (True Ogre turns 0 into 2)
@@ -60,6 +61,9 @@ func setup(stage: StageData, effect_data: EffectData, models: Array[CharacterMod
 	effects.set_costumes(costume_slots)
 	add_child(effects)
 	add_child(rig)
+	rig.camera.add_child(sword_glow)
+	if models.any(func(m: CharacterModel) -> bool: return m.arcade):
+		sword_glow.load_levels()
 	var true_ogre := Character.TRUE_OGRE in char_ids
 	_floor_kind = stage_view.floor_kind()
 	_stage_number = stage.number
@@ -170,9 +174,11 @@ func apply(sim: FightSimulation) -> void:
 		var appearing := shown and not view.visible
 		view.visible = shown
 		if not shown:
+			sword_glow.set_ribbon(i, null)
 			continue
 		view.set_wind(_wind.vector)
 		view.set_joints(f.body.draw_joints.slice(0, FighterView.JOINT_SLOTS), appearing)
+		sword_glow.set_ribbon(i, _glow_ribbon(view, f, sim), appearing)
 		view.set_hidden_joints(0 if f.body.stick_shown else 1 << FighterView.STICK_JOINT)
 		view.set_overhead(sim.camera.overhead != 0, f.pose_move.flags & MoveFlag.REACT_CHAIN != 0)
 		view.set_hands(f.hands)
@@ -207,6 +213,14 @@ func apply(sim: FightSimulation) -> void:
 		ball.apply(sim)
 	if items != null:
 		items.apply(sim)
+
+
+## Fighter `f`'s sword glow: the arcade's for an arcade model (when its picture was converted), else
+## the PlayStation's; null when it has none. The frame's display buffer picks the brightness.
+func _glow_ribbon(view: FighterView, f: FighterState, sim: FightSimulation) -> SwordGlow.Ribbon:
+	if view.model.arcade and sword_glow.has_levels():
+		return ArcadeSwordGlow.ribbon(f, sim.fighter_view, sim.t, sim.fight.display_buffer)
+	return SwordGlow.ribbon(f, sim.fighter_view, sim.t, sim.fight.display_buffer)
 
 
 ## FloorDrawGrid: where the floor's distance shading starts, the camera's horizontal distance to
@@ -262,6 +276,7 @@ func interpolate(weight: float, window: Vector2) -> void:
 		if view.visible:
 			view.show_between(weight)
 	rig.place(weight, window)
+	sword_glow.show_between(weight, rig.frame_tan)
 	stage_view.place_sky(rig.camera, rig.frame_tan)
 	# FUN_80036254: under the overhead KO camera the fighters are drawn ViewMatrix.OVERHEAD_DEPTH
 	# units nearer to it (along the view axis).

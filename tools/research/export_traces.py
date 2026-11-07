@@ -40,6 +40,9 @@ pattern and some pairs.
 Attachment cases (`attachments.bin`): `attachment_cases.py` — random inputs of the costume
 attachments' dynamics (FUN_80037F10) with the game's results.
 
+Sword glow cases (`sword_glow.bin`): `sword_glow_cases.py` — random fighters, views and sword
+joints with the ten quads Yoshimitsu's glow routine (FUN_80031980) builds.
+
 Gon's eyes' look direction (`gon_eyes.bin`): `gon_eyes_cases.py` — random head positions and
 rotations with the shift of the pupils GonEyesFollow gives.
 
@@ -50,7 +53,7 @@ The Tekken Force pick-up's golden colours (`force_back_colour.json`) come from
 `trace_back_colour.py force --out` (the whole scenario runs: about ten minutes).
 
     python3 tools/research/export_traces.py [--banks divmot00 divmot99] [--enbu 0 1 2]
-        [--attachments N] [--gon-eyes N] [--no-back-colour]
+        [--attachments N] [--sword-glow N] [--gon-eyes N] [--no-back-colour]
 """
 
 from __future__ import annotations
@@ -159,6 +162,7 @@ def main() -> int:
     parser.add_argument("--no-back-colour", action="store_true")
     parser.add_argument("--no-vibration", action="store_true")
     parser.add_argument("--attachments", type=int, default=3000, help="attachment cases (0: none)")
+    parser.add_argument("--sword-glow", type=int, default=2000, help="sword glow cases (0: none)")
     parser.add_argument("--fight", nargs="*", default=None,
                         help="fight scenarios of fight_harness.SCENARIOS (no names: all)")
     parser.add_argument("--jobs", type=int, default=8, help="fight scenarios run in parallel")
@@ -173,6 +177,10 @@ def main() -> int:
         import attachment_cases
         (OUT_DIR / "attachments.bin").write_bytes(attachment_cases.generate(args.attachments))
         log.info("attachments: %d cases", args.attachments)
+    if args.sword_glow:
+        import sword_glow_cases
+        (OUT_DIR / "sword_glow.bin").write_bytes(sword_glow_cases.generate(args.sword_glow))
+        log.info("sword glow: %d cases", args.sword_glow)
     if args.gon_eyes:
         import gon_eyes_cases
         (OUT_DIR / "gon_eyes.bin").write_bytes(gon_eyes_cases.generate(args.gon_eyes))

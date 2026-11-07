@@ -47,6 +47,16 @@ AXIS_RECORD_COUNT = (arcade_kmd.ATTACHMENT_ENABLE + arcade_kmd.FIRST_ATTACHMENT 
 CLAMPS = 0x801FD2F0
 CLAMP_WORDS = 4
 TABLES_FILE = "characters/arcade_attachments.json"
+# The picture of the arcade's sword glow (FUN_80192ecc, tools/research/arcade_sword_glow.py): 16 × 16
+# 4-bit texels at VRAM (960, 256) through the CLUT at (768, 375), part of the costume textures of
+# Yoshimitsu (slots 8 and 9; Mokujin's the same), as the first player has them.
+GLOW_FILE = "characters/arcade_sword_glow.json"
+GLOW_SLOT = 8
+GLOW_PICTURE = 16
+GLOW_TEXTURE = (960, 256)
+GLOW_CLUT = (768, 375)
+CLUT_COLOURS = 16
+TEXELS_PER_WORD = 4
 # True Ogre's wings are two groups of vertex variants, each with the view's value that selects
 # them (FUN_80194458, arcade/README.md#true-ogres-wings): row 1 takes the wing sequence's variant
 # (the tables at 0x801FCF30 and 0x801FCF44 give 0–39), rows 18 and 19 (the tail) the level
@@ -103,12 +113,27 @@ def joint_of_row(row: int) -> int:
     return row if row < arcade_kmd.JOINTS else ATTACHMENT_JOINT + row - arcade_kmd.FIRST_ATTACHMENT
 
 
+def glow_levels(words) -> list[int]:
+    """The sword glow's picture as grey levels (0–31, 16 rows of 16): each texel's palette index
+    through the CLUT, whose colours are grey (the red channel stands for all three). `words` is the
+    1024-row VRAM image."""
+    x, y = GLOW_TEXTURE
+    clut_x, clut_y = GLOW_CLUT
+    clut = [int(c) for c in words[clut_y, clut_x:clut_x + CLUT_COLOURS]]
+    if any((c & 0x1F) != (c >> 5) & 0x1F or (c & 0x1F) != (c >> 10) & 0x1F for c in clut):
+        raise arcade.ArcadeError("the sword glow's CLUT is not grey")
+    return [clut[(int(words[y + v, x + u // TEXELS_PER_WORD]) >> (4 * (u % TEXELS_PER_WORD))) & 0xF] & 0x1F
+            for v in range(GLOW_PICTURE) for u in range(GLOW_PICTURE)]
+
+
 def write_tables(out: Output, arc: arcade.ArcadeSet) -> None:
-    """The attachment dynamics' axis records and clamps (remake: ArcadeAttachments)."""
+    """The attachment dynamics' axis records and clamps (remake: ArcadeAttachments) and the sword
+    glow's picture (SwordGlowView)."""
     out.write_json(TABLES_FILE, {
         "limits": [list(arc.prog_values("<6b", AXIS_RECORDS + AXIS_RECORD * k)) for k in range(AXIS_RECORD_COUNT)],
         "clamps": list(arc.prog_values(f"<{CLAMP_WORDS}h", CLAMPS)),
     })
+    out.write_json(GLOW_FILE, {"levels": glow_levels(load_textures(costume(arc, GLOW_SLOT)[1]).words)})
 
 
 def replaces(slot: int) -> bool:

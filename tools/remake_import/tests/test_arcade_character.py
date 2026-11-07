@@ -498,5 +498,41 @@ class VariantGroupTest(unittest.TestCase):
             character.face_group([corner(4), corner(5)], [a, b], "test")
 
 
+class GlowLevelsTest(unittest.TestCase):
+    """The sword glow's picture (glow_levels) on a synthetic VRAM."""
+
+    @staticmethod
+    def vram(clut: list[int], index) -> Vram:
+        """A VRAM whose glow picture has the palette index `index(u, v)` and the CLUT `clut`."""
+        vram = Vram(arcade_kmd.VRAM_ROWS)
+        x, y = arcade_character.GLOW_TEXTURE
+        for v in range(arcade_character.GLOW_PICTURE):
+            for u in range(arcade_character.GLOW_PICTURE):
+                vram.words[y + v, x + u // 4] |= index(u, v) << (4 * (u % 4))
+        cx, cy = arcade_character.GLOW_CLUT
+        vram.words[cy, cx:cx + 16] = clut
+        return vram
+
+    def test_each_texel_is_its_grey_level(self) -> None:
+        # Index i is grey level 31 − 2i (STP set), as the game's CLUT counts down to black.
+        clut = [0x8000 | (31 - 2 * i) * 0x421 for i in range(15)] + [0x8000]
+        vram = self.vram(clut, lambda u, v: u)
+        levels = arcade_character.glow_levels(vram.words)
+        self.assertEqual(len(levels), 256)
+        self.assertEqual(levels[:16], [31 - 2 * i for i in range(15)] + [0])
+        self.assertEqual(levels[16:32], levels[:16])
+
+    def test_rows_follow_the_texture_rows(self) -> None:
+        clut = [i * 0x421 for i in range(16)]
+        levels = arcade_character.glow_levels(self.vram(clut, lambda u, v: v).words)
+        self.assertEqual([levels[16 * v] for v in range(16)], list(range(16)))
+        self.assertEqual(levels[16 * 5 + 15], 5)
+
+    def test_a_coloured_clut_is_refused(self) -> None:
+        clut = [0x001F] * 16
+        with self.assertRaises(arcade_character.arcade.ArcadeError):
+            arcade_character.glow_levels(self.vram(clut, lambda u, v: 0).words)
+
+
 if __name__ == "__main__":
     unittest.main()
