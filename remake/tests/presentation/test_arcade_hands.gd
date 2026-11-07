@@ -58,6 +58,15 @@ func test_wing_and_tail_values() -> void:
 	expect_equal(ArcadePoses.wing_variants(hands), PackedInt32Array([17, 16]), "the wing sequence's variant and the tail's level >> 4")
 
 
+func test_a_replay_selects_the_variants_by_its_recorded_values() -> void:
+	var hands := FighterHands.new()
+	hands.wing_variant = 17
+	hands.replay_levels = PackedInt32Array([0x200, 0x203])
+	expect_equal(ArcadePoses.hand_variants(hands), PackedInt32Array([FIST_VARIANT, 35]), "the fist and shape 3, not the rested hands")
+	hands.replay_levels = PackedInt32Array([0x100, 0])
+	expect_equal(ArcadePoses.wing_variants(hands), PackedInt32Array([17, 16]), "True Ogre's tail from the recorded level")
+
+
 func _surface(triangles: int) -> CharacterModel.Surface:
 	var surface := CharacterModel.Surface.new()
 	surface.vertices.resize(3 * triangles * STRIDE)

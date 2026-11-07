@@ -18,14 +18,15 @@ static func hand_variant(value: int) -> int:
 	return value >> BLEND_SHIFT if value <= FighterHands.FIST else value - SHAPE_BASE
 
 
-## The variant of each hand channel (the order of `FighterHands.current`).
+## The variant of each hand channel (the order of `FighterHands.current`; a replay's recorded values
+## while it plays, `FighterHands.shown`).
 static func hand_variants(hands: FighterHands) -> PackedInt32Array:
 	var out := PackedInt32Array()
-	for value: int in hands.current:
+	for value: int in hands.shown():
 		out.append(hand_variant(value))
 	return out
 
 
 ## True Ogre's wings (the wing sequence's variant) and tail (the level channel) variants.
 static func wing_variants(hands: FighterHands) -> PackedInt32Array:
-	return PackedInt32Array([hands.wing_variant, hands.current[0] >> TAIL_LEVEL_SHIFT])
+	return PackedInt32Array([hands.wing_variant, hands.shown()[0] >> TAIL_LEVEL_SHIFT])

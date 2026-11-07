@@ -106,6 +106,7 @@ func animate(f: FighterState, view: ViewMatrix, blend_enabled: bool, draw: bool)
 		else:
 			f.hands.wing_variant = fight.replay.wings(f, f.hands.wing_variant)
 			f.hands.variant[0] = fight.replay.hand_pose(f, f.hands.variant[0], 0)
+		f.hands.replay_levels = fight.replay.hand_levels(f)
 	_blink(f)
 	_compose(f)
 	if draw:

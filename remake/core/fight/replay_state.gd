@@ -34,6 +34,7 @@ class Frame:
 	var pos := PackedInt32Array([0, 0, 0])      ## +0x18
 	var angles := PackedInt32Array([0, 0, 0])   ## +0x24 root rotation (s16)
 	var hands := PackedInt32Array([0, 0])       ## +0x2A vertex variants
+	var levels := PackedInt32Array([0, 0])      ## the hand channels' values (not in the game's frame)
 	var src_frame := 0               ## +0x2C
 	var dst_frame := 0               ## +0x2D
 	var pose_frame := 0              ## +0x2E (u8)
@@ -418,6 +419,19 @@ func root_position(f: FighterState) -> void:
 ## one byte each.
 func hand_pose(f: FighterState, value: int, channel: int) -> int:
 	return _byte(f, value, 0, channel)
+
+
+## The hand channels' values for the arcade models, recorded with each frame and returned while the
+## replay plays (empty otherwise, the live ones are drawn). The game's frame holds only the
+## variants of the PlayStation's four blend steps (`hand_pose`), so an arcade model's hands, which
+## its 33 steps and shapes select by the channels' values, would stay at the round's last ones.
+func hand_levels(f: FighterState) -> PackedInt32Array:
+	var p := _side(f)
+	if mode == FIRST_FRAME or mode == PLAYING:
+		return _frame_of(p).levels
+	if mode == RECORDING:
+		frames[p][record].levels = f.hands.current.duplicate()
+	return PackedInt32Array()
 
 
 func wings(f: FighterState, value: int) -> int:

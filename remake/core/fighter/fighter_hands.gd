@@ -28,6 +28,15 @@ var wing_frame := 0
 var wing_phase := 0
 var wing_first := 0
 var wing_variant := 0
+var replay_levels := PackedInt32Array()   ## the channel values a replay shows; empty while none plays
+
+
+## The channel values the arcade models draw their hands (and True Ogre's tail) by: the replay's
+## recorded ones while it plays, else the live ones. The game's replay keeps only the coarse
+## `variant` of each hand, which a PlayStation model shows; the live `current` is left alone in a
+## replay (the traces compare it), so the recorded values are held apart (ReplayState.hand_levels).
+func shown() -> PackedInt32Array:
+	return current if replay_levels.is_empty() else replay_levels
 
 
 ## HandFaceCommand for `hands` (bit 0 channel 0, bit 1 channel 1), a shape and a speed: shapes
