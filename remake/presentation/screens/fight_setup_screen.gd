@@ -1,6 +1,6 @@
 class_name FightSetupScreen
 extends Control
-## A temporary set-up screen for VS fights until the game's own select screens arrive (M3):
+## A temporary set-up screen for VS fights until the game's own select screens arrive:
 ## both players' characters and costumes, the stage, the rounds to win, the round time and the
 ## Gameplay fixes option. Either pad moves the cursor with up and down, changes a value with
 ## left and right, and starts the fight with Start or Cross on START.
@@ -16,7 +16,7 @@ const COSTUMES := 4
 const STAGES := 15
 const MAX_ROUNDS := 5
 const ROUND_TIMES := ["20", "30", "40", "50", "60", "∞"]
-const TITLE := "VS BATTLE (temporary set-up until M3)"
+const TITLE := "VS BATTLE SETUP"
 const HINT := "Up / Down: choose   Left / Right: change   Start or Cross: fight"
 
 var tables: FightTables
