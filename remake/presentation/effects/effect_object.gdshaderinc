@@ -32,8 +32,12 @@ void vertex() {
 	VERTEX = (centre + vec3(mix(q.x, q.z, UV.x), -mix(q.y, q.w, UV.y), 0.0)) * pull;
 }
 
+// The texel of the frame at `uv`. A pixel on the quad's edge is shaded at the pixel's centre, which
+// MSAA can leave outside the quad, with `uv` a little below 0 or above 1: it is held inside the
+// frame, as a pixel of the game's sprite never leaves it. Unclamped below, the top and left edge
+// read the page's row and column before the frame, which are index 0, white in the fire's palette.
 vec4 texel_colour(vec2 uv) {
-	vec2 texel = floor(sprite.xy + min(uv * sprite.z, vec2(sprite.z - 0.001)));
+	vec2 texel = floor(sprite.xy + clamp(uv * sprite.z, vec2(0.0), vec2(sprite.z - 0.001)));
 	float index = texelFetch(page, ivec2(texel), 0).r * 255.0;
 	return texelFetch(palettes, ivec2(int(index + 0.5), int(sprite.w + 0.5)), 0);
 }

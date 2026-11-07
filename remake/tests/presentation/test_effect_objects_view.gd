@@ -36,3 +36,25 @@ func test_setup_reads_the_converted_objects() -> void:
 		expect_equal(view.sprite_of(o)[0], first[0], "table %d: frame 0" % (t + 1))
 	view.show_pool(EffectPool.new())
 	view.free()
+
+
+## The texel of a frame at `uv` as effect_object.gdshaderinc's texel_colour() takes it (one axis).
+static func _texel(origin: int, size: int, uv: float) -> int:
+	return floori(origin + clampf(uv * size, 0.0, size - 0.001))
+
+
+## A pixel on the quad's edge is shaded at its centre, which MSAA can leave outside the quad: `uv`
+## a little below 0 or above 1. The texel must stay in the frame on both sides (issue
+## n0madic/Tekken3Remake#24: the top and left edges read the page's row and column before the
+## frame, white in the fire's palette, as thin lines on the flames).
+func test_an_edge_pixel_stays_inside_its_frame() -> void:
+	for uv: float in [-0.5, -0.02, -0.0001, 0.0, 0.5, 0.9999, 1.0, 1.02, 1.5]:
+		var texel := _texel(160, 32, uv)
+		expect(texel >= 160 and texel <= 191, "uv %s reads texel %d of the frame 160..191" % [uv, texel])
+	expect_equal(_texel(160, 32, -0.02), 160, "below the frame: its first texel")
+	expect_equal(_texel(160, 32, 1.02), 191, "above the frame: its last texel")
+
+
+func test_shader_holds_the_texel_inside_the_frame() -> void:
+	var code := FileAccess.get_file_as_string("res://presentation/effects/effect_object.gdshaderinc")
+	expect(code.contains("floor(sprite.xy + clamp(uv * sprite.z, vec2(0.0), vec2(sprite.z - 0.001)))"), "clamped on both sides")
