@@ -38,6 +38,43 @@ func test_flipbooks_follow_the_draw_events() -> void:
 	view.free()
 
 
+## Tekken Force's enemies (costume slots 47-50) upload the fore*.arc flipbook like any fighter: the
+## Mishima lightning of their hits (issue n0madic/Tekken3Remake#25: the converter skipped them).
+func test_the_force_enemies_have_their_flipbook() -> void:
+	var dir := AssetCatalog.ROOT.path_join("effects")
+	if not require(dir.path_join("effects.json")):
+		return
+	var data := EffectData.load_from(dir)
+	for slot in range(47, 51):
+		var book := data.costume(slot)
+		expect(book != null, "slot %d has a flipbook" % slot)
+		if book != null:
+			expect_equal(book.frames, 22, "slot %d: the 22 frames of the Mishima lightning" % slot)
+			expect(book.additive, "slot %d: drawn additively" % slot)
+
+
+## A damaging hit adds the attacker's own flipbook, whichever of the fight's records it is (Tekken
+## Force's third included).
+func test_the_third_fighters_hit_adds_its_flipbook() -> void:
+	var data := EffectData.new()
+	var hit := EffectData.Flipbook.new()
+	hit.frames = 5
+	data.system.append(hit)
+	var view := EffectsView.new()
+	view.setup(data)
+	var enemy := EffectData.Flipbook.new()
+	enemy.frames = 22
+	var books: Array[EffectData.Flipbook] = [null, null, enemy]
+	view.character = books
+	var events := SimEvents.new()
+	events.add_at(SimEvents.Kind.HIT_SPARK, 1, PackedInt32Array([0, 0, 0]), 0, EffectObjects.SPARK_DAMAGE).c = 2
+	events.add(SimEvents.Kind.EFFECTS_DRAW, -1, SimEvents.EFFECTS_ADVANCE)
+	view.step(events)
+	expect_equal(view.sprites.size(), 2, "the hit spark and the attacker's flipbook")
+	expect(view.sprites.any(func(s: EffectsView.Sprite) -> bool: return s.book == enemy), "the third record's flipbook")
+	view.free()
+
+
 static func _step(view: EffectsView, events: SimEvents, mode: int) -> void:
 	events.clear()
 	events.add(SimEvents.Kind.EFFECTS_DRAW, -1, mode)

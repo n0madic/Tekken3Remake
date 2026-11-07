@@ -51,7 +51,6 @@ DUST_INTERVAL = 2                   # FUN_8004AD28: a new puff every second fram
 COSTUME_KEYS = 0x80095CE8           # s8 costume slot per costume key (charId · 4 + costume)
 COSTUME_KEY_COUNT = 0x5C
 COSTUME_ARC_FIRST = 73              # the costume's .arc: BNS 73 + 4 · slot
-NO_FLIPBOOK_SLOTS = range(47, 51)   # slots without a fighting costume (convert.COSTUME_SLOTS)
 # Effect objects' CLUTs (effects.md#common-conventions): the fixed ones of row 503 and the fade
 # ramps of rows 509 and 510 (FUN_8006E848), as CLUT ids (x / 16 | y << 6).
 OBJECT_CLUTS = [*range(0x7DC6, 0x7DCB), *[0x7F40 | (0x10 + i) for i in range(16)],
@@ -174,6 +173,23 @@ def _character_flipbook(disc: Disc, out: Output, arc: arcade.ArcadeSet | None, n
     return {"name": name, "file": f"{name}.png", "frames": count, "blend": "add", "light": colour}
 
 
+def costume_characters(slots: list[int]) -> dict[int, tuple[int, int]]:
+    """Each costume slot a fight loads, with the character the game uploads its flipbook for and the
+    character whose arcade set it takes: `slots` is the s8 slot per costume key (charId · 4 + costume),
+    negative for a costume the character does not have. Tekken Force's enemies (slots 47–50, charId 21)
+    are among them: `FighterLoadCharacter` uploads their ARCs' member 1 like any other (the Mishima
+    lightning, issue n0madic/Tekken3Remake#25).
+
+    The ARC's own character is the arcade's: slot 36's is Anna's (key 72), though Nina's third costume
+    (key 22) shares it."""
+    owners = {slot: key >> 2 for key, slot in enumerate(slots[:NAMED_KEYS])}
+    found: dict[int, tuple[int, int]] = {}
+    for key, slot in enumerate(slots):
+        if slot >= 0 and slot not in found:
+            found[slot] = (key >> 2, owners[slot])
+    return found
+
+
 def convert(disc: Disc, out: Output, arc: arcade.ArcadeSet | None = None) -> None:
     system = disc.system_vram()
     table = {"system": [], "enbu": []}
@@ -199,14 +215,10 @@ def convert(disc: Disc, out: Output, arc: arcade.ArcadeSet | None = None) -> Non
     # with FighterUploadFlipbook(player, charId), the frame count and light from the charId.
     table["costumes"] = {}
     slots = [byte - 256 if byte > 127 else byte for byte in disc.exe_u8(COSTUME_KEYS, COSTUME_KEY_COUNT)]
-    # The ARC's own character: slot 36's is Anna's (key 72), though Nina's third costume (key 22) shares it.
-    owners = {slot: key >> 2 for key, slot in enumerate(slots[:NAMED_KEYS])}
-    for key, slot in enumerate(slots):
-        if slot < 0 or str(slot) in table["costumes"] or slot in NO_FLIPBOOK_SLOTS:
-            continue
+    for slot, (char_id, arcade_char) in costume_characters(slots).items():
         member = arc_members(disc.bns(COSTUME_ARC_FIRST + 4 * slot))[1]
-        table["costumes"][str(slot)] = _character_flipbook(disc, out, arc, f"costume_{slot:02d}", member, key >> 2,
-                                                           owners[slot])
+        table["costumes"][str(slot)] = _character_flipbook(disc, out, arc, f"costume_{slot:02d}", member, char_id,
+                                                           arcade_char)
     palettes = {}
     for clut in OBJECT_CLUTS:
         x, y = clut_xy(clut)
