@@ -669,7 +669,6 @@ func _show() -> void:
 	var state := flow.state
 	var sub := flow.sub
 	var frames := flow.fight.vblank
-	var fight_state := state == GameFlow.State.FIGHT or state == GameFlow.State.PREPARE
 	# The fighters of a new fight: the stage and models are built again; a model swapped in during
 	# the fight replaces only its own.
 	if _fight_view_due:
@@ -678,7 +677,7 @@ func _show() -> void:
 		_build_fight_view()
 	elif flow.sim.model_loads != _model_loads:
 		_replace_fighters()
-	var fighting := fight_state and fight_view != null and (state == GameFlow.State.PREPARE or sub >= 7)
+	var fighting := fight_view != null and flow.showing_fight()
 	if fight_view != null:
 		fight_view.visible = fighting
 		if fighting:

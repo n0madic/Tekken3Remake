@@ -442,6 +442,15 @@ func _update_escape() -> void:
 	escape_pressed = not _escape()
 
 
+## Whether the frame shows a fight running: the rounds from their first frame on, and what follows
+## them (the Continue and Game Over screens, the scenes). Never the preparation (FightPrepare: the
+## mode's overlay loads while the display is on and off) nor the fight's own loading: the fight
+## view still holds the last fight's stage and fighters until `load_fighters` makes a new one, so
+## drawing it there flashes the previous fight in front of the next screen.
+func showing_fight() -> bool:
+	return state == State.FIGHT and sub >= MatchFlow.Sub.ROUND_START
+
+
 ## A pause menu is open and takes the remake's Escape (the move lists take it as Start).
 func pause_menu_open() -> bool:
 	if state != State.FIGHT:
