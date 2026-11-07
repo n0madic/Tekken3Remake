@@ -2,7 +2,7 @@
 
 The arcade Tekken 3 runs on Namco System 12. That board has the PlayStation chipset (R3000A with GTE, PS GPU) with a faster CPU, a 1024 × 1024 VRAM, banked data ROMs and a C352 sound chip driven by an H8/3002. This part of the documentation describes the arcade data as a source of assets the PlayStation release does not have. The main asset is the polygonal stage scenery, which the PlayStation port replaced with flat panoramas ([stages.md](../code/stages.md#panorama)).
 
-Status: ROM layout, program compression and file system `confirmed` (decoded and compared with MAME RAM dumps); stage formats in [stages.md](stages.md); character models, their attachment dynamics and the motion streams below.
+Status: ROM layout, program compression and file system `confirmed` (decoded and compared with MAME RAM dumps); stage formats in [stages.md](stages.md); character models, their attachment dynamics and the motion streams below; the program's structure in [Program structure](#program-structure).
 
 ## Source set
 
@@ -49,6 +49,8 @@ All game data is read through one file table (`FUN_801BB748` builds it at start-
 
 | Category | Entries | Content (`confirmed` unless marked) |
 |---:|---:|---|
+| 0 | 261 | MDEC pictures played in sequence (4.5 MB). `FUN_801BE3EC` loads the next entry and `FUN_801BE474` decodes it (`DecDCTvlc`, `DecDCTin`, `DecDCTout`); `FUN_801BE180` restarts at entry 0. Every entry has the bitstream frame header: `u16` length, `0x3800`, `u16` quantiser (1–6), `u16` version (1). `inferred`: a movie; where it plays is `unknown`. |
+| 1–18 | 1–59 each | One compressed TIM per entry (273 entries, 2.3 MB decoded). Their use is `unknown`. |
 | 19 | 64 | Character models of costume slots 0–31: entry `2·slot` a TIM block, `2·slot + 1` its `3DMK` model ([models](#character-models)). |
 | 20 | 82 | The same pairs for slots 0–40, compressed; 4-byte entries are empty. A model here replaces category 19's (slots 7, 15, 21, 29 and 32–40 have one); a TIM block here is uploaded after category 19's (`FUN_80197e88`, `FUN_80197b38`). |
 | 21 | 11 | Low-polygon hull meshes (`inferred`: collision or shadow bodies). |
@@ -57,6 +59,8 @@ All game data is read through one file table (`FUN_801BB748` builds it at start-
 | 36, 37 | 9 each | A 14th scene (TMD at `prg + 0x283B08`, cell 10,120) with eight compressed TIM blocks. Stage 7 uses category 36 instead of 30, and its loader decompresses the TIM blocks. |
 | 38 | 3 | Copy of category 32. |
 | 39–43 | 1–7 | Small single-object TMDs (props) and TIM sets (`unknown` use). |
+
+Walking the directories as `arcade.py` does gives 837 entries against the 835 above; the difference is `unknown`.
 
 ## Character models
 
@@ -95,7 +99,7 @@ Measured against the PlayStation's models in the same pose (PlayStation motions 
 
 A costume's face texture has up to six *eye shapes* (the face's eye and mouth strip) that the game copies over the face as the fighter reacts. Statuses are `confirmed` unless marked.
 
-- **Layout.** `s8 × 8` per costume slot at `0x801FE370`: the rectangle index of the face strip (`dest`), the size index and the rectangles of shapes 0–5 (−1: the slot lacks it; slots 6–9, 22–25, 28–35 and 37 have no layout at all). Rectangles are `(x, y)` `s16` at `0x801FCE98` (16 words wide, 64 rows, in the page row 256 / 320), sizes `(w, h)` at `0x801FCF1C`; player 2's rows are 128 lower. Shape 0 is the face as loaded: `FUN_80193DD8` (round start) saves it into shape 0's rectangle and clears the state (`+0x1172` shape, `+0x1174` hold counter). `FUN_80193EA4(fighter, shape, frames)` sets the counter and, when the shape differs from the current one and the slot has it, `MoveImage`s its rectangle over the strip (skipped while the word `0x8021FD20` is 2; its meaning is `unknown`).
+- **Layout.** `s8 × 8` per costume slot at `0x801FE370`: the rectangle index of the face strip (`dest`), the size index and the rectangles of shapes 0–5 (−1: the slot lacks it; slots 6–9, 22–25, 28–35 and 37 have no layout at all). Rectangles are `(x, y)` `s16` at `0x801FCE98` (16 words wide, 64 rows, in the page row 256 / 320), sizes `(w, h)` at `0x801FCF1C`; player 2's rows are 128 lower. Shape 0 is the face as loaded: `FUN_80193DD8` (round start) saves it into shape 0's rectangle and clears the state (`+0x1172` shape, `+0x1174` hold counter). `FUN_80193EA4(fighter, shape, frames)` sets the counter and, when the shape differs from the current one and the slot has it, `MoveImage`s its rectangle over the strip (skipped while the [main state](#main-loop) `0x8021FD20` is 2; `inferred`: the attract state).
 - **Per frame.** `FUN_80193F90` (called from `FUN_80198298`): a move whose row has `+0x18 < 0` shows the *held* shape for 2 frames (table `0x801FE4E4`, 1 for every costume); else a lying fighter (move state bit 2 with `+0x17 = 0`) the *down* shape (`0x801FE510`, 2); then, when the counter is zero, open eyes (shape 0) become the *blink* shape for 3 frames (`0x801FE4B8`: shape 2 for slots 0–3, 12, 13, 18–21, 26, 27, 39, 40; shape 3 for 16 and 17; shape 4 for 10, 11, 14, 15, 36, 38; 0, no blink, for the rest) and any other shape becomes shape 0 for `(rand() & 0xFE) | 1` frames. Tables are `s8` per costume slot (41).
 - **Shouts.** `FUN_801A104C` plays a character's attack voices (voice ids `0x2000`–`0x2008`: from a move's sound list at its first frame, or a random grunt while attacking) and calls `FUN_801A1C74(fighter, id)`, which shows a *shout* shape for as many frames as the sample lasts, by character id (`+0x1a`: `FUN_8019CAC0` maps `id × 4 + colour` through `0x801FE060` to the slot): ids 0, 1 and 7 shape 3 and id 6 shape 5, nothing for the others, with 0 frames (no visible change) for code `0x2008` of ids 0, 1 and 7. The converter reads the shapes and frame counts from the routine itself (`arcade_eyes.shouts` interprets its instructions on the program; `tools/research/verify_arcade_eyes.py` checks that against the CPU harness for every id and code). The shapes of slot 0 on screen: 1 a wince (brow down, eye shut, teeth), 2 closed eyes, 3 open mouth.
 - **Not eyes.** The `s8` tables at `0x801FE2EC` and `0x801FE318` (`FUN_8019CBE4`, `FUN_8019CC10`, `FUN_8019CC3C`) are values below 10 for `FUN_80194080` (`inferred`: hand variants, which the PlayStation's face command also carries); it sends only values 10 and up to `FUN_80193EA4` (value − 10 is the shape), and only the shout code passes one.
@@ -108,7 +112,7 @@ The arcade draws the PlayStation's flipbook ring ([effects.md](../code/effects.m
 
 - **Sets.** Category 22, each entry compressed: one 4-bit TIM of 16 words × 64 lines per frame. Only the first TIM's CLUT is uploaded (`FUN_801af068`), so all frames go through it.
 - **Records.** 0x18 bytes: `u32` set, `s16` frame count, width, height (texels), additive flag, three `s16` colour factors (R, G, B, 128 neutral), `s16` a red and green exchange, then the light colour's bytes. One per charId at `0x80175510` (22), the system sets at `0x80175720` (hit, hit without damage, guard); `FUN_801ac680` loads the dust from the record at `0x80175798` instead of the table's fourth. It would load the record at `0x80175780` (set 0, red) as the hit when the word `0x8021F7A0` is 1, but sets that word to 0 just before.
-- **Palette.** `FUN_801af068` multiplies each non-zero colour by the factors (`channel · factor >> 7`, clamped to 31) and turns a result of black into `0x0400`, so that it stays opaque. With the exchange word set and the setting `0x8021FBBC` (copied from `0x8036EC5B`, its source `unknown`) green takes red's value and red green's halved. The hit's record has it. The PlayStation's hit colours are those of the unchanged palette (`inferred`, the comparison below: 2.2 levels against 16), so the converter does not exchange.
+- **Palette.** `FUN_801af068` multiplies each non-zero colour by the factors (`channel · factor >> 7`, clamped to 31) and turns a result of black into `0x0400`, so that it stays opaque. With the exchange word set and the setting `0x8021FBBC` (copied from `0x8036EC5B`, the test menu's hit colour, [Settings](#settings)) green takes red's value and red green's halved. The hit's record has it. The PlayStation's hit colours are those of the unchanged palette (`inferred`, the comparison below: 2.2 levels against 16), so the converter does not exchange.
 - **Size.** `FUN_801ad2fc`, the draw routine, sizes a sprite `w · (H · 0xAFE60 / 0xEEC0) / (4 · otz)` pixels wide. At the projection distance `H` = 500 a 64-texel frame is `32 · 0x2E0C / (4 · otz)`, within a part in 10,000 of the PlayStation's 32-texel `32 · 0x2E0B / (4 · otz)`, so the frames cover the same 754 world units (`inferred`: the routine's `otz` is taken to be the PlayStation's).
 - **Same drawing.** Frame step, last-ten-frames fade (`0x9999`), spawn drift (`0x1900`, decaying by `0x76 / 128` per frame) and the three-slot ring are the PlayStation's. `FUN_801ac974` keeps the sets of characters 4 and 9 in spare VRAM and `FUN_801aca14` copies them over a player's (`inferred`: for the attract demonstration, whose PlayStation copies in `enbu.ovl` are the same pair).
 - **Against the PlayStation** (`tools/research/compare_arcade_flipbooks.py`: every arcade strip reduced to 32 × 32 and compared with every PlayStation strip, all 54 closest to the converter's choice). The character sets are the PlayStation's frame for frame, with the same 30 or 22 frames. The system sets have more frames: hit 30 (the PlayStation's 27 are its frames 3–29), hit without damage 28 (21, from frame 1), guard 30 (25), dust 30 (27).
@@ -131,6 +135,142 @@ Yoshimitsu's sword glow ([effects.md](../code/effects.md#sword-glow)) is drawn b
 `FUN_8018eab4` relocates the move tables: per motion type (17 types, the PlayStation's banks 0–16), `0x8006D430 + type × 0x3B78` holds 3,806 move-row indices (the PlayStation has 4,023 slots), relocated to pointers to 0x3C-byte rows at `0x80025E8C`. A row's first word indexes the animation table (0x9838 bytes at file address `0x22DAD08`, 8 bytes per animation), whose first word is the stream's address: its top nibble 0x9, 0xA or 0xB adds 0x70387290, 0x61800000 or 0x522DAD08 (streams in the gaps of banked ROM 0–1, in the flash bank `tet1fl3`, and in the program ROM). A stream starts with its frame count; `FUN_80194744 (stream, out, frame, 57)` decodes a frame's 57 `s16` channels from keyframes every 16 frames and variable-length deltas (`confirmed` by running it in the harness, `tools/research/arcade_motion.py`): three root channels, then each joint's Euler angles, turned into its local rotation as `Euler(x, −y, −z)` (`FUN_801984a0`, `FUN_8019a498`). There is no IK: the PlayStation's pose vector (IK targets, `PoseBuildMatrices`) and spline keys are a compression of these streams.
 
 Compared frame by frame, 96–100 % of each PlayStation bank's animations have an arcade animation of the same type and length; the joints and limb tips of matched animations lie 10–36 model units apart on average (about 1–4 cm), with single frames of fast moves up to 0.5–1 m apart where the PlayStation's splines lag a few frames behind. The arcade's foot joints turn 90° about y against the PlayStation's in every frame (see Feet).
+
+## Program structure
+
+How the program runs, as far as reading it shows. Here `confirmed` means read in the decompile, and in the disassembly where it says so. Nothing here has been run in the harness or compared with MAME, except where it points to another section.
+
+### Main loop
+
+`main` (`0x801899F4`) sets the display once ([Display](#display)), seeds the generators ([Frame wait and generators](#frame-wait-and-generators)) and then repeats these steps (`confirmed`):
+
+1. `FUN_8019C9E0`, then the frame wait `FUN_801BBBE8`.
+2. `FUN_801F21F0` (`inferred`: the test mode's entry) and a write to `0x1F018000` (`inferred`: the watchdog). Either edge of bit `0x20` of the system inputs toggles `0x8021F03A`, and while it is set the loop stays in steps 1 and 2, so the game is held.
+3. The active buffer and ordering table, `FUN_801A2404`, then the routine of the state word `0x8021FD20`. Its sub-state is the word `0x8021FD64`.
+
+| State | Routine | Role (`inferred` unless marked) |
+|---:|---|---|
+| 0 | `FUN_80189EC8` | Boot. |
+| 1 | `FUN_801B5EEC` | Transition: `FUN_801B5EC0` enters it, and it restores the state saved in `0x8021F22D`. |
+| 2 | `FUN_801BD5A0` | Attract: it sets mode 6. |
+| 3 | `FUN_801BD97C` | Title and coins. |
+| 4 | `FUN_801B6BA4` | Game flow: it calls the fight frame from several sub-states (`confirmed`). |
+| 5 | `FUN_801C06E4` | Character select. |
+| 7 | `FUN_801C241C` | After the game (weak: from the callers that set it). |
+| 8 | `FUN_801E5F50` | Ending; it calls the fight frame too (`confirmed`). |
+| 10 | `FUN_80192EC4` | An empty routine (`confirmed`). No assignment of 10 was found, but the copies from `0x8021F22D` and `0x80374F1E` were not traced. |
+
+### Fight frame
+
+`FUN_8018A988` runs one frame for the fighter records at `0x8031E154` and `0x8031FC38` (`0x1AE4` bytes apart). A nonzero `0x8021FAD0` makes it draw only. `FUN_8019541C` returns the word `0x8021F03C`, which selects the replay path (`FUN_801969B4`, `FUN_801D6C08`, then drawing) over the live one (`inferred`). The live path's calls, in order (order `confirmed`, roles `inferred`):
+
+| Calls | Role |
+|---|---|
+| `FUN_8019EE00`, `FUN_8019541C`, `FUN_8019D560`, `FUN_8019DCA8` | Frame reset, replay, round flow, HUD. |
+| `FUN_8018B500` (`FUN_801D009C`), `FUN_801AE9DC`, `FUN_801A6DBC` | Camera director and camera frame. |
+| `FUN_801E2114` (stages 6 and 12 only), `FUN_801E3D0C` | Stage objects. |
+| `FUN_80198A48` × 2, `FUN_8018C498` (`FUN_80190FF8`) | Sides, move start. |
+| `FUN_8018B050`, `FUN_8018B124`, `FUN_8019F3FC`, `FUN_801A5B00` | `unknown`. |
+| `FUN_8019C738`, `FUN_8018B388`, `FUN_801D8FD0` | Wind (`confirmed` above), skeleton, stage drawing. |
+| `FUN_801DC758` × 2, `FUN_801DC990`, `FUN_8018B430` × 2 | Effect objects. |
+| `FUN_80198BF8` × 2, `FUN_8019EF90`, `FUN_8018B808`, `FUN_8018B91C`, `FUN_8018B47C` × 2, `FUN_8018C2DC` | Collision shapes and what follows them. |
+| `FUN_8018C5A4`, `FUN_8018BB68`, `FUN_8018CBD8` × 2 | Hits. |
+| `FUN_801A104C` × 2, `FUN_8018B57C`, `FUN_801ADAF4`, `FUN_801AE4E4` | Voices (`confirmed` above), then conditional effects. |
+| `FUN_8018B61C` (`FUN_8018E0DC`), `FUN_8018B710`, `FUN_8018C340` (`FUN_8018F528`) | Input, human or CPU (`FUN_801C3614`); the move step. |
+
+### Game modes
+
+The word `0x80374F18` holds the mode, and 14 functions refer to it directly. The only direct assignment is in `FUN_801BDA64(mode, players)`, which has two `jal` sites and no pointer to it in the program: `FUN_801B7810` passes 0 and `FUN_801BD5A0` passes 6 (`confirmed`, the sites from the program's words). So modes 1–5 are not entered by any direct call.
+
+Most of what these modes would run in the flow is empty: `FUN_801B662C`, `FUN_801B6634`, `FUN_801B663C`, `FUN_801B6644`, `FUN_801B664C`, `FUN_801B6654` and `FUN_801B665C` are each `jr ra; nop` (`confirmed`, disassembly). What remains is texts, status routines and a few branches.
+
+| Mode | Name | Flow hooks of `FUN_801B6BA4` | Status routine |
+|---:|---|---|---|
+| 0 | Normal | `FUN_801B6664`, `FUN_801B66D8`, `FUN_801B67E0` | `FUN_801B4514` |
+| 1 | `unknown` | `FUN_801B6644` (empty) | None |
+| 2 | Team | `FUN_801B662C`, `FUN_801B6634`, `FUN_801B664C` (empty) | `FUN_801B462C` |
+| 3 | Time attack | Mode 0's first two, then `FUN_801B6654` (empty) | `FUN_801B46AC` |
+| 4 | Survival | `FUN_801B663C`, `FUN_801B665C` (empty) | `FUN_801B46F0` |
+| 5 | Practice | Returns to sub-state 0 after the fight | None |
+| 6 | Attract demo | None | A constant |
+
+The names come from the texts in `FUN_8019E034`, `FUN_801B437C` and `FUN_801BF520` (`inferred`: the last switches on the mode word through its argument). Whether a mode forced in the harness plays through is `unknown`.
+
+### Frame wait and generators
+
+`FUN_801BBDB8` installs `0x801BBD88` with `VSyncCallback`, which arms `0x801BBCCC` through `FUN_801F216C`. That handler increments the frame counter `0x8021F278` and the word `0x8021F8A4` (`confirmed`, disassembly). `FUN_801BBBE8` snapshots the counter into `0x8021FD58` (`FUN_801BBE04`), clears `0x8021F8A4` and spins until it is set, stepping two generators once per spin (`confirmed`):
+
+- `0x8021FB5C`: `(x + 1) · 0x10DCD`. `FUN_801A458C`, `FUN_801A511C` and `FUN_801D59FC` step it themselves and use its top bits.
+- `0x8021F838`: `x · 5 + 1` in `FUN_801B2468`. The decompile shows that routine as `void`, but it leaves the value in `$v0`, and `FUN_801B50EC`, `FUN_801B551C`, `FUN_801B557C`, `FUN_801BF6B4` and `FUN_801BF8B4` use it (`confirmed`, disassembly).
+
+The number of spins depends on how long the frame's work took, so these two values depend on timing as well as on the game's logic (`inferred`). `rand` (`0x801E7B24`) is a separate BIOS call through `0xA0` and the wait does not step it; the decompile has 215 lines calling it in 68 functions, among them the eyes, the voices and the wind.
+
+`FUN_801AEAB8`, called once from `main`, seeds both `srand` and `0x8021FB5C` with the sum of the first 256 scratchpad words added to `$s0` as the routine finds it (`confirmed`). It is the only `srand` call.
+
+After the spin, `FUN_801BBBE8` waits for `0x1F083006` to be 0 (`unknown`), then `FUN_801B0BB8` polls `0x1F083200`, `0x1F083240`, `0x1F083900` and `0x1F083940` (`inferred`: coins), and `FUN_8018CD30` reads `0x1F083380` (system inputs, masked with `0x807C`, edges in `0x8021FBD8` and `0x8021FBC0`) and `0x1F083140`, `0x1F083142` (`inferred`: the players).
+
+### Settings
+
+The block `0x8036EC1C` (`0xDC` bytes) is a copy of the EEPROM: `FUN_801F7920` reads it from the address in `0x8021FD10` and `FUN_801F7820`, whose messages name the EEPROM, writes it back. `FUN_80189FF4` copies settings from it into words such as `0x8021FBBC` (`confirmed`).
+
+Two tables of descriptor pointers drive the test menus: `0x8021C600` for the bytes from `0x8036EC44`, `0x801FCB58` for the bytes from `0x8036EC4F`. A descriptor has a label pointer at `+0`, the value at `+6` and the defaults at `+7` to `+0xA`, chosen by `0x8036ECF4` (`+8`, `+9`, `+0xA` for 2, 3, 4, else `+7`; `FUN_801F9B10`, `FUN_801F9A08`). What sets `0x8036ECF4` is `unknown`. The labels (`confirmed`):
+
+| Byte | Setting |
+|---|---|
+| `0x8036EC44`, `…45` | Start cost, continue cost. |
+| `…46`–`…49` | Coin mechanism values (`inferred` from a short label). |
+| `…4A`, `…4E` | Credit (`…4E` mirrors `…4A`). |
+| `…4B`, `…4D` | Coin counter (`…4D` mirrors `…4B`). |
+| `…4C` | Free play. |
+| `…4F` | Difficulty level. |
+| `…50`, `…51` | Fight count: one player, versus. |
+| `…52`, `…53` | Life bar: one player, versus. |
+| `…54`, `…55`, `…56` | Guard damage, neutral guard, round time. |
+| `…57`, `…58` | Character change: at continue, at a versus game. |
+| `…59`, `…5A`, `…5B` | Music in attract, event mode, hit colour. |
+| `0x8036ECF0` | Display: 0 non-interlaced, 1 interlaced (labels at `0x8021C630`). |
+
+- **Free play.** `FUN_801B0DD0` sets `0x8021F818` when `0x8036EC4C` is nonzero, and `FUN_801B0ED8`, `FUN_801B1070`, `FUN_801B114C`, `FUN_801B13A8` and `FUN_801B1514` test that word (`confirmed`).
+- **Hit colour.** Its default is 0, or 1 when `0x8036ECF4` is 2 (`confirmed`, the descriptor's bytes). [Effect flipbooks](#effect-flipbooks) has its effect on the palette.
+
+### Display
+
+`FUN_801A23C4`, the only caller of `FUN_801BB838`, passes mode 4. The routine reduces the mode with `& 3` unless `0x8021FD3C` (copied from `0x8036ECF0`) is nonzero. Its table at `0x801FF898` (16 bytes per mode) makes mode 0 512 × 240 and mode 4 512 × 480, so the game draws 512 wide, against the PlayStation's 368 (`confirmed`, the table read from the program). A test-mode routine sets `0x8036ECF0` to 0 when `0x8036ECF4` is 2, 3 or 4, else to 1, and a test menu toggles it. `FUN_801BB838` also sets `0x8036EA34` and `0x8036EA36` to `0x100` and `0xF0` (`inferred`: the screen's centre).
+
+### Sound commands
+
+`FUN_801B0810`, `FUN_801B086C`, `FUN_801B0924`, `FUN_801B0968`, `FUN_801B09AC`, `FUN_801B09C4` and `FUN_801B0A30` write commands to `0x1F080100 + 2 · channel` and parameters to `0x1F080200 + 2 · n`; `FUN_801B0ACC` clears them. Apart from these, only `FUN_801F58C8` (`inferred`: the sound test) refers to the two addresses, so the game's logic does not read anything back from the sound CPU through them (`confirmed` by searching the decompile for direct references).
+
+### Program map
+
+Address ranges by subsystem (`inferred`, from call graphs, strings and the routines named above). The decompile lists 1,667 entries, of which 1,153 have no name; the others carry library names, mostly PsyQ's.
+
+| Range | Content |
+|---|---|
+| `0x80189…`–`0x8018D…` | `main`, start-up, the fight frame's helpers. |
+| `0x8018E…`–`0x80192…` | Moves. |
+| `0x80193…`–`0x8019C…` | Models and pose. |
+| `0x8019D…`–`0x8019E…` | Round flow and HUD. |
+| `0x801A0BD0`–`0x801A23…` | Sound wrappers and voices. |
+| `0x801AC…`–`0x801AF…` | Flipbook effects. |
+| `0x801B0…`–`0x801B4…` | Services: sound commands, coins, texts. |
+| `0x801B5…`–`0x801C2…` | Game flow and screens. |
+| `0x801C2F6C`–`0x801CDB38` | CPU AI (67 functions). |
+| `0x801D0…`–`0x801D6…` | Camera. |
+| `0x801D9…`–`0x801DB…` | Stage. |
+| `0x801DC…`–`0x801E0…` | Effect objects. |
+| `0x801E7888`–`0x801F21…` | PsyQ libraries. |
+| `0x801F21F0`… | Test mode. |
+
+### Against the PlayStation's data
+
+Measured with a one-off script: every read of the converter's `tables`, `ai` and `flow` modules and of its floor fade from the PlayStation's executable and overlays, searched in the decompressed program with pointer words masked (`confirmed` as a measurement).
+
+- **Byte for byte.** 22.4 % of the 80.7 KB occur unchanged. By reading function: `stage.convert_floor_fade` 100 %, `tables.convert` 96.5 %, `tables.vectors` 90.4 %, `tables._camera` 45.1 %, `tables._voice_set` 38.8 %, `tables._effects` 32.8 %, `flow.convert` 3.7 %, `tables.convert_fight` 3.0 %, `tables._sound_scripts` 0.7 %, `flow._exe` 0.4 %, `tables._branch_rows` and `tables._char_records` 0 %.
+- **At the best alignment.** Bytes equal after aligning a table by voting on 4-byte matches: AI scripts 61.6 %, branch rows 53.7 %, flow progress 42.4 %, sequences 13.7 %, camera presets 10.3 %, character records 0 %.
+- **Move rows.** The arcade's rows are 0x3C bytes against the PlayStation's 56. The gap from `0x80025E8C` to `0x8006D430` holds 4,871 of them (`inferred`: rows fill it).
+
+So values from the PlayStation's tables hold for the arcade only where they were compared.
 
 ## Method and tools
 
