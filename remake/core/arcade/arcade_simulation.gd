@@ -67,8 +67,9 @@ func _make_parts() -> void:
 	animation.camera = camera
 	round_flow = ArcadeRoundFlow.new(fight, panels)
 	fight.replay = ArcadeReplay.new()
-	ai = ArcadeCpu.new(fight, moves)
-	cpu = ArcadeAiDecision.new(ai)
+	var opponent := ArcadeCpu.new(fight, moves)
+	ai = opponent
+	cpu = ArcadeAiDecision.new(opponent)
 	effect_objects = ArcadeEffectObjects.new(fight, (content as ArcadeFightContent).effect_tables)
 	arcade_combat.effect_objects = effect_objects
 	_attachment_tables = (content as ArcadeFightContent).attachment_tables(animation.solver)
@@ -235,7 +236,7 @@ func round_start() -> void:
 	camera.round_start(f0, f1)
 	effect_objects.round_start()
 	round_sounds.round_start(events)
-	(ai as ArcadeCpu).init_round()
+	ai.init_round()
 	_reset_look_at()                    # FUN_801992B0
 	wind.round_start()
 

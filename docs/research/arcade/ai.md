@@ -2,7 +2,7 @@
 
 The port is `remake/core/arcade/arcade_cpu*.gd`, its tables come from `tools/remake_import/arcade_ai_tables.py`.
 
-Rules used here: `confirmed` means read on both sides, in the arcade decompile or capstone disassembly (`work/arcade/decomp_full/arcade_e1_full.exe.c`, `work/arcade/prg_world_e1.unpacked.bin`) and on the PS1 side in the decompile (`work/decomp/SLPS_013.00.c`) or the verified ports (`tools/research/ai_update.py`, `tools/research/ai_sim.py`). `inferred` means one side only, or a conclusion drawn from what was read. Nothing was run in a harness: the arcade logic below is read code, except the few RAM dump checks, which are marked. "Remake" means `remake/core/ai/ai_decision.gd` and `cpu_opponent.gd`.
+Rules used here: `confirmed` means read on both sides, in the arcade decompile or capstone disassembly (`work/arcade/decomp_full/arcade_e1_full.exe.c`, `work/arcade/prg_world_e1.unpacked.bin`) and on the PS1 side in the decompile (`work/decomp/SLPS_013.00.c`) or the verified ports (`tools/research/ai_update.py`, `tools/research/ai_sim.py`). `inferred` means one side only, or a conclusion drawn from what was read. Nothing was run in a harness: the arcade logic below is read code, except the few RAM dump checks, which are marked. "Remake" means `remake/core/ai/ai_decision.gd` and `cpu_opponent.gd`, with what both builds share in their bases `cpu_decision.gd` (the movement picks, the guard test) and `cpu_machinery.gd` (the draws, `level_vs_state`, the row and hint names).
 
 ## Headline
 

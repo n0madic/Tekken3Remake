@@ -211,10 +211,10 @@ static func mirror_costumes(globals: GameGlobals, player: int) -> void:
 	var b := PackedInt32Array([globals.player_char[other], globals.player_costume[other],
 		globals.player_keep[other], globals.player_active[other]])
 	if b[2] != 0 and a[0] == b[0] and a[1] == b[1]:
-		if b[3] == 0 and a[3] != 0:
-			b[1] = a[1] ^ 1 if a[1] < 2 else 0
+		if Opponents.clash_yields_other(a[3], b[3]):
+			b[1] = Opponents.costume_after_clash(a[1])
 		else:
-			a[1] = b[1] ^ 1 if b[1] < 2 else 0
+			a[1] = Opponents.costume_after_clash(b[1])
 	globals.player_char[player] = a[0]
 	globals.player_costume[player] = a[1]
 	globals.player_keep[player] = 1

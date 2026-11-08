@@ -93,7 +93,7 @@ static func update_sides(f0: FighterState, f1: FighterState) -> void:
 
 
 ## FUN_8018B61C for one fighter: `mode` is the fighter's input mode.
-static func source(fight: FightState, f: FighterState, panels: Panels, mode: int, cpu: AiDecision) -> void:
+static func source(fight: FightState, f: FighterState, panels: Panels, mode: int, cpu: CpuDecision) -> void:
 	match mode:
 		1:
 			if f.health == 0 or (f.is_cpu != 0 and fight.no_damage != 0):
@@ -106,7 +106,7 @@ static func source(fight: FightState, f: FighterState, panels: Panels, mode: int
 
 ## FUN_8018E0DC. Control −1 reads nothing; the program has no writer of that value (FUN_8018A44C
 ## writes positive ones only).
-static func _read(fight: FightState, f: FighterState, panels: Panels, cpu: AiDecision) -> void:
+static func _read(fight: FightState, f: FighterState, panels: Panels, cpu: CpuDecision) -> void:
 	var p := f.index
 	if f.is_cpu == NO_CONTROL:
 		update(fight, f, -1, 0, 0)

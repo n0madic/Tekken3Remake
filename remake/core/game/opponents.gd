@@ -90,6 +90,18 @@ static func ladder_costume(character: int, key: int) -> int:
 	return 1 if key & 3 != 0 else 0
 
 
+## FUN_8004F334 and its copies: the costume a side takes when both sides pick the same costume of one
+## character. 0 and 1 swap; 2 and 3 become 0.
+static func costume_after_clash(costume: int) -> int:
+	return costume ^ 1 if costume < 2 else 0
+
+
+## Which side of such a clash changes: the other one when it is not active (a CPU or undecided side) and
+## this one is, else this one.
+static func clash_yields_other(own_active: int, other_active: int) -> bool:
+	return other_active == 0 and own_active != 0
+
+
 ## FUN_800B2494: the ten stages (character, costume, stage index) at the mode context's +0x90,
 ## for the player's costume key `key`.
 static func build_ladder(g: GameFlow, key: int) -> void:

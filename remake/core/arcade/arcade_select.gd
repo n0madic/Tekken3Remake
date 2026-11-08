@@ -331,10 +331,10 @@ func _resolve_costume(s: ArcadeSelectSide) -> void:
 	var o: ArcadeSelectSide = sides[1] if s == sides[0] else sides[0]
 	var decided := flow.data.select_decided
 	if decided[o.state * 2] != 0 and s.character == o.character and s.costume == o.costume:
-		if decided[o.state * 2 + 1] == 0 and decided[s.state * 2 + 1] != 0:
-			o.costume = s.costume ^ 1 if s.costume < 2 else 0
+		if Opponents.clash_yields_other(decided[s.state * 2 + 1], decided[o.state * 2 + 1]):
+			o.costume = Opponents.costume_after_clash(s.costume)
 		else:
-			s.costume = o.costume ^ 1 if o.costume < 2 else 0
+			s.costume = Opponents.costume_after_clash(o.costume)
 
 
 ## FUN_801BF23C: the choice leaves for the mode's globals.

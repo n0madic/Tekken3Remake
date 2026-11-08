@@ -1,6 +1,6 @@
 class_name CpuOpponent
-extends RefCounted
-## The CPU opponent's shared machinery (ai.md), written from the verified port
+extends CpuMachinery
+## The PlayStation's CPU opponent (ai.md) on `CpuMachinery`, written from the verified port
 ## `tools/research/ai_sim.py`: the candidate table filled from the running move's branch list and its
 ## filters, executing a candidate as pad input, input scripts, the character hooks, and the
 ## record set-up (AiInitRound, AiReset, AiLoadParams). AiDecision runs AiUpdate on top of it.
@@ -8,11 +8,8 @@ extends RefCounted
 ## As in the game, one candidate table serves every CPU fighter, and `ai_self` / `ai_opp` are
 ## globals set by the last AiInitRound or AiUpdate (AiReset reads them, not its argument).
 
-const MAX_CANDIDATES := 180
-const END := MoveSystem.END
+const RESTRICTION_LAST := 0x73       ## the largest restriction byte the AI matches
 const COMMON := MoveSystem.CALL
-const SIDE_STEP := 0xC001
-const CROUCH_DASH := 0xC002
 ## The CPU's pad words are in its own frame (ai.md#per-frame-behaviour).
 const PAD_UP := PadState.UP
 const PAD_FORWARD := PadState.RIGHT
@@ -20,23 +17,6 @@ const PAD_DOWN := PadState.DOWN
 const PAD_BACK := PadState.LEFT
 const PAD_DOWN_FORWARD := PAD_DOWN | PAD_FORWARD
 const PAD_DOWN_BACK := PAD_DOWN | PAD_BACK
-## The AI byte of a move's attack word (+0x0A, ai.md#move-row-hint-bits).
-const HINT_SAFE := 0x10000           ## a safe or priority attack
-const HINT_CLOSE := 0x40000          ## reach bits: close, middle, far (none: close or middle)
-const HINT_MIDDLE := 0x80000
-const HINT_FAR := 0x100000
-const HINT_REACH := HINT_CLOSE | HINT_MIDDLE | HINT_FAR
-const HINT_SPECIAL := 0x200000       ## usable as an airborne or special move
-const HINT_NEVER := 0x400000         ## never chosen by the AI
-const GRAB := HINT_NEVER             ## the same bit of the opponent's move: a grab
-const ROW_COMMAND := MoveSystem.ROW_COMMAND
-const ROW_RESTRICTION := MoveSystem.ROW_RESTRICTION
-const ROW_CONDITION := MoveSystem.ROW_CONDITION
-const ROW_TARGET := MoveSystem.ROW_TARGET
-const ROW_FLAGS := MoveSystem.ROW_FLAGS
-const ROW_FIRST := MoveSystem.ROW_FIRST
-const ROW_LAST := MoveSystem.ROW_LAST
-const ROW_ENTRY := MoveSystem.ROW_ENTRY
 ## Branch conditions answered from the cached situation bits (record +0x64).
 const SITUATION_CONDITIONS := [BranchCondition.TURNED_AWAY, BranchCondition.TURNED_SIDE_A,
 	BranchCondition.TURNED_SIDE_B, BranchCondition.HIGH_ATTACK_COMING, BranchCondition.FACING_QUADRANT_0]
@@ -52,9 +32,6 @@ const FORCE_LEVELS := 4              ## Tekken Force's pattern words (0x80023210
 const FORCE_LEVEL_WORDS := 3
 const FORCE_GROUP_WORDS := 15
 
-var fight: FightState
-var t: AiTables
-var moves: MoveSystem
 var records: Array[AiRecord] = []
 var ai_self: FighterState:           ## 0x800AFF24: the fighter being driven (in the mode region)
 	set(v):
@@ -63,44 +40,16 @@ var ai_self: FighterState:           ## 0x800AFF24: the fighter being driven (in
 var ai_opp: FighterState             ## 0x800A8B44: its target
 var multi := 0                       ## 0x8009F6A4: team, survival or Tekken Force: odd slots think every other frame
 var force_timers := PackedInt32Array([-1, -1, -1, -1])   ## 0x8009F6A8 (Tekken Force)
-## The candidate table (0x8009FD20): target move, branch row, mark (−1 unusable, 0, 1 marked).
-var cand_target: Array[MoveRow] = []
-var cand_row: Array[PackedInt32Array] = []
-var cand_mark := PackedInt32Array()
 
 
 func _init(fight_state: FightState, move_system: MoveSystem) -> void:
-	fight = fight_state
-	moves = move_system
-	t = fight.tables.ai
+	super(fight_state, move_system)
 	for i in 3:
 		records.append(AiRecord.new())
-	cand_target.resize(MAX_CANDIDATES)
-	cand_row.resize(MAX_CANDIDATES)
-	cand_mark.resize(MAX_CANDIDATES)
 
 
 func record(f: FighterState) -> AiRecord:
 	return records[f.ai_slot]
-
-
-# ---- random numbers -------------------------------------------------------------------------
-
-## The AI generator 0x800AE168 (x = 5x + 3): returns the old value and advances it.
-func lcg_next() -> int:
-	var x := fight.ai_rng
-	fight.ai_rng = (5 * x + 3) & 0xFFFFFFFF
-	return x
-
-
-## FUN_800569D0 and the draws like it: n · ((rand() + LCG) & 0x7FFF) >> 15.
-func random_below(n: int) -> int:
-	var r := fight.rng.next()
-	var x := lcg_next()
-	var p := n * ((r + x) & 0x7FFF)
-	if p < 0:
-		p += 0x7FFF
-	return p >> 15
 
 
 # ---- branch lists ----------------------------------------------------------------------------
@@ -132,19 +81,7 @@ func list_rows(move: MoveRow) -> Array[PackedInt32Array]:
 
 ## The branch-row restriction byte as the AI tests it (values above 0x73 never match).
 static func restriction_ok(f: FighterState, opp: FighterState, value: int) -> bool:
-	if value == 0:
-		return true
-	if value < 0x18:
-		return f.bank_type == value - 1
-	if value < 0x2F:
-		return f.bank_type != value - 0x18
-	if value < 0x46:
-		return opp.bank_type == value - 0x2F
-	if value < 0x5D:
-		return f.char_id == value - 0x46
-	if value > 0x73:
-		return false
-	return f.char_id != value - 0x5D
+	return value <= RESTRICTION_LAST and MoveSystem.restriction_holds(f, opp, value, MoveSystem.RESTRICTION_CHARACTERS_END)
 
 
 ## A row's condition with the situation bits standing in for the conditions they cache.
@@ -351,21 +288,6 @@ func filter_vs_posture(rec: AiRecord) -> int:
 		if g & StateBit.CROUCHING:
 			return a != AttackWord.HIGH and a != AttackWord.LOW
 		return not (g & StateBit.DOWN and (a == AttackWord.HIGH or a == AttackWord.MID)))
-
-
-## Attack level `a` against the opponent state `g` (FUN_80057AC4, FUN_80057C88).
-static func level_vs_state(g: int, a: int) -> bool:
-	if g & 0xFFFF == StateWord.LAUNCHED:
-		return true
-	if g & StateBit.AIRBORNE:
-		return a == AttackWord.HIGH or a == AttackWord.MID or a == AttackWord.MID_2
-	if g & StateBit.DOWN:
-		return a == AttackWord.LOW or a == AttackWord.LOW_2
-	if g & StateBit.CROUCHING:
-		return a == AttackWord.MID or a == AttackWord.LOW
-	if g & StateBit.STANDING:
-		return a == AttackWord.LOW or a == AttackWord.MID or a == AttackWord.HIGH
-	return false
 
 
 ## FUN_80057AC4: attacks in reach whose level hits the opponent's current state.

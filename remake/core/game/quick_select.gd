@@ -444,12 +444,10 @@ func pick(player: int, pressed: int) -> int:
 ## twice changes one of them (the undecided or CPU side's, else `a`'s).
 static func costume_clash(block: ByteBlock, a: int, b: int) -> void:
 	if block.u32(b + 8) != 0 and block.u32(a) == block.u32(b) and block.u32(a + 4) == block.u32(b + 4):
-		var c := block.s32(a + 4)
-		if block.u32(b + 12) == 0 and block.u32(a + 12) != 0:
-			block.put32(b + 4, c ^ 1 if c < 2 else 0)
+		if Opponents.clash_yields_other(block.u32(a + 12), block.u32(b + 12)):
+			block.put32(b + 4, Opponents.costume_after_clash(block.s32(a + 4)))
 		else:
-			var cb := block.s32(b + 4)
-			block.put32(a + 4, cb ^ 1 if cb < 2 else 0)
+			block.put32(a + 4, Opponents.costume_after_clash(block.s32(b + 4)))
 
 
 ## FUN_80054294: the picks into the players' choices (team battle: the member lists).

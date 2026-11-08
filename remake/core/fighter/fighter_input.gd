@@ -87,7 +87,7 @@ class PadWords:
 
 ## InputSource (0x8002BF3C): nothing (mode 0), the pad or the CPU (1), the scripted word (2,
 ## InputScripted 0x8002C778: the round end's hold or crouch, the practice dummy).
-static func source(fight: FightState, f: FighterState, pads: PadWords, cpu: AiDecision = null) -> void:
+static func source(fight: FightState, f: FighterState, pads: PadWords, cpu: CpuDecision = null) -> void:
 	match fight.input_mode[f.index]:
 		0:
 			clear(fight, f)
@@ -105,7 +105,7 @@ static func source(fight: FightState, f: FighterState, pads: PadWords, cpu: AiDe
 ## CpuOrPadInput (0x8002C4CC) for a CPU fighter: AiUpdate's pad words in the fighter's own frame
 ## (side 0). A CPU without health skips AiUpdate and gets no input (the game passes stack
 ## garbage, bug #59).
-static func _cpu_input(fight: FightState, f: FighterState, cpu: AiDecision) -> void:
+static func _cpu_input(fight: FightState, f: FighterState, cpu: CpuDecision) -> void:
 	var words := PackedInt32Array([0, 0])
 	if f.health != 0:
 		words = cpu.update(f)

@@ -206,8 +206,9 @@ func setup() -> void:
 
 ## AiReset (0x800596B0) of the dummy with the page's CPU DIFFICULTY and LEVEL.
 func _ai_reset(f: FighterState) -> void:
-	if f.ai_slot >= 0 and g.sim.ai.ai_self != null:
-		g.sim.ai.reset(f, sb(CPU_DIFFICULTY), sb(CPU_LEVEL), -1)
+	var ai := g.sim.ai as CpuOpponent
+	if f.ai_slot >= 0 and ai.ai_self != null:
+		ai.reset(f, sb(CPU_DIFFICULTY), sb(CPU_LEVEL), -1)
 
 
 ## FUN_8002BE54: every fighter's input cleared and its input mode set.

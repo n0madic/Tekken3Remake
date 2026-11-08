@@ -1,5 +1,5 @@
 class_name ArcadeAiDecision
-extends AiDecision
+extends CpuDecision
 ## The arcade CPU's decision for one frame (FUN_801C3634, FUN_801C3C74): the steps run in the game's
 ## order until one produces the frame's input; the bookkeeping at the end (FUN_801C3730) always runs.
 ## `f` and `o` are the CPU and its opponent, `sm` and `om` their running moves. Addresses are the
@@ -155,9 +155,9 @@ var cpu: ArcadeCpu
 var r: ArcadeAiRecord
 
 
-func _init(opponent: CpuOpponent) -> void:
+func _init(opponent: ArcadeCpu) -> void:
 	super(opponent)
-	cpu = opponent as ArcadeCpu
+	cpu = opponent
 
 
 ## FUN_801C3634: (held pad, newly pressed pad) of CPU fighter `fighter`.
@@ -715,7 +715,7 @@ func _string_rows() -> PackedInt32Array:
 	var rows := sm.bank.branches
 	var out := PackedInt32Array()
 	var i := sm.branches
-	while rows[i][ROW_COMMAND] != CpuOpponent.END and out.size() < STRING_ROWS:
+	while rows[i][ROW_COMMAND] != CpuMachinery.END and out.size() < STRING_ROWS:
 		if cpu.restriction_passes(rows[i][ROW_RESTRICTION]) \
 				and cpu.slot_row(rows[i][ROW_TARGET]).flags & MoveFlag.BUFFER_INPUT != 0:
 			out.append(i)
@@ -729,7 +729,7 @@ func _planned_rows() -> PackedInt32Array:
 	var rows := sm.bank.branches
 	var out := PackedInt32Array()
 	var i := sm.branches
-	while rows[i][ROW_COMMAND] != CpuOpponent.END and out.size() < PLANNED_ROWS:
+	while rows[i][ROW_COMMAND] != CpuMachinery.END and out.size() < PLANNED_ROWS:
 		if cpu.restriction_passes(rows[i][ROW_RESTRICTION]) and _plans(cpu.slot_row(rows[i][ROW_TARGET]), chance):
 			out.append(i)
 		i += 1
@@ -758,7 +758,7 @@ func _link_rows() -> PackedInt32Array:
 	r.link_last = 0
 	var rows := sm.bank.branches
 	var i := sm.branches
-	while rows[i][ROW_COMMAND] != CpuOpponent.END and out.size() < LINK_ROWS:
+	while rows[i][ROW_COMMAND] != CpuMachinery.END and out.size() < LINK_ROWS:
 		var row := rows[i]
 		if row[ROW_FIRST] == 1 and row[ROW_LAST] == row[ROW_ENTRY] and cpu.restriction_passes(row[ROW_RESTRICTION]):
 			var target := cpu.slot_row(row[ROW_TARGET])

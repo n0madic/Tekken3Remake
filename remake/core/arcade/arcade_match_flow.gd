@@ -355,11 +355,10 @@ func _clash(p: int) -> void:
 	var g := flow
 	var o := 1 - p
 	if g.chosen[o] != 0 and g.chars[p] == g.chars[o] and g.costumes[p] == g.costumes[o]:
-		var costume := g.costumes[p]
-		if g.active[o] == 0 and g.active[p] != 0:
-			g.costumes[o] = costume ^ 1 if costume < 2 else 0
+		if Opponents.clash_yields_other(g.active[p], g.active[o]):
+			g.costumes[o] = Opponents.costume_after_clash(g.costumes[p])
 		else:
-			g.costumes[p] = costume ^ 1 if costume < 2 else 0
+			g.costumes[p] = Opponents.costume_after_clash(g.costumes[o])
 	g.chosen[p] = 1
 
 

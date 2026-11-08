@@ -1,11 +1,11 @@
 class_name ArcadeCpu
-extends CpuOpponent
+extends CpuMachinery
 ## The arcade's CPU opponent: the round's reset (FUN_801C3178) and what the decision steps
 ## (`ArcadeAiDecision`) share in the family 0x801C2F6C–0x801CEA0C: the draws, branch lists, the
 ## candidate table and its filters, presses and scripts, and the character hooks.
 ##
 ## The same design as the PlayStation's `CpuOpponent` on an older build with its own record, so the
-## two share only the generators and the level test. Addresses are the arcade's.
+## two share only what `CpuMachinery` holds. Addresses are the arcade's.
 
 const RECORDS := 2
 const LEVELS := 10

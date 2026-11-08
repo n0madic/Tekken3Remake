@@ -340,7 +340,7 @@ Index map (monotone, 861 of 864 steps; from row pairs):
 | 2 | CALL/RETURN rows | C00C jumps to common rows, C00D returns (`BranchFind`). [moves.md](../code/moves.md) documented this after this comparison | Not present; lists inlined. C00C, C00D are sequences | `MoveSystem._branch_find` (`CALL`, `RETURN`) |
 | 3 | Sequence numbers | C00E+n | C00C+n, same contents | `_input_match`, `FightTables.sequences_a` |
 | 4 | New commands | none | C007–C00A: at least 4 presses of LP, RP, LK or RK within 60 frames (`+0x420..+0x42C`). C00B: buffered command (`FUN_8018e4a8`, row +4). **No row uses them**; dead in the data | `_input_match` |
-| 5 | Restriction boundaries | char == 0x46..0x5C, char != ≥ 0x5D | 0x46..0x5B, ≥ 0x5C (`FUN_8018f914`); data confirms 0x6A ↔ 0x6B | `_restriction_ok` |
+| 5 | Restriction boundaries | char == 0x46..0x5C, char != ≥ 0x5D | 0x46..0x5B, ≥ 0x5C (`FUN_8018f914`); data confirms 0x6A ↔ 0x6B | `MoveSystem.restriction_holds` (`_restriction_characters_end`) |
 | 6 | Mode-specific rows | Mode 8 throw skip (`BranchFind`); mode 7 look-ahead and ball hit (`MoveBranchStep`, `MoveStep`) | Removed | `_branch_find`, `branch_step`, `step` |
 | 7 | `branchWindow` | −1 written only when no move is pending (`MoveStep` tests `moveRow` first), so a pending move keeps it | −1 at every `FUN_8018f528` entry. Transitions 4/5 (`holdFrames = branchWindow`) get −1 if the pending move waited ≥ 1 frame | `MoveSystem.step`, `branch_step`, `_hold` |
 | 8 | Reaction then attackClass | `if throwState > 0: attackClass = 1` | Absent | `step` |

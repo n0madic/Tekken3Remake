@@ -35,8 +35,7 @@ const THROWN_MASH_SCALE := 0x20
 const THROWN_MASH_DIVISOR := 0x2D
 const POWER_FRAMES := 0x78
 const ALERT_FRAMES := 9
-const BRANCH_COOLDOWN_LIMIT := 0x19
-const LOOK_AHEAD_FRAMES := 5
+const ARCADE_RESTRICTION_CHARACTERS_END := 0x5C   ## 0x46 + 22 characters
 const LAUNCH_SPEED_KINDS: Array[int] = [3, 5]
 const KIND_RESTART_AT_6 := 1
 
@@ -469,60 +468,9 @@ func _collapse(f: FighterState, opp: FighterState) -> void:
 
 # ---- branches -------------------------------------------------------------------------------
 
-## FUN_8018F528's branch step.
-func branch_step(f: FighterState, opp: FighterState) -> void:
-	if f.move_row != null or f.step_cooldown > BRANCH_COOLDOWN_LIMIT:
-		return
-	var rows := f.pose_move.bank.branches
-	var row := rows[_find(f, opp, f.pose_move.branches, f.pose_frame)]
-	if row[ROW_COMMAND] != END:
-		_take(f, row[ROW_TARGET], row[ROW_FLAGS])
-		f.branch_window = Fx.s16(row[ROW_LAST] - f.pose_frame)
-		f.entry_frame = row[ROW_LAST] if f.frame_step < 0 else row[ROW_ENTRY]
-		if (f.entry_frame & 0xFFFF) == 0xFF:
-			f.entry_frame = f.pose_move.length
-		f.branch_kind = 2
-		return
-	var first := row[ROW_FIRST]
-	var last := row[ROW_LAST]
-	var newest := f.in_history[f.in_hist_index]
-	var look := first - LOOK_AHEAD_FRAMES <= f.pose_frame and f.pose_frame < first and f.frame_step >= 1 \
-		and newest & FighterInput.HIST_BUTTONS != 0
-	if not look:
-		look = first <= f.pose_frame and f.pose_frame <= last and f.frame_step > 0
-	if look:
-		var target := fight.move_for_slot(f, row[ROW_TARGET])
-		var heading := f.heading
-		f.heading = Fx.s16(heading + f.pose_move.end_turn)
-		relative_angles(f, opp)
-		var hit := target.bank.branches[_find(f, opp, target.branches, 1)]
-		f.heading = heading
-		relative_angles(f, opp)
-		if hit[ROW_COMMAND] != END:
-			f.entry_frame = first
-			_take(f, hit[ROW_TARGET], hit[ROW_FLAGS])
-			f.branch_window = Fx.s16(hit[ROW_LAST] - f.pose_frame)
-			f.trans_bit6 = row[ROW_FLAGS] & 0x40
-			f.apply_end_turn = 1
-			f.branch_kind = 3
-			return
-	var frame := f.pose_frame + f.frame_step
-	if frame >= 1 and frame <= f.pose_move.length:
-		return
-	f.entry_frame = f.pose_frame
-	_take(f, row[ROW_TARGET], row[ROW_FLAGS])
-	f.apply_end_turn = 1
-	f.branch_kind = 4
-
-
-## A branch row's target becomes the pending move; the transition's remap reads the entry frame
-## the fighter holds when the row is taken.
-func _take(f: FighterState, target: int, flags: int) -> void:
-	f.move_slot = Fx.s16(target)
-	f.move_row = fight.move_for_slot(f, f.move_slot)
-	f.transition = _remap(f, flags & 0x3F)
-	f.trans_bit7 = flags & 0x80
-	f.trans_bit6 = flags & 0x40
+## The arcade's branch lists are one flat table: `move`'s rows are found by index (FUN_8018F9A4).
+func _find_row(f: FighterState, opp: FighterState, move: MoveRow, frame: int) -> PackedInt32Array:
+	return move.bank.branches[_find(f, opp, move.branches, frame)]
 
 
 ## FUN_8018F9A4: the index of the first matching row of a list, else of its terminator.
@@ -551,19 +499,14 @@ func _row_matches(f: FighterState, opp: FighterState, row: PackedInt32Array, fra
 		and (row[ROW_CONDITION] == 0 or condition(row, f, opp))
 
 
-## FUN_8018F914.
-func _restriction_ok(f: FighterState, opp: FighterState, value: int) -> bool:
-	if value == 0:
-		return true
-	if value < 0x18:
-		return f.bank_type == value - 1
-	if value < 0x2F:
-		return f.bank_type != value - 0x18
-	if value < 0x46:
-		return opp.bank_type == value - 0x2F
-	if value < 0x5C:
-		return f.char_id == value - 0x46
-	return f.char_id != value - 0x5C
+## The arcade keeps the masked row flag bit itself (0x80 or 0x40), not 1.
+func _flag_bit(flags: int, mask: int) -> int:
+	return flags & mask
+
+
+## FUN_8018F914: the arcade has one character fewer.
+func _restriction_characters_end() -> int:
+	return ARCADE_RESTRICTION_CHARACTERS_END
 
 
 ## FUN_8018E8D8: the arcade's commands: 0xC00C on are its motion sequences, 0xC007–0xC00A count

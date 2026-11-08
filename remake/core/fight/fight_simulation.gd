@@ -40,8 +40,8 @@ var combat: Combat
 var animation: FighterAnimation
 var camera: CameraDirector
 var round_flow: RoundFlow
-var ai: CpuOpponent
-var cpu: AiDecision
+var ai: CpuMachinery
+var cpu: CpuDecision
 var practice: PracticeMode             ## practice.ovl's hooks in mode 5 (set by the game flow)
 var ball: TekkenBall:                  ## volley.ovl's state and hooks in mode 7 (FightState.ball)
 	get: return fight.ball
@@ -83,8 +83,9 @@ func _make_parts() -> void:
 	combat.camera = camera
 	animation.camera = camera
 	round_flow = RoundFlow.new(fight)
-	ai = CpuOpponent.new(fight, moves)
-	cpu = AiDecision.new(ai)
+	var opponent := CpuOpponent.new(fight, moves)
+	ai = opponent
+	cpu = AiDecision.new(opponent)
 
 
 # ==== match and rounds ============================================================================

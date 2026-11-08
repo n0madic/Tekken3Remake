@@ -1,5 +1,5 @@
 class_name AiDecision
-extends RefCounted
+extends CpuDecision
 ## AiUpdate (0x80059B78; ai.md#per-frame-behaviour), written from the verified port
 ## `tools/research/ai_update.py`: the CPU fighter's held and newly pressed pad words for one frame.
 ## The steps run in the game's order until one produces the frame's input; the bookkeeping at
@@ -10,32 +10,6 @@ const FORCED_ESCAPES: Array[int] = [0x189, 0x18E, 0x17F, 0x181]
 const THROW_ROWS := 48
 const DIRECT := 0x7FFFFFFF           ## _choose: execute the marked neutral move directly
 
-## The kinds of movement the random pick chooses (arcade FUN_801CB2F0; `_do_movement` takes them).
-const MOVE_NONE := 0
-const MOVE_DASH := 1                 ## side step or walk in
-const MOVE_WALK := 2
-const MOVE_RETREAT := 3
-const MOVE_LONG_DASH := 4            ## side step with a long approach, or dash in
-const MOVE_LONG_WALK := 5
-const MOVE_BACK_DASH := 6            ## crouch dash or step back
-const MOVE_SIDE_STEP := 8
-const WAIT_LONG := 0x23              ## beyond this wait the pick follows the reach band
-const GUARD_ANGLE := 0x3000          ## least angle to the opponent at which an attack no longer comes at the CPU
-const ROW_COMMAND := CpuOpponent.ROW_COMMAND
-const ROW_CONDITION := CpuOpponent.ROW_CONDITION
-const ROW_TARGET := CpuOpponent.ROW_TARGET
-const ROW_FLAGS := CpuOpponent.ROW_FLAGS
-const ROW_FIRST := CpuOpponent.ROW_FIRST
-const ROW_LAST := CpuOpponent.ROW_LAST
-const ROW_ENTRY := CpuOpponent.ROW_ENTRY
-const ROW_RESTRICTION := CpuOpponent.ROW_RESTRICTION
-const HINT_NEVER := CpuOpponent.HINT_NEVER
-const HINT_SAFE := CpuOpponent.HINT_SAFE
-const HINT_CLOSE := CpuOpponent.HINT_CLOSE
-const HINT_MIDDLE := CpuOpponent.HINT_MIDDLE
-const HINT_REACH := CpuOpponent.HINT_REACH
-const HINT_SPECIAL := CpuOpponent.HINT_SPECIAL
-const GRAB := CpuOpponent.GRAB
 const PAD_UP := CpuOpponent.PAD_UP
 const PAD_FORWARD := CpuOpponent.PAD_FORWARD
 const PAD_DOWN := CpuOpponent.PAD_DOWN
@@ -44,27 +18,12 @@ const PAD_DOWN_FORWARD := CpuOpponent.PAD_DOWN_FORWARD
 const PAD_DOWN_BACK := CpuOpponent.PAD_DOWN_BACK
 
 var ai: CpuOpponent
-var fight: FightState
-var t: AiTables
-
-# The frame's context.
 var rec: AiRecord
-var f: FighterState
-var o: FighterState
-var sm: MoveRow
-var om: MoveRow
-var my_first := 0
-var my_last := 0
-var my_frame := 0
-var op_first := 0
-var op_last := 0
-var op_frame := 0
 
 
 func _init(opponent: CpuOpponent) -> void:
+	super(opponent)
 	ai = opponent
-	fight = ai.fight
-	t = ai.t
 
 
 ## AiUpdate for CPU fighter `fighter`: (held pad, newly pressed pad).
@@ -330,27 +289,6 @@ func _needs_guard() -> int:
 	if rec.distance >= 0xB87 or rec.vs_stance != 0:
 		return 0
 	return 1 if guard_posture_holds(rec.own_state & 0xFFFF, rec.opp_attack, rec.opp_grabs, rec.opp_coming, rec.angle) else 0
-
-
-## Whether the posture is one that stops the attack level: a grab needs a crouch or a low guard unless
-## it is a mid, an attack that comes at the CPU needs the guard of its level.
-static func guard_posture_holds(posture: int, attack: int, grabs: int, coming: int, angle: int) -> bool:
-	if grabs != 0:
-		return attack != AttackWord.MID and (posture == StateWord.CROUCH or posture == StateWord.GUARD_LOW)
-	if coming == 0 or angle > GUARD_ANGLE:
-		return false
-	match attack:
-		AttackWord.HIGH:
-			return posture == StateWord.CROUCH or posture == StateWord.GUARD_LOW or posture == StateWord.GUARD_HIGH
-		AttackWord.MID:
-			return posture == StateWord.GUARD_HIGH
-		AttackWord.LOW:
-			return posture == StateWord.GUARD_LOW
-		AttackWord.MID_2:
-			return posture == StateWord.GUARD_LOW or posture == StateWord.GUARD_HIGH
-		AttackWord.UNBLOCKABLE_2:
-			return posture == StateWord.GUARD_LOW or posture == StateWord.CROUCH
-	return false
 
 
 func _guard_state() -> void:
@@ -1553,69 +1491,6 @@ func _by_closing(v: int) -> int:
 	return movement_by_reach(rec.reach_band, rec.far_count, rec.opp_down, rec.own_state & StateBit.STANDING != 0, v)
 
 
-## The movement for a random draw `v` (0 to 0xFFF) by the distance band; `side_step_word` is the
-## difficulty word that sets the side step's share.
-static func movement_by_band(band: int, far_count: int, opp_down: int, side_step_word: int, v: int) -> int:
-	match band:
-		0, 1:
-			return MOVE_RETREAT if v < 0x14 else MOVE_NONE
-		2:
-			if v < 0x7A:
-				return MOVE_LONG_WALK
-			if v < 0x1EB:
-				return MOVE_DASH
-			if v < 0x214:
-				return MOVE_RETREAT
-			return MOVE_SIDE_STEP if v < Fx.div_trunc(side_step_word << 12, 1000) else MOVE_NONE
-		3:
-			return MOVE_WALK if v < 0x666 else (MOVE_DASH if v < 0xB33 else MOVE_NONE)
-		4:
-			return MOVE_WALK if v < 0xCC else (MOVE_LONG_DASH if v < 0x599 else MOVE_DASH)
-		5:
-			if far_count < 0x2D1 and opp_down == 0 and v > 0x11D:
-				return MOVE_DASH
-			return MOVE_LONG_DASH
-	return MOVE_NONE
-
-
-## The movement for a random draw `v` while waiting long, by the reach band.
-static func movement_by_reach(reach_band: int, far_count: int, opp_down: int, standing: bool, v: int) -> int:
-	match reach_band:
-		0, 1:
-			return MOVE_BACK_DASH if v < 0x199 else (MOVE_RETREAT if v < 0x333 else MOVE_NONE)
-		2:
-			if v <= 0x27:
-				return MOVE_WALK
-			return MOVE_RETREAT if v < 0x170 else MOVE_NONE
-		3:
-			if v < 0x1EB:
-				return MOVE_WALK
-			if v < 0x214:
-				return MOVE_LONG_WALK
-			if v < 0x218:
-				return MOVE_RETREAT
-			if v < 0x22D:
-				return MOVE_DASH
-			return MOVE_SIDE_STEP if v < 0x241 and standing else MOVE_NONE
-		4:
-			if v < 0x80:
-				return MOVE_WALK
-			if v < 0x90:
-				return MOVE_LONG_WALK
-			if v < 0xC0:
-				return MOVE_SIDE_STEP
-			return MOVE_DASH if v < 0x3C0 else MOVE_NONE
-		5:
-			if far_count < 0x2D1 and opp_down == 0 and v > 0x50:
-				if v < 0xCC:
-					return MOVE_WALK
-				if v < 0x400:
-					return MOVE_DASH
-				return MOVE_LONG_WALK if v < 0x5EB else MOVE_NONE
-			return MOVE_LONG_DASH
-	return MOVE_NONE
-
-
 ## The movement of kind `choice` (MOVE_*): a dash with no command to mark falls back to the walk, the
 ## back dash to the step back, and the side step goes on to a candidate.
 func _do_movement(choice: int) -> int:
@@ -1681,10 +1556,6 @@ func _do_movement(choice: int) -> int:
 
 
 # ---- the end of the frame --------------------------------------------------------------------
-
-static func _dec(v: int) -> int:
-	return v - 1 if v >= 0 else v
-
 
 ## Timers, adaptive difficulty, guard memory and the pad output.
 func _finish() -> PackedInt32Array:

@@ -35,6 +35,11 @@ const MAX_MASH := 66
 const LAUNCH_AIR_KIND := 5
 const HIGH_ATTACK_RANGE := 0x700
 const FACING_EACH_OTHER := 0x2AAA   ## relAngle 60°, both fighters (reversals)
+const RESTRICTION_CHARACTERS_END := 0x5D   ## the PlayStation's: 0x46 + 23 characters
+const BRANCH_COOLDOWN_LIMIT := 0x19        ## no branch is taken while the step cooldown is above it
+const LOOK_AHEAD_FRAMES := 5               ## a held button opens a row's look-ahead this early
+const ROW_FLAG_BIT6 := 0x40                ## the row flags above the transition code: kept in the fighter
+const ROW_FLAG_BIT7 := 0x80
 
 ## The fields of a reaction record (21 s16, combat.md#reactions): reaction slots standing and
 ## crouching, then the push-back.
@@ -1027,18 +1032,12 @@ class Cursor:
 ## MoveBranchStep (0x8002DC3C).
 func branch_step(f: FighterState, opp: FighterState) -> void:
 	f.branch_window = -1
-	if f.move_row != null or f.step_cooldown > 0x19:
+	if f.move_row != null or f.step_cooldown > BRANCH_COOLDOWN_LIMIT:
 		return
-	var found := _branch_find(f, opp, Cursor.new(f.pose_move.bank.branches, f.pose_move.branches), f.pose_frame)
-	var row := found.row()
+	var row := _find_row(f, opp, f.pose_move, f.pose_frame)
 	if row[ROW_COMMAND] != END:
-		f.move_slot = Fx.s16(row[ROW_TARGET])
-		f.move_row = fight.move_for_slot(f, f.move_slot)
+		_take(f, row[ROW_TARGET], row[ROW_FLAGS])
 		f.branch_window = Fx.s16(row[ROW_LAST] - f.pose_frame)
-		var flags := row[ROW_FLAGS]
-		f.transition = _remap(f, flags & 0x3F)
-		f.trans_bit7 = flags >> 7
-		f.trans_bit6 = (flags >> 6) & 1
 		f.entry_frame = row[ROW_LAST] if f.frame_step < 0 else row[ROW_ENTRY]
 		if (f.entry_frame & 0xFFFF) == 0xFF:
 			f.entry_frame = f.pose_move.length
@@ -1047,7 +1046,7 @@ func branch_step(f: FighterState, opp: FighterState) -> void:
 	var first := row[ROW_FIRST]
 	var last := row[ROW_LAST]
 	var look := false
-	if f.pose_frame >= first - 5 and f.pose_frame < first:
+	if f.pose_frame >= first - LOOK_AHEAD_FRAMES and f.pose_frame < first:
 		look = f.frame_step >= 1 and (f.in_history[f.in_hist_index] & FighterInput.HIST_BUTTONS) != 0
 	if not look and first <= f.pose_frame and f.pose_frame <= last and f.frame_step > 0:
 		look = true
@@ -1060,33 +1059,43 @@ func branch_step(f: FighterState, opp: FighterState) -> void:
 		var heading := f.heading
 		f.heading = Fx.s16(heading + f.pose_move.end_turn)
 		relative_angles(f, opp)
-		var ahead := _branch_find(f, opp, Cursor.new(target.bank.branches, target.branches), 1)
+		var hit := _find_row(f, opp, target, 1)
 		f.heading = heading
 		relative_angles(f, opp)
-		var hit := ahead.row()
 		if hit[ROW_COMMAND] != END:
-			f.move_slot = Fx.s16(hit[ROW_TARGET])
-			f.move_row = fight.move_for_slot(f, f.move_slot)
 			f.entry_frame = first
-			f.trans_bit6 = (row[ROW_FLAGS] >> 6) & 1
+			_take(f, hit[ROW_TARGET], hit[ROW_FLAGS])
+			f.trans_bit6 = _flag_bit(row[ROW_FLAGS], ROW_FLAG_BIT6)
 			f.branch_window = Fx.s16(hit[ROW_LAST] - f.pose_frame)
-			var flags := hit[ROW_FLAGS]
-			f.transition = _remap(f, flags & 0x3F)
 			f.apply_end_turn = 1
 			f.branch_kind = 3
-			f.trans_bit7 = flags >> 7
 			return
 	var frame := f.pose_frame + f.frame_step
 	if f.pose_move.length < frame or frame < 1:
 		f.entry_frame = f.pose_frame
-		f.move_slot = Fx.s16(row[ROW_TARGET])
-		f.move_row = fight.move_for_slot(f, f.move_slot)
-		var flags := row[ROW_FLAGS]
-		f.transition = _remap(f, flags & 0x3F)
-		f.trans_bit7 = flags >> 7
+		_take(f, row[ROW_TARGET], row[ROW_FLAGS])
 		f.apply_end_turn = 1
 		f.branch_kind = 4
-		f.trans_bit6 = (flags >> 6) & 1
+
+
+## A branch row's target becomes the pending move; the transition's remap reads the entry frame the
+## fighter holds when the row is taken.
+func _take(f: FighterState, target: int, flags: int) -> void:
+	f.move_slot = Fx.s16(target)
+	f.move_row = fight.move_for_slot(f, f.move_slot)
+	f.transition = _remap(f, flags & 0x3F)
+	f.trans_bit7 = _flag_bit(flags, ROW_FLAG_BIT7)
+	f.trans_bit6 = _flag_bit(flags, ROW_FLAG_BIT6)
+
+
+## A row's flag bit `mask` as the fighter keeps it: 1 or 0 (the arcade keeps the masked bit itself).
+func _flag_bit(flags: int, mask: int) -> int:
+	return 1 if flags & mask != 0 else 0
+
+
+## The first row of `move`'s branch list that matches on `frame`, else the list's terminator.
+func _find_row(f: FighterState, opp: FighterState, move: MoveRow, frame: int) -> PackedInt32Array:
+	return _branch_find(f, opp, Cursor.new(move.bank.branches, move.branches), frame).row()
 
 
 func _remap(f: FighterState, code: int) -> int:
@@ -1199,17 +1208,29 @@ func _can_act_find(f: FighterState, opp: FighterState, start: Cursor, ahead: boo
 
 
 func _restriction_ok(f: FighterState, opp: FighterState, value: int) -> bool:
+	return restriction_holds(f, opp, value, _restriction_characters_end())
+
+
+## Where a restriction byte's "this character" range ends and "any other" begins.
+func _restriction_characters_end() -> int:
+	return RESTRICTION_CHARACTERS_END
+
+
+## A branch row's restriction byte: 0 any; then "this bank" (1–0x17), "any other bank" (0x18–0x2E),
+## "the opponent's bank" (0x2F–0x45) and "this character" (from 0x46 to `characters_end`), then "any
+## other character".
+static func restriction_holds(f: FighterState, opp: FighterState, value: int, characters_end: int) -> bool:
 	if value == 0:
 		return true
 	if value < 0x18:
 		return f.bank_type == value - 1
 	if value < 0x2F:
-		return value - 0x18 != f.bank_type
+		return f.bank_type != value - 0x18
 	if value < 0x46:
 		return opp.bank_type == value - 0x2F
-	if value < 0x5D:
+	if value < characters_end:
 		return f.char_id == value - 0x46
-	return value - 0x5D != f.char_id
+	return f.char_id != value - characters_end
 
 
 ## InputMatch (0x8002CE7C).

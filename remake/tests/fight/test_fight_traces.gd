@@ -240,7 +240,7 @@ func _compare(scenario: String, trace: FightTrace, sim: FightSimulation) -> void
 				lines.append("fighter %d %s" % [i, d])
 		if ai_compare != null:
 			for slot in 2:
-				lines.append_array(ai_compare.differences(sim.ai, slot, frame, banks))
+				lines.append_array(ai_compare.differences(sim.ai as CpuOpponent, slot, frame, banks))
 		for name: String in GLOBALS:
 			var g := JsonFile.ints(GLOBALS[name])
 			if not trace.has_ram(g[0], absi(g[1])):
