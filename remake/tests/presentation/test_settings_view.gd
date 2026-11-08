@@ -4,7 +4,8 @@ extends TestSuite
 ## key fields beside their pad pictures, or a drawn pad holding every button place); two columns on landscape windows, one on narrow windows; every row and
 ## field inside the panel and the panel inside the window, none overlapping, on both tabs; the
 ## settings with a single choice not shown; a tap or a drag on a volume's bar sets it there; a key
-## field takes the next key, Escape keeps its key.
+## field takes the next key, Escape keeps its key; the cross at the panel's top right corner closes
+## the screen.
 
 
 func _view(window: Vector2, tab: int) -> SettingsView:
@@ -31,6 +32,10 @@ func _check(window: Vector2, columns: int) -> void:
 			expect(view._panel.encloses(r), "%d inside the panel at %s" % [i, at])
 			placed.append(r)
 		placed.append_array(view._pictures)
+		expect(view._panel.encloses(view._close_rect), "the cross inside the panel at %s" % at)
+		for r in view._tab_rects:
+			expect(not view._close_rect.intersects(r), "the cross clear of the tabs at %s" % at)
+		placed.append(view._close_rect)
 		for a in placed.size():
 			for b in range(a + 1, placed.size()):
 				expect(not placed[a].grow(-1.0).intersects(placed[b].grow(-1.0)), "%s and %s apart at %s" % [placed[a],
@@ -246,6 +251,32 @@ func test_volume_by_touch() -> void:
 	Settings.set_value("volume_music", saved)
 	Settings._dirty = false
 	view.free()
+
+
+func test_cross_closes_the_screen() -> void:
+	for window: Vector2 in [Vector2(1280, 720), Vector2(720, 1280)]:
+		var view := _view(window, SettingsView.GAME)
+		view.visible = true
+		var closed := [0]
+		view.closed.connect(func() -> void: closed[0] += 1)
+		var touch := InputEventScreenTouch.new()
+		touch.pressed = true
+		touch.position = view._panel.position + Vector2(2, 2)
+		view._gui_input(touch)
+		expect_equal(closed[0], 0, "a tap on the panel's empty corner keeps it open at %s" % window)
+		expect(view.visible, "still shown at %s" % window)
+		touch.position = view._close_rect.get_center()
+		view._gui_input(touch)
+		expect_equal(closed[0], 1, "a tap on the cross closes it at %s" % window)
+		expect(not view.visible, "hidden at %s" % window)
+		view.visible = true
+		var click := InputEventMouseButton.new()
+		click.button_index = MOUSE_BUTTON_LEFT
+		click.pressed = true
+		click.position = view._close_rect.end + Vector2(view._row * SettingsView.CROSS_SLACK * 0.5, 0.0)
+		view._gui_input(click)
+		expect_equal(closed[0], 2, "a click just outside the cross still closes it at %s" % window)
+		view.free()
 
 
 func test_drawn_pad_holds_every_button_place() -> void:

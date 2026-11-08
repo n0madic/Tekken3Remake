@@ -144,8 +144,12 @@ attract movie.
   All of the arcade's fighters are open; `--day=<n>` sets the operator's day counter that opens them.
 - **What it lacks:** the main menu and the console's other modes (VS, Team Battle, Time Attack,
   Survival, Practice, Tekken Ball, Tekken Force, Theater), its Options and memory card, and anything
-  else the arcade does not have. Settings open with Select on the attract and the title; records are
-  kept in `arcade_records.json` in the user data folder.
+  else the arcade does not have. Records are kept in `arcade_records.json` in the user data folder.
+- **Pause and settings:** the cabinet has neither, so these are the remake's own. Select (Esc, Android's
+  Back, the touch controls' Select) opens the settings in any state, and the game waits while they are
+  open, music and sounds included: that is its pause. A fight whose window loses focus pauses itself.
+  Start is not the pause, because a game's Start joins a second player. On the attract and the title
+  the gear at the top left opens them too.
 - **Options and status:** [`remake/README.md`](remake/README.md) lists the command-line options of
   this build, and [the plan](docs/remake-plan.md#m6-arcade-only-build) its state.
 
@@ -162,7 +166,8 @@ appear on touch screens and belong to player 1.
 | Start / Select | Start / Select | Space / Q | Enter / Backspace |
 | Shoulder buttons | L1 R1 L2 R2 | Z X C V | O P L ; |
 
-- **Esc** pauses a fight, skips a movie, and goes back in the menus.
+- **Esc** pauses a fight, skips a movie, and goes back in the menus (in the arcade build it is Select:
+  it opens the settings, which pause the game, and closes them).
 - ✕ and ○ also skip what Start skips: the start-up, the attract sequence, replays and movies.
 - A click or tap is player 1's Start.
 - **F3** shows the frame rate.
@@ -172,7 +177,8 @@ The game's own key configuration (in OPTIONS) works as in the original.
 ## Settings
 
 Press **Select** on the main menu (Esc, Q or Backspace; on touch screens, the gear at the top left)
-to open the remake's settings:
+to open the remake's settings (in the arcade build, in any state). The cross at the window's top
+right corner closes them, as Circle, Select or Esc do, and so does a click or tap outside the window:
 
 - **Gameplay fixes**: fix the original's gameplay bugs, from the next mode started.
 - **Game texts**: English (USA) or Japanese (English only when converted from the USA disc).

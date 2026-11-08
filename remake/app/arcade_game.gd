@@ -88,7 +88,8 @@ func _ready() -> void:
 	Settings.changed.connect(_on_setting_changed)
 	RenderQuality.apply_viewport(get_viewport())
 	TranslationServer.set_locale(Settings.locale())
-	touch.visible = DisplayServer.is_touchscreen_available()
+	Pads.escape_rules = _escape_rules
+	_show_touch()
 	stats.position = Vector2(8, 8)
 	message.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -175,6 +176,8 @@ func _notification(what: int) -> void:
 			OrphanNodes.free_all(self)
 		NOTIFICATION_WM_CLOSE_REQUEST:
 			_quit()
+		NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_APPLICATION_PAUSED, NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+			_pause_on_focus_loss()
 
 
 func _quit() -> void:
@@ -184,18 +187,47 @@ func _quit() -> void:
 	DevOptions.quit_after_drain(get_tree())
 
 
-## The cabinet has no menu: the settings open from the attract and the title, where no game is on.
-func _settings_allowed() -> bool:
-	return flow.state == ArcadeGameFlow.State.ATTRACT or flow.state == ArcadeGameFlow.State.TITLE
-
-
+## The cabinet has no menu and no pause: this is the remake's own. Select (Escape on the keyboard,
+## Android's Back, the touch controls' Select) opens the settings in any state, and the game waits
+## while they are open: that is its pause. Start is not for it, a game's Start joins a challenger.
 func _open_settings() -> void:
-	if _settings_allowed():
-		settings_view.open()
+	if settings_view.visible:
+		return
+	settings_view.open()
+	audio.set_paused(true)
+	_show_touch()
 
 
 func _on_settings_closed() -> void:
 	_release_pads = true
+	audio.set_paused(false)
+	_show_touch()
+
+
+## The gear that opens the settings, where nothing else is on screen: the attract and the title.
+func _gear_shown() -> bool:
+	return not settings_view.visible and (flow.state == ArcadeGameFlow.State.ATTRACT or flow.state == ArcadeGameFlow.State.TITLE)
+
+
+## The touch controls where the settings want them (hidden while the settings are open: the panel
+## takes the taps).
+func _show_touch() -> void:
+	touch.set_macros(Settings.text("touch_macros"))
+	touch.set_scale_share(Settings.touch_scale())
+	touch.visible = Settings.touch_enabled() and not settings_view.visible
+	if not touch.visible:
+		touch.reset()
+
+
+## Escape stands for Select, always: the pause, and the way out of the settings.
+func _escape_rules() -> Vector2i:
+	return Vector2i(PadState.SELECT, -1)
+
+
+## A fight whose window lost focus (or went to the background) pauses; a scripted session does not.
+func _pause_on_focus_loss() -> void:
+	if flow != null and flow.state == ArcadeGameFlow.State.MATCH and _pad_script.is_empty() and options.screenshot_path.is_empty():
+		_open_settings()
 
 
 func _on_setting_changed(key: String) -> void:
@@ -203,17 +235,19 @@ func _on_setting_changed(key: String) -> void:
 		RenderQuality.apply_viewport(get_viewport())
 	elif key == "attract_sound" and flow != null:
 		flow.settings.attract_sound = _attract_sound()
+	elif key == "touch_controls" or key == "touch_macros" or key == "touch_size":
+		_show_touch()
 
 
 func _physics_process(_delta: float) -> void:
-	settings_button.visible = _settings_allowed() and not settings_view.visible
+	settings_button.visible = _gear_shown()
 	settings_button.place(touch.top_left_free if touch.visible else Rect2())
 	for i in options.speed:
 		var pads := _pads()
 		steps += 1
 		if settings_view.visible:
 			settings_view.handle(pads[0] | pads[1])
-		elif _settings_allowed() and (pads[0] | pads[1]) & ~_previous_pads & PadState.SELECT:
+		elif (pads[0] | pads[1]) & ~_previous_pads & PadState.SELECT:
 			_open_settings()
 		else:
 			_step(pads)
@@ -347,7 +381,9 @@ func _process(_delta: float) -> void:
 	if stats.visible:
 		stats.text = "%s  state %d sub %d  step %d  %.0f µs" % [options.render_stats(get_viewport()), flow.state, flow.sub, steps, _step_usec]
 	var window := get_viewport().get_visible_rect().size
-	var fraction := options.weight(Engine.get_physics_interpolation_fraction()) if Settings.flag("interpolation") else 1.0
+	# A paused game stands on its last step: interpolating would swing the poses back and forth.
+	var interpolated := Settings.flag("interpolation") and not settings_view.visible
+	var fraction := options.weight(Engine.get_physics_interpolation_fraction()) if interpolated else 1.0
 	var surround := Settings.text("framing") == "stage"
 	if fight_view != null and fight_view.visible:
 		fight_view.rig.camera.make_current()

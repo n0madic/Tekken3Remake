@@ -11,8 +11,8 @@ extends Control
 ## and right (or Cross and Start) change it, Circle or Select (Esc) close the screen. Cross, Enter
 ## or a click on a field waits for the field's new key (Esc cancels, a gamepad button too). A
 ## click or tap on a row changes it too (on a volume's bar it sets the volume there, and a drag
-## along the bar follows the finger), one outside the panel closes it (the touch controls are
-## hidden while it is open). Settings with a single choice in this build are not shown. The rows
+## along the bar follows the finger), the cross at the panel's top right corner and a click or tap
+## outside the panel close it (the touch controls are hidden while it is open). Settings with a single choice in this build are not shown. The rows
 ## stand in two columns on landscape windows, in one on narrow ones. The interface strings are
 ## translated (app/translations).
 
@@ -90,6 +90,9 @@ const PAD_LINES := 1.1 + FIELDS_PER_SIDE * FIELD_PITCH + 0.3   ## a pad picture 
 const PICTURE_SHARE := 0.42            ## the widest pad picture, of its panel's width
 const GLYPH_ROWS := 1.2                ## a field's button glyph, in rows
 const SCREEN_MARGIN := 8.0
+const CROSS_SIZE := 0.9                ## the closing cross's side, in rows
+const CROSS_MARGIN := 0.2              ## its distance from the panel's corner, in rows
+const CROSS_SLACK := 0.25              ## taps this far outside it still close the screen, in rows
 const REPEAT_DELAY := 16               ## frames before a held direction repeats, then every REPEAT_RATE
 const REPEAT_RATE := 4
 const UP := PadState.UP
@@ -116,6 +119,7 @@ var _column_of := PackedInt32Array()   ## each row's column on the tab last arra
 var _line_of := PackedInt32Array()     ## and its line there (−1: not there)
 var _dragging := -1                    ## the volume row a finger or the mouse drags along
 var _panel := Rect2()
+var _close_rect := Rect2()             ## the cross at the panel's top right corner
 var _row := MIN_ROW
 var _suppress := true                  ## buttons held when the screen opened are ignored until released
 
@@ -264,6 +268,9 @@ func _gui_input(event: InputEvent) -> void:
 		return
 	accept_event()
 	_layout()
+	if _close_rect.grow(_row * CROSS_SLACK).has_point(at):
+		close()
+		return
 	var was_listening := listening >= 0
 	listening = -1
 	for t in _tab_rects.size():
@@ -536,6 +543,8 @@ func _layout() -> void:
 	var width := minf(size.x - 2.0 * SCREEN_MARGIN, count * COLUMN_ROWS * _row + (count + 1) * pad)
 	var height := _row * lines
 	_panel = Rect2((size - Vector2(width, height)) / 2.0, Vector2(width, height))
+	var cross := _row * CROSS_SIZE
+	_close_rect = Rect2(_panel.end.x - cross - _row * CROSS_MARGIN, _panel.position.y + _row * CROSS_MARGIN, cross, cross)
 	var column_width := (width - (count + 1) * pad) / count
 	var left := _panel.position.x + pad * 0.6     # the first column's rows, a column further each column_step
 	var column_step := column_width + pad
@@ -596,6 +605,7 @@ func _draw() -> void:
 	var text_size := int(row * 0.56)
 	draw_rect(_panel, PANEL)
 	draw_rect(_panel, EDGE, false, 1.5)
+	_draw_cross()
 	var pad := row * 0.6
 	var x := _panel.position.x + pad
 	var width := _panel.size.x - 2.0 * pad
@@ -643,6 +653,18 @@ func _draw() -> void:
 	var keys := tr("SETTINGS_KEYS")
 	draw_string(font, Vector2(x, _panel.end.y - row * 0.35), keys, HORIZONTAL_ALIGNMENT_CENTER, width,
 		_fitted(keys, width, int(row * 0.42)), MUTED)
+
+
+## The closing cross: a box with an X in it.
+func _draw_cross() -> void:
+	var c := _close_rect
+	var inset := c.size * 0.28
+	var thickness := maxf(2.0, _row * 0.09)
+	draw_rect(c, BOX)
+	draw_rect(c, EDGE, false, 1.0)
+	draw_line(c.position + inset, c.end - inset, VALUE, thickness, true)
+	draw_line(Vector2(c.end.x - inset.x, c.position.y + inset.y), Vector2(c.position.x + inset.x, c.end.y - inset.y),
+		VALUE, thickness, true)
 
 
 func _help(i: int) -> String:

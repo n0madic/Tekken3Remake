@@ -315,6 +315,20 @@ func advance() -> void:
 	_run_music()
 
 
+## The pause: the voices and the music hold where they are and go on from there. The board's clock
+## stands still meanwhile, as nothing calls `advance`.
+func set_paused(paused: bool) -> void:
+	for p in _players:
+		p.stream_paused = paused
+	for p in _music:
+		p.stream_paused = paused
+	if _fade != null and _fade.is_valid():
+		if paused:
+			_fade.pause()
+		else:
+			_fade.play()
+
+
 # ==== the music ===================================================================================
 
 func play_music(sequence: int) -> void:
