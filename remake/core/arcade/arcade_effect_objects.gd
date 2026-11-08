@@ -6,6 +6,13 @@ extends RefCounted
 ## simulation state: the objects draw on the shared `rand()`, which the CPU's decisions read, and the
 ## fire and the clouds publish the hit segments of their owner's move.
 ##
+## TODO: the update functions below (`_spark`, `_spray`, `_rise`, `_ember`, `_smoke`, `_floor_fire`,
+## `_cloud` ...) are near copies of `EffectObjects`' (~600 lines); only `finish`, `move`, `save_previous`
+## and `rand2` are shared. They differ in being instance methods over `tables` instead of statics over
+## `fight`, in the look lines (`_show` flipbooks against clut and uv_table) and in the tables they read.
+## Merging them takes the PlayStation's statics turned into instance methods with a hook for the look, and
+## a trace that reaches the object types `tests/support/effect_pool_hashes.gd` lists as uncovered.
+##
 ## The pool is `fight.effects`, the objects `EffectObjects.Obj`. FUN_801DC990 walks the live ones in
 ## allocation order; it takes the next link before each update, so an object spawned while the last one
 ## updates waits for the next frame, otherwise it updates in the same walk. The presentation draws an
@@ -81,13 +88,6 @@ func alloc(type: int) -> EffectObjects.Obj:
 	o.flags = MARK
 	objects.append(o)
 	return o
-
-
-## FUN_801DD168: the object ends; it stays in the pool as type 0 for two more updates.
-static func finish(o: EffectObjects.Obj) -> void:
-	o.type = Type.FINISHED
-	o.state = 0
-	o.flags = MARK
 
 
 ## FUN_801DC094.
@@ -383,26 +383,6 @@ func _aim_flat(o: EffectObjects.Obj) -> void:
 	o.vz = Fx.w32((speed * tables.cos_table[w]) >> 3)
 
 
-## One step along the velocity (the upper halves of the 16.16 values).
-static func _move(o: EffectObjects.Obj) -> void:
-	o.x = Fx.w32(o.x + Fx.s16(o.vx >> 16))
-	o.y = Fx.w32(o.y + Fx.s16(o.vy >> 16))
-	o.z = Fx.w32(o.z + Fx.s16(o.vz >> 16))
-
-
-static func _save_previous(o: EffectObjects.Obj) -> void:
-	o.px = o.x
-	o.py = o.y
-	o.pz = o.z
-
-
-## Two rand() draws as the game combines them: (first, first | second << 16).
-func _rand2() -> Vector2i:
-	var r1 := fight.rng.next()
-	var r2 := fight.rng.next()
-	return Vector2i(r1, r1 | r2 << 16)
-
-
 ## FUN_801E0B3C: the owner's move no longer runs `code`, or is before its active window.
 func _owner_ended(o: EffectObjects.Obj, code: int) -> bool:
 	var f := fight.fighters[0] if o.flags & OWNER_0 else fight.fighters[1]
@@ -462,7 +442,7 @@ func _spark(o: EffectObjects.Obj, power: bool) -> void:
 		o.state += 1
 		o.flags |= VISIBLE
 		o.model = EffectObjects.Model.POWER_SPARK if power else EffectObjects.Model.SPARK
-		var r := _rand2()
+		var r := EffectObjects.rand2(fight)
 		var u := r.y
 		var pitch_step := ((r.x & 0x7FF) - 0x3FF) * 2
 		var yaw_step := (((u >> 2) & 0x7FF) - 0x3FF) * 2
@@ -480,10 +460,10 @@ func _spark(o: EffectObjects.Obj, power: bool) -> void:
 		var ease := Fx.div_trunc(tables.cos_table[Fx.div_trunc(o.a * 0x7FF, o.b) & 0xFFF] + 0x7FFF, 2)
 		o.speed = Fx.s16(((o.d - o.c) * ease >> 15) + o.c)
 		_aim(o)
-		_move(o)
+		EffectObjects.move(o)
 		if o.y < 0:
 			return
-	finish(o)
+	EffectObjects.finish(o)
 
 
 ## Types 2 and 13 (FUN_801DD67C, FUN_801E071C): sparks sprayed from a jittered start at a constant speed.
@@ -492,7 +472,7 @@ func _spray(o: EffectObjects.Obj, power: bool) -> void:
 		o.state += 1
 		o.flags |= VISIBLE
 		o.model = EffectObjects.Model.POWER_SPARK if power else EffectObjects.Model.SPARK
-		var r := _rand2()
+		var r := EffectObjects.rand2(fight)
 		var u := r.y
 		o.b = ((u >> 10) & 0x1F) + 0x14
 		o.a = 0
@@ -511,10 +491,10 @@ func _spray(o: EffectObjects.Obj, power: bool) -> void:
 	o.a += 1
 	if o.a < o.b:
 		_spark_frame(o, power)
-		_move(o)
+		EffectObjects.move(o)
 		if o.y < 0:
 			return
-	finish(o)
+	EffectObjects.finish(o)
 
 
 ## Type 3 (FUN_801DDA9C): the power glow on one joint (+0x8000: the second fighter's), shown while the
@@ -555,7 +535,7 @@ func _rise(o: EffectObjects.Obj) -> void:
 		o.flags |= VISIBLE | FOLLOWS
 		o.model = EffectObjects.Model.GLOW_RISE
 		o.b = -1
-		var r := _rand2()
+		var r := EffectObjects.rand2(fight)
 		o.vy = 0
 		o.x = Fx.w32(o.x - 0x3F + (r.x & 0x7F))
 		o.y = Fx.w32(o.y - 0x3F + ((r.y >> 2) & 0x7F))
@@ -568,7 +548,7 @@ func _rise(o: EffectObjects.Obj) -> void:
 		o.vy = Fx.w32(o.vy + 0x12000)
 		o.y = Fx.w32(o.y - (o.vy >> 16))
 	else:
-		finish(o)
+		EffectObjects.finish(o)
 
 
 ## Type 5 (FUN_801DE204): a rising ember.
@@ -579,7 +559,7 @@ func _ember(o: EffectObjects.Obj) -> void:
 		o.model = EffectObjects.Model.EMBER
 		o.a = -1
 		o.vy = 0
-		var r := _rand2()
+		var r := EffectObjects.rand2(fight)
 		o.x = Fx.w32(o.x - 0x7F + (r.x & 0xFF))
 		o.z = Fx.w32(o.z - 0x7F + ((r.y >> 4) & 0xFF))
 	elif o.state != 1:
@@ -590,7 +570,7 @@ func _ember(o: EffectObjects.Obj) -> void:
 		o.vy = Fx.w32(o.vy + 0x12000)
 		o.y = Fx.w32(o.y - (o.vy >> 16))
 	else:
-		finish(o)
+		EffectObjects.finish(o)
 
 
 ## Type 6 (FUN_801DE520): a fireball of the fire breath: grows, loops, bursts; slides along the floor; its
@@ -607,8 +587,8 @@ func _fireball(o: EffectObjects.Obj) -> void:
 			_fireball_loop(o)
 		3:
 			_fireball_burst(o)
-	_save_previous(o)
-	_move(o)
+	EffectObjects.save_previous(o)
+	EffectObjects.move(o)
 	if o.y > FLOOR:
 		o.y = FLOOR
 		o.pitch = 0
@@ -631,7 +611,7 @@ func _fireball(o: EffectObjects.Obj) -> void:
 func _fireball_start(o: EffectObjects.Obj) -> void:
 	o.state += 1
 	o.flags |= VISIBLE | SEGMENT
-	var r := _rand2()
+	var r := EffectObjects.rand2(fight)
 	o.model = EffectObjects.Model.FIREBALL_B if r.x & 1 == 0 else EffectObjects.Model.FIREBALL_A
 	o.a = 0
 	o.c = 0
@@ -668,7 +648,7 @@ func _fireball_burst(o: EffectObjects.Obj) -> void:
 		if o.flags & SEGMENT and tables.segment_fireball[o.c & 7] == 0:
 			o.flags &= ~SEGMENT
 	else:
-		finish(o)
+		EffectObjects.finish(o)
 
 
 ## Type 7 (FUN_801DEDF0): a smoke puff that rises faster and faster; ends at the floor.
@@ -679,7 +659,7 @@ func _smoke(o: EffectObjects.Obj) -> void:
 				o.state += 1
 				o.flags |= VISIBLE
 				o.model = EffectObjects.Model.SMOKE
-				var r := _rand2()
+				var r := EffectObjects.rand2(fight)
 				var u := r.y
 				o.b = (u >> 10) & 0x1F
 				o.a = 0
@@ -700,11 +680,11 @@ func _smoke(o: EffectObjects.Obj) -> void:
 			if o.a < 8:
 				_show(o, Book.FIRE_BURST, o.a)
 			else:
-				finish(o)
+				EffectObjects.finish(o)
 	o.vy = Fx.w32(o.vy - 0x30000)
-	_move(o)
+	EffectObjects.move(o)
 	if o.y >= 0:
-		finish(o)
+		EffectObjects.finish(o)
 
 
 ## Type 9 (FUN_801DF394): floor fire: flickers, then rises and fades; emits smoke until its last update.
@@ -715,7 +695,7 @@ func _floor_fire(o: EffectObjects.Obj) -> void:
 				o.state += 1
 				o.flags |= VISIBLE
 				o.model = EffectObjects.Model.FLOOR_FIRE
-				var r := _rand2()
+				var r := EffectObjects.rand2(fight)
 				o.y = -0x100
 				o.a = r.y >> 2
 				o.vy = 0
@@ -733,7 +713,7 @@ func _floor_fire(o: EffectObjects.Obj) -> void:
 				_show(o, Book.FLOOR_FADE, (o.a & 0x1E) >> 1)
 				o.y = Fx.w32(o.y + (o.vy >> 16))
 			else:
-				finish(o)
+				EffectObjects.finish(o)
 	if fight.rng.next() & 0x1F == 0:
 		_spawn_smoke(o, SMOKE_PITCH, 0)
 
@@ -746,7 +726,7 @@ func _cloud(o: EffectObjects.Obj) -> void:
 		o.state += 1
 		o.flags |= VISIBLE | SEGMENT
 		o.model = EffectObjects.Model.CLOUD
-		var r := _rand2()
+		var r := EffectObjects.rand2(fight)
 		o.c = -1
 		o.speed = 0x300
 		o.pitch = Fx.s16(o.pitch - 0x7F + (r.x & 0xFF))
@@ -759,9 +739,9 @@ func _cloud(o: EffectObjects.Obj) -> void:
 			if o.flags & SEGMENT and tables.segment_cloud[o.c] == 0:
 				o.flags &= ~SEGMENT
 		else:
-			finish(o)
-	_save_previous(o)
-	_move(o)
+			EffectObjects.finish(o)
+	EffectObjects.save_previous(o)
+	EffectObjects.move(o)
 
 
 ## Type 11 (FUN_801DFCC0): one flame of a burning body, following its joint; then it rises and bursts. The
@@ -785,7 +765,7 @@ func _burn(o: EffectObjects.Obj) -> void:
 				o.vy = Fx.w32(o.vy - 0x18000)
 				o.y = Fx.w32(o.y + (o.vy >> 16))
 			else:
-				finish(o)
+				EffectObjects.finish(o)
 
 
 func _burn_follow(o: EffectObjects.Obj) -> void:

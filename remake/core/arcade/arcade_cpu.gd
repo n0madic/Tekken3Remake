@@ -17,7 +17,6 @@ const ATTRACT_LEVEL := 4
 const DRAW_MASK := 0xFFF                ## word draws: chances out of 4096
 const ROW_ADDRESSES := 0x80025E8C       ## the game address of a move row (kept by the hit history)
 const ROW_BYTES := 0x3C
-const APPROACH_HOLD := 0x28             ## +0x5C after an approach starts or stops
 const LONG_APPROACH_HOLD := 0x3C
 const FIRST_WAIT := 0x3C
 const FIRST_HOLD := 0x32
@@ -33,10 +32,6 @@ const LP := 0x200
 const RP := 0x100
 const LK := 0x40
 const RK := 0x20
-const STEP_LP := 0x100                  ## script steps: buttons in bits 8–11
-const STEP_RP := 0x200
-const STEP_LK := 0x400
-const STEP_RK := 0x800
 
 const SEQUENCES_B_FIRST := 0xC7FF
 const ATTRACT_BANK := 4                 ## the demonstration keeps this bank's slot out of the lists
@@ -67,15 +62,11 @@ const REACH_DEFAULT := HINT_CLOSE | HINT_MIDDLE
 # State bits of a move row the code names only by number (StateBit's doc).
 const STATE_BIT19 := 0x80000
 const STATE_BIT21 := 0x200000
-const STATE_BIT22 := 0x400000
 const QUICK_ATTACK := 0xC               ## FUN_801C689C: active before this frame
 const WALK_COMMANDS := 0x3FE0
 const DIRECTION_COMMANDS := 0xFFE0
 const MOTION_COMMANDS := 0xC200
 const NO_MOTION := 0x200
-# Hook results (FUN_801CD708): a pad word otherwise.
-const HOOK_NOTHING := -1
-const HOOK_ACTED := -2
 
 var arcade_records: Array[ArcadeAiRecord] = []
 var r: ArcadeAiRecord                   ## 0x8021FB84
@@ -90,6 +81,7 @@ var _skip_last := false
 
 func _init(fight_state: FightState, move_system: MoveSystem) -> void:
 	super(fight_state, move_system)
+	step_buttons = PackedInt32Array([LP, RP, LK, RK])
 	for i in RECORDS:
 		arcade_records.append(ArcadeAiRecord.new())
 	cand_index.resize(MAX_CANDIDATES)
@@ -459,25 +451,6 @@ func execute() -> int:
 
 # ---- pads and scripts -------------------------------------------------------------------------
 
-## FUN_801C3EA0's pad word of a script step.
-func step_pad(step: int) -> int:
-	var pad := LP if step & STEP_LP else 0
-	if step & STEP_RP:
-		pad |= RP
-	if step & STEP_LK:
-		pad |= LK
-	if step & STEP_RK:
-		pad |= RK
-	return pad | t.numpad_pads[step & 0xF]
-
-
-## FUN_801C3EA0: presses the first step and keeps the rest pending.
-func start_steps(steps: PackedInt32Array) -> void:
-	r.script_steps = steps
-	r.script_at = 1 if steps.size() > 1 else -1
-	r.pad = step_pad(steps[0] if not steps.is_empty() else 0)
-
-
 ## FUN_8018EA28: whether a command has an input sequence, and its steps.
 func _has_sequence(command: int) -> bool:
 	if command < ArcadeMoveSystem.SEQUENCES_A_FIRST:
@@ -503,19 +476,12 @@ func press(command: int, target: MoveRow) -> int:
 	command &= 0xFFFF
 	var result := -1
 	if command & 0xC000 == 0:
-		var d := 9
-		while d > 0 and t.direction_masks[d] & ((command & 0x3FFF) >> 5) == 0:
-			d -= 1
-		var buttons := 0
-		for k in 4:
-			if (command >> k) & 1:
-				buttons |= t.button_pads[k]
-		r.pad = t.direction_pads[d] | buttons
+		r.pad = command_pad(command)
 		result = r.pad
 	else:
 		if command & 0xC000 != 0xC000 or not _has_sequence(command):
 			return 0
-		start_steps(_sequence_steps(command))
+		start_script(r, _sequence_steps(command))
 	r.pressed_move = target
 	return result
 
@@ -531,15 +497,7 @@ func after_press(row: PackedInt32Array) -> void:
 		r.wait = r.word(ArcadeAiRecord.Param.WAIT) + r.word(ArcadeAiRecord.Param.WAIT_EXTRA + extra)
 		if r.air_cooldown > 0:
 			r.air_cooldown = -1
-		stop_approach()
-
-
-## The approach state cleared, as many steps do.
-func stop_approach() -> void:
-	r.approach_hold = APPROACH_HOLD
-	r.approach_kind = 0
-	r.approach = 0
-	r.direction_hold = -1
+		reset_approach(r)
 
 
 ## FUN_801C3134.
@@ -556,27 +514,12 @@ func set_long_approach(frames: int, kind: int) -> void:
 	r.approach_hold = frames + LONG_APPROACH_HOLD
 
 
-const SIDE_STEP_AUTO := -1
-const HEADING_SIDE_A := 0x101           ## headings the side-step choice reads by their half turn
-const HEADING_SIDE_A_SPAN := 0x7EFF
-const HEADING_SIDE_B := 0x7FFF
-const HEADING_SIDE_B_SPAN := 0x7EFE
-
-
 ## FUN_801CDA04: a side step; SIDE_STEP_AUTO picks the side from the opponent's heading.
 func step_aside(side: int) -> void:
 	if side == SIDE_STEP_AUTO:
-		var heading := opp.heading_delta & 0xFFFF
-		if _span(heading - HEADING_SIDE_A, HEADING_SIDE_A_SPAN):
-			side = 0
-		elif (heading + HEADING_SIDE_B) & 0xFFFF < HEADING_SIDE_B_SPAN:
-			side = 1
-		else:
-			side = (fight.rng.next() >> 4) & 1
-		if opp.screen_x < me.screen_x:
-			side = 1 - side
-	start_steps(t.side_steps[side])
-	stop_approach()
+		side = auto_side(opp.heading_delta, opp.screen_x, me.screen_x)
+	start_script(r, t.side_steps[side])
+	reset_approach(r)
 
 
 static func _span(value: int, count: int) -> bool:
@@ -857,16 +800,11 @@ func run_hook(hook: AiTables.Hook) -> int:
 
 
 const PAUL_SLOT := 0x2CB
-const PAUL_BACK_FRAME := 0x10
 
 
 ## 0x801CE078.
 func _vs_paul() -> int:
-	if opp.cur_slot == PAUL_SLOT and r.reach_band < 3:
-		if opp.pose_frame >= PAUL_BACK_FRAME:
-			return BACK
-		r.wait = -1
-	return HOOK_NOTHING
+	return vs_paul(r, opp, PAUL_SLOT, BACK)
 
 
 const YOSHI_SLOT_A := 0x157
@@ -936,7 +874,7 @@ func _vs_yoshimitsu_d() -> int:
 	if rel_of(opp) > 0x1000:
 		return HOOK_NOTHING if r.reach_band < 2 else FORWARD
 	if r.reach_band >= 3 and fight.fighter_distance < YOSHI_DASH_DISTANCE:
-		start_steps(t.back_dash)
+		start_script(r, t.back_dash)
 		return HOOK_ACTED
 	if r.opp_until >= 11:
 		if r.reach_band < 2:
@@ -962,34 +900,14 @@ func _vs_yoshimitsu_e() -> int:
 
 const OGRE_SLOT_BREATH := 0x904
 const OGRE_SLOT_SWEEP := 0x156
-const OGRE_NEAR := 0x1B59
 const OGRE_WAIT := 8
-const NO_SIDE := -1
-
-
-## 0x801CDB78: the side to step to from Ogre's sweep, −1 for none.
-func _ogre_sweep_side() -> int:
-	if ((me.heading_delta & 0xFFFF) + 0x2000) & 0xFFFF > 0x4000 or me.pose_move.state & STATE_BIT22 != 0 \
-			or fight.fighter_distance >= OGRE_NEAR:
-		return NO_SIDE
-	return 1 if me.screen_x < opp.screen_x else 0
 
 
 ## 0x801CDBE8: steps aside from Ogre's breath when his heading allows it; the side, −1 for none.
 func _ogre_breath_side() -> int:
-	if me.pose_move.state & STATE_BIT22 != 0 or fight.fighter_distance >= OGRE_NEAR:
-		return NO_SIDE
-	var heading := opp.heading_delta & 0xFFFF
-	var side := NO_SIDE
-	if _span(heading - HEADING_SIDE_A, HEADING_SIDE_A_SPAN):
-		side = 0
-	elif (heading + HEADING_SIDE_B) & 0xFFFF < HEADING_SIDE_B_SPAN:
-		side = 1
-	else:
-		return NO_SIDE
-	if opp.screen_x < me.screen_x:
-		side = 1 - side
-	step_aside(side)
+	var side := ogre_breath_side(me, opp, opp.heading_delta, fight.fighter_distance)
+	if side != NO_SIDE:
+		step_aside(side)
 	return side
 
 
@@ -1065,7 +983,7 @@ func _vs_ogre_sweep() -> int:
 	var frame := opp.pose_frame
 	var move := opp.pose_move
 	if frame < move.active_first - 8:
-		var side := _ogre_sweep_side()
+		var side := ogre_sweep_side(me, opp, fight.fighter_distance)
 		if r.band <= 0:
 			r.wait = -1
 			return FORWARD
@@ -1093,16 +1011,16 @@ func _as_king() -> int:
 		return HOOK_NOTHING
 	if fight.rng.next() & 7 == 0 and r.opp_state & StateBit.STANDING != 0 and r.band < 3 and opp.in_air == 0 \
 			and _king_may_start() and branch_open(KING_THROW_SLOT):
-		start_steps(t.king_throws[draw() % t.king_throws.size()])
+		start_script(r, t.king_throws[draw() % t.king_throws.size()])
 		r.planned_on = 1
 		return HOOK_ACTED
 	if r.opp_state & StateBit.CROUCHING != 0 and r.band < 2 and _king_may_start() and grab_open():
-		start_steps(t.king_vs_crouch[fight.rng.next() & 1])
+		start_script(r, t.king_vs_crouch[fight.rng.next() & 1])
 		return HOOK_ACTED
 	if r.opp_down != 0 and r.band < 2 and (opp.facing_quadrant == 0 or opp.facing_quadrant == 2) \
 			and me.facing_quadrant == 0 and opp.about_to_hit == 0 and me.pose_move.active_first == 0 \
 			and r.opp_until >= KING_SAFE_UNTIL and r.vs_stance == 0 and grab_open():
-		start_steps(t.king_ground[fight.rng.next() & 1])
+		start_script(r, t.king_ground[fight.rng.next() & 1])
 		return HOOK_ACTED
 	return HOOK_NOTHING
 
@@ -1117,8 +1035,4 @@ const HWOARANG_SLOT := 0x827
 
 ## 0x801CE984.
 func _as_hwoarang() -> int:
-	if me.cur_slot != HWOARANG_SLOT:
-		return HOOK_NOTHING
-	if _span((me.pose_frame & 0xFFFF) - 0xD, 5) and r.opp_until < 10:
-		return HOOK_NOTHING
-	return FORWARD if fight.rng.next() & 0xF != 0 else HOOK_NOTHING
+	return as_hwoarang(r, me, HWOARANG_SLOT, FORWARD)

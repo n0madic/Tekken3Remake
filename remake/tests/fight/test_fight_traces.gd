@@ -230,9 +230,11 @@ func _run(scenario: String) -> void:
 func _compare(scenario: String, trace: FightTrace, sim: FightSimulation) -> void:
 	var compare := FighterCompare.new(trace)
 	var ai_compare := AiCompare.new(trace) if AiCompare.applies(trace) else null
+	var pool_hash := EffectPoolHash.new()
 	for frame in trace.frames:
 		expect_equal(sim.main_state, trace.sub_state(frame), "%s frame %d FightMain state" % [scenario, frame])
 		sim.step(PackedInt32Array([trace.pad(frame, 0), trace.pad(frame, 1)]))
+		pool_hash.add(sim.fight.effects)
 		var banks: Array[MotionBank] = [sim.fight.fighters[0].bank, sim.fight.fighters[1].bank, _content.common]
 		var lines := PackedStringArray()
 		for i in 2:
@@ -258,6 +260,7 @@ func _compare(scenario: String, trace: FightTrace, sim: FightSimulation) -> void
 			expect(false, "%s frame %d (FightMain %d, round state %d):\n    %s" % [scenario, frame,
 				trace.sub_state(frame), sim.fight.round_state, "\n    ".join(shown)])
 			return
+	expect_equal(pool_hash.value, EffectPoolHashes.PLAYSTATION.get(scenario, -1), "%s effect pool hash" % scenario)
 
 
 func _global(sim: FightSimulation, name: String) -> int:

@@ -79,7 +79,7 @@ const DOWN_STATE := StateBit.DOWN
 const AIRBORNE := StateBit.AIRBORNE
 const STATE_CHARGING := ArcadeCpu.STATE_BIT19
 const STATE_SPECIAL := ArcadeCpu.STATE_BIT21
-const STATE_RECOVERS := ArcadeCpu.STATE_BIT22
+const STATE_RECOVERS := CpuMachinery.STATE_BIT22
 const WORD_LINKED := 0x80000           ## the attack word's bit that keeps a string counted
 
 # Fixed values of the distance and angle tests.
@@ -280,7 +280,7 @@ func _step_script() -> bool:
 	r.script_at += 1
 	if r.script_at >= r.script_steps.size():
 		r.script_at = -1
-	r.pad = cpu.step_pad(step)
+	r.pad = cpu.pad_from_step(step)
 	return true
 
 
@@ -308,7 +308,7 @@ func _refresh() -> void:
 	r.collected_move = sm
 	r.move_frame_seen = my_frame
 	if r.own_state & STATE_RECOVERS != 0:
-		cpu.stop_approach()
+		CpuMachinery.reset_approach(r)
 	_count_attacks()
 	_distance_bands()
 	_opponent_attack()
@@ -459,7 +459,7 @@ func _step_throw() -> bool:
 		r.throw_press_frame = -1
 		r.throw_row = -1
 		return false
-	cpu.stop_approach()
+	CpuMachinery.reset_approach(r)
 	var changed := sm != r.throw_move
 	if f.throw_state < 1:
 		if changed:
@@ -504,7 +504,7 @@ func _next_throw_step() -> void:
 func _step_launched() -> bool:
 	if r.own_state & 0xFFFF != StateWord.LAUNCHED or my_first != 0:
 		return false
-	cpu.stop_approach()
+	CpuMachinery.reset_approach(r)
 	r.marked_count = 0
 	r.collected_move = sm
 	r.candidate_count = cpu.collect_current()
@@ -546,7 +546,7 @@ func _step_neutral() -> bool:
 		r.pad = 0
 		return true
 	r.neutral_action = 1
-	cpu.stop_approach()
+	CpuMachinery.reset_approach(r)
 	r.move_block = NEUTRAL_MOVE_BLOCK
 	r.neutral_actions += 1
 	if r.neutral_actions < NEUTRAL_GRACE and _breath_coming():
@@ -636,9 +636,9 @@ func _step_hook(hook: AiTables.Hook) -> bool:
 	if r.move_block >= 0 or hook == AiTables.Hook.NONE or not _below(WORD_HOOKS):
 		return false
 	var result := cpu.run_hook(hook)
-	if result == ArcadeCpu.HOOK_ACTED:
+	if result == CpuMachinery.HOOK_ACTED:
 		return true
-	if result == ArcadeCpu.HOOK_NOTHING:
+	if result == CpuMachinery.HOOK_NOTHING:
 		return false
 	r.pad = result
 	if result == FORWARD or result == BACK:
@@ -797,7 +797,7 @@ func _step_counter() -> bool:
 		return true
 	if _below(WORD_SIDE_STEP) and _span(r.opp_until - 9, 3) and _rel() < 0x4000 \
 			and r.own_state & STATE_RECOVERS == 0 and r.band > 1:
-		cpu.step_aside(ArcadeCpu.SIDE_STEP_AUTO)
+		cpu.step_aside(CpuMachinery.SIDE_STEP_AUTO)
 		r.wait -= 10
 		return true
 	return false
@@ -813,13 +813,13 @@ func _attack_blockable() -> bool:
 func _guard_pad() -> int:
 	if f.facing_quadrant != 0:
 		return 0
-	cpu.stop_approach()
+	CpuMachinery.reset_approach(r)
 	return BACK if r.opp_attack == AttackWord.MID else DOWN_BACK
 
 
 ## FUN_801CD948.
 func _walk_pad() -> int:
-	cpu.stop_approach()
+	CpuMachinery.reset_approach(r)
 	return FORWARD if r.frame_count & 1 != r.slot else 0
 
 
@@ -962,7 +962,7 @@ func _step_react() -> bool:
 		Reaction.EVADE:
 			return _evade_step()
 		Reaction.SIDE_STEP:
-			cpu.step_aside(ArcadeCpu.SIDE_STEP_AUTO)
+			cpu.step_aside(CpuMachinery.SIDE_STEP_AUTO)
 			r.wait -= 10
 			return true
 		Reaction.BANK_COUNTER_A:
@@ -972,10 +972,10 @@ func _step_react() -> bool:
 			n = cpu.mark(cpu.p_counter_slot_b)
 			result = n > 0
 		Reaction.PARRY_HIGH:
-			cpu.start_steps(t.bank(f.bank_type).parry_high)
+			cpu.start_script(r, t.bank(f.bank_type).parry_high)
 			return true
 		Reaction.PARRY_LOW:
-			cpu.start_steps(t.bank(f.bank_type).parry_low)
+			cpu.start_script(r, t.bank(f.bank_type).parry_low)
 			return true
 		Reaction.CROUCH:
 			n = cpu.mark(cpu.p_crouch)
@@ -984,7 +984,7 @@ func _step_react() -> bool:
 				r.parried = 1
 				r.wait = -1
 	if result and n > 0 and cpu.execute() >= 0:
-		cpu.stop_approach()
+		CpuMachinery.reset_approach(r)
 	return result
 
 
@@ -1013,14 +1013,14 @@ func _evade_step() -> bool:
 			if r.own_state & STATE_RECOVERS == 0 and fight.rng.next() & 7 == 0 and r.opp_until > 6:
 				if _opp_rel() > 0x3FFF:
 					r.evasion = EVADE_STEP_BACK
-				cpu.step_aside(ArcadeCpu.SIDE_STEP_AUTO)
+				cpu.step_aside(CpuMachinery.SIDE_STEP_AUTO)
 				return true
 			r.pad = FORWARD
 	return false
 
 
 func _evade_stepping_back(distance: int) -> bool:
-	cpu.stop_approach()
+	CpuMachinery.reset_approach(r)
 	if op_first != 0 and op_last < op_frame:
 		return false
 	if r.opp_until < 0x1D:
@@ -1049,11 +1049,11 @@ func _evade_stepping_back(distance: int) -> bool:
 
 
 func _evade_back_dash(distance: int) -> bool:
-	cpu.stop_approach()
+	CpuMachinery.reset_approach(r)
 	if _opp_rel() < 0x4001 or r.reach_band < 2:
 		if distance <= NEAR:
 			if r.opp_until < 9 or r.band > 1:
-				cpu.start_steps(t.back_dash)
+				cpu.start_script(r, t.back_dash)
 				return true
 			if cpu.mark(cpu.p_attack_no_high) > 0:
 				r.wait = -1
@@ -1217,12 +1217,12 @@ func _step_attack() -> bool:
 			and fight.rng.next() & 3 == 0 and _below(WORD_PUNISH):
 		n = cpu.mark(cpu.p_power)
 	if n < 0:
-		cpu.stop_approach()
+		CpuMachinery.reset_approach(r)
 		return true
 	var i := cpu.execute()
 	if i < 0:
 		return false
-	cpu.stop_approach()
+	CpuMachinery.reset_approach(r)
 	var target := cpu.cand_target[i]
 	if fight.attract == 0 and target.flags & MoveFlag.BUFFER_INPUT != 0:
 		r.strings_on = 1
@@ -1300,7 +1300,7 @@ func _choose_vs_down(wait: int) -> int:
 	if choice < 0x829:
 		return cpu.mark(cpu.p_tap_back)
 	if _span(r.band - 2, 2) and choice < 0x9C3:
-		cpu.start_steps(t.wake_up)
+		cpu.start_script(r, t.wake_up)
 		return -1
 	return cpu.mark(cpu.p_ground_any_low)
 
@@ -1384,7 +1384,7 @@ func _start_setup() -> bool:
 		if chance <= setup.chance:
 			if not cpu.branch_open(setup.slot):
 				return false
-			cpu.start_steps(setup.steps)
+			cpu.start_script(r, setup.steps)
 			r.planned_on = 1
 			r.setup_cooldown = (fight.rng.next() & 0xF) + 0x1C
 			return true
@@ -1427,9 +1427,9 @@ func _step_approach() -> bool:
 	elif not _in_breath():
 		if r.band > 0 and (_below(WORD_FOCUS) or not cpu.coming_reaches(true)):
 			return _keep_approaching()
-		cpu.stop_approach()
+		CpuMachinery.reset_approach(r)
 	else:
-		cpu.stop_approach()
+		CpuMachinery.reset_approach(r)
 	if r.approach_hold >= 0 or r.direction_hold >= 0:
 		return false
 	match _movement_kind():
@@ -1456,7 +1456,7 @@ func _step_approach() -> bool:
 			return _retreat()
 		MOVE_SIDE_STEP:
 			if r.reach_band > 2 or r.opp_until > 10:
-				cpu.step_aside(ArcadeCpu.SIDE_STEP_AUTO)
+				cpu.step_aside(CpuMachinery.SIDE_STEP_AUTO)
 			return cpu.execute() >= 0
 	return false
 
@@ -1464,10 +1464,10 @@ func _step_approach() -> bool:
 func _keep_approaching() -> bool:
 	if r.approach_kind == 2:
 		if _in_breath():
-			cpu.stop_approach()
+			CpuMachinery.reset_approach(r)
 			r.pad = BACK
 		elif r.reach_band < 3 and cpu.draw() < 0x20:
-			cpu.stop_approach()
+			CpuMachinery.reset_approach(r)
 			r.pad = BACK
 		else:
 			r.pad = FORWARD
@@ -1541,7 +1541,7 @@ func _finish_frame() -> void:
 		and (o.cur_slot == OGRE_BREATH_SLOT or o.cur_slot == OGRE_SWEEP_SLOT) else 0
 	_track_guard()
 	if f.got_hit != 0:
-		cpu.stop_approach()
+		CpuMachinery.reset_approach(r)
 		r.links_on = 0
 		r.strings_on = 0
 		r.planned_on = 0
@@ -1561,7 +1561,7 @@ func _finish_frame() -> void:
 		r.history_same = 1 if r.history[0] == r.history[1] and r.history[1] == r.history[2] else 0
 	r.health_seen = f.health
 	if f.got_hit != 0 and fight.attract == 0:
-		cpu.stop_approach()
+		CpuMachinery.reset_approach(r)
 		r.raise_word(WORD_GUARD, HIT_LEARN_GUARD, WORD_GUARD_CAP)
 		r.raise_word(WORD_PUNISH, HIT_LEARN_PUNISH, WORD_PUNISH_CAP)
 		if r.opp_string > 0:

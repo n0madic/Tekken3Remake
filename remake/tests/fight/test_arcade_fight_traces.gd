@@ -484,6 +484,7 @@ func _compare(scenario: String, trace: ArcadeTrace, sim: ArcadeSimulation) -> vo
 	var compare := ArcadeFighterCompare.new(trace)
 	var banks: Array[MotionBank] = [_content.common]
 	var started := false
+	var pool_hash := EffectPoolHash.new()
 	for frame in trace.frames:
 		var sub := trace.sub_state(frame)
 		if frame == 0:
@@ -498,6 +499,7 @@ func _compare(scenario: String, trace: ArcadeTrace, sim: ArcadeSimulation) -> vo
 			started = true
 		if not started:
 			continue
+		pool_hash.add(sim.fight.effects)
 		var lines := _globals(sim, trace, frame)
 		lines.append_array(_camera(sim, trace, frame) if sub == ArcadeSimulation.SUB_FIGHT else _camera_start(sim, trace, frame))
 		if sim.fight.rng.state != trace.rand(frame):
@@ -511,3 +513,4 @@ func _compare(scenario: String, trace: ArcadeTrace, sim: ArcadeSimulation) -> vo
 			expect(false, "%s frame %d of %d (sub-state %d, round state %d):\n    %s" % [scenario, frame, trace.frames,
 				sub, sim.fight.round_state, "\n    ".join(shown)])
 			return
+	expect_equal(pool_hash.value, EffectPoolHashes.ARCADE.get(scenario, -1), "%s effect pool hash" % scenario)

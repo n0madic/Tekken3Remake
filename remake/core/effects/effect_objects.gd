@@ -96,7 +96,7 @@ static func alloc(fight: FightState, type: int) -> Obj:
 	return o
 
 
-## FUN_8006F894: the object ends; it stays in the pool as type 0 for two more updates.
+## FUN_8006F894 (the arcade's FUN_801DD168): the object ends; it stays in the pool as type 0 for two more updates.
 static func finish(o: Obj) -> void:
 	o.type = 0
 	o.state = 0
@@ -229,20 +229,21 @@ static func _aim_flat(fight: FightState, o: Obj) -> void:
 
 
 ## One step along the velocity (the upper halves of the 16.16 values).
-static func _move(o: Obj) -> void:
+static func move(o: Obj) -> void:
 	o.x = Fx.w32(o.x + Fx.s16(o.vx >> 16))
 	o.y = Fx.w32(o.y + Fx.s16(o.vy >> 16))
 	o.z = Fx.w32(o.z + Fx.s16(o.vz >> 16))
 
 
-static func _save_previous(o: Obj) -> void:
+## The position kept as the previous one (a hit segment's start).
+static func save_previous(o: Obj) -> void:
 	o.px = o.x
 	o.py = o.y
 	o.pz = o.z
 
 
-## Two rand() draws as the game combines them: r1 | r2 << 16.
-static func _rand2(fight: FightState) -> Vector2i:
+## Two rand() draws as the game combines them: (first, first | second << 16).
+static func rand2(fight: FightState) -> Vector2i:
 	var r1 := fight.rng.next()
 	var r2 := fight.rng.next()
 	return Vector2i(r1, r1 | r2 << 16)
@@ -302,7 +303,7 @@ static func _spark(fight: FightState, o: Obj, power: bool) -> void:
 		o.flags |= VISIBLE
 		o.model = Model.POWER_SPARK if power else Model.SPARK
 		o.clut = CLUT_DUST
-		var r := _rand2(fight)
+		var r := rand2(fight)
 		var u := r.y
 		var i4 := ((r.x & 0x7FF) - 0x3FF) * 2
 		o.b = ((u >> 4) & 0x1F) + 10
@@ -321,7 +322,7 @@ static func _spark(fight: FightState, o: Obj, power: bool) -> void:
 		var w := FightMath.cos12(Fx.div_trunc(o.a * 0x3FF, o.b) & 0x3FF, fight.tables)
 		o.speed = Fx.s16(o.c + (((o.d - o.c) * (w * 4 + 0x2000)) >> 15))
 		_aim(fight, o)
-		_move(o)
+		move(o)
 		if o.y < 0:
 			return
 	finish(o)
@@ -334,7 +335,7 @@ static func _spark_spray(fight: FightState, o: Obj, power: bool) -> void:
 		o.flags |= VISIBLE
 		o.model = Model.POWER_SPARK if power else Model.SPARK
 		o.clut = CLUT_DUST
-		var r := _rand2(fight)
+		var r := rand2(fight)
 		var u := r.y
 		o.b = ((u >> 10) & 0x1F) + 0x14
 		o.a = 0
@@ -354,7 +355,7 @@ static func _spark_spray(fight: FightState, o: Obj, power: bool) -> void:
 	if o.a < o.b:
 		var i := Fx.div_trunc(o.a * 0x10, o.b)
 		o.clut = ramp509(i) if power else ramp510(i)
-		_move(o)
+		move(o)
 		if o.y < 0:
 			return
 	finish(o)
@@ -425,7 +426,7 @@ static func _glow_rise(fight: FightState, o: Obj) -> void:
 		o.model = Model.GLOW_RISE
 		o.clut = CLUT_GLOW
 		o.b = -1
-		var r := _rand2(fight)
+		var r := rand2(fight)
 		o.vy = 0
 		o.x = Fx.w32(o.x - 0x3F + (r.x & 0x7F))
 		o.y = Fx.w32(o.y - 0x3F + ((r.y >> 2) & 0x7F))
@@ -450,7 +451,7 @@ static func _ember(fight: FightState, o: Obj) -> void:
 		o.clut = CLUT_GLOW
 		o.a = -1
 		o.vy = 0
-		var r := _rand2(fight)
+		var r := rand2(fight)
 		o.x = Fx.w32(o.x - 0x7F + (r.x & 0xFF))
 		o.z = Fx.w32(o.z - 0x7F + ((r.y >> 4) & 0xFF))
 	elif o.state != 1:
@@ -474,7 +475,7 @@ static func _fireball(fight: FightState, o: Obj) -> void:
 		if not _owner_active(fight, o, FIRE_BREATH):
 			o.d = 0
 		if own_buffer:
-			_save_previous(o)
+			save_previous(o)
 	match o.state:
 		0, 1:
 			if o.state == 0:
@@ -513,7 +514,7 @@ static func _fireball_start(fight: FightState, o: Obj) -> void:
 	o.state += 1
 	o.flags |= VISIBLE
 	o.clut = CLUT_FIRE
-	_save_previous(o)
+	save_previous(o)
 	var r := fight.rng.next()
 	o.model = Model.FIREBALL_A if r & 1 == 0 else Model.FIREBALL_B
 	o.b = ((r >> 2) & 3) + 5
@@ -570,7 +571,7 @@ static func _smoke(fight: FightState, o: Obj) -> void:
 				o.flags |= VISIBLE
 				o.model = Model.SMOKE
 				o.clut = CLUT_GLOW
-				var r := _rand2(fight)
+				var r := rand2(fight)
 				var u := r.y
 				o.b = (u >> 10) & 0x1F
 				o.a = 0
@@ -595,7 +596,7 @@ static func _smoke(fight: FightState, o: Obj) -> void:
 			else:
 				finish(o)
 	o.vy = Fx.w32(o.vy - 0x30000)
-	_move(o)
+	move(o)
 	if o.y >= 0:
 		finish(o)
 
@@ -664,8 +665,8 @@ static func _flame(fight: FightState, o: Obj) -> void:
 					o.flags &= ~SEGMENT
 			else:
 				finish(o)
-	_save_previous(o)
-	_move(o)
+	save_previous(o)
+	move(o)
 	if o.y > FLOOR:
 		o.y = FLOOR
 		o.pitch = 0
@@ -687,7 +688,7 @@ static func _floor_fire(fight: FightState, o: Obj) -> void:
 				o.flags |= VISIBLE
 				o.model = Model.FLOOR_FIRE
 				o.clut = CLUT_GLOW
-				var r := _rand2(fight)
+				var r := rand2(fight)
 				o.y = -0x100
 				o.vy = 0
 				o.a = r.y >> 2
@@ -726,7 +727,7 @@ static func _cloud(fight: FightState, o: Obj) -> void:
 		o.model = Model.CLOUD
 		o.tpage = TPAGE_HALF
 		o.clut = CLUT_CLOUD if o.d == 0 else CLUT_DUST
-		var r := _rand2(fight)
+		var r := rand2(fight)
 		o.c = -1
 		o.speed = 0x300
 		o.pitch = Fx.s16(o.pitch - 0x7F + (r.x & 0xFF))
@@ -741,8 +742,8 @@ static func _cloud(fight: FightState, o: Obj) -> void:
 				o.flags &= ~SEGMENT
 		else:
 			finish(o)
-	_save_previous(o)
-	_move(o)
+	save_previous(o)
+	move(o)
 
 
 ## Type 11: one flame of a burning body, following its joint; then it rises and bursts.
@@ -874,7 +875,7 @@ static func _ball_glow_start(fight: FightState, o: Obj) -> void:
 		# DAT_800ae338, set at the game's start); the update routines only move their UVs.
 		o.clut = CLUT_FIRE
 		o.tpage = TPAGE_ADD
-	var r := _rand2(fight)
+	var r := rand2(fight)
 	var u := r.y
 	o.speed = 0
 	o.pitch = Fx.s16(o.pitch - 0x3F + ((Fx.w32(u) >> 4) & 0x7F))
@@ -976,7 +977,7 @@ static func _gas_emitter(fight: FightState, o: Obj) -> void:
 static func _gas(fight: FightState, o: Obj) -> void:
 	if o.flags & SEGMENT and not _owner_active(fight, o, GAS):
 		o.flags &= ~SEGMENT
-	_save_previous(o)
+	save_previous(o)
 	if o.state == 0:
 		o.state += 1
 		o.flags |= VISIBLE | SEGMENT
@@ -985,7 +986,7 @@ static func _gas(fight: FightState, o: Obj) -> void:
 		o.tpage = TPAGE_HALF
 		o.c = -1
 		_aim(fight, o)
-		_move(o)
+		move(o)
 		o.vy = 0
 	if o.state == 1:
 		o.c += 1

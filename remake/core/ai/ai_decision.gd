@@ -9,6 +9,7 @@ const FORCED_ESCAPES: Array[int] = [0x189, 0x18E, 0x17F, 0x181]
 
 const THROW_ROWS := 48
 const DIRECT := 0x7FFFFFFF           ## _choose: execute the marked neutral move directly
+const STATE_RECOVERS := CpuMachinery.STATE_BIT22
 
 const PAD_UP := CpuOpponent.PAD_UP
 const PAD_FORWARD := CpuOpponent.PAD_FORWARD
@@ -166,7 +167,7 @@ func _track() -> void:
 		rec.collected_move = sm
 		rec.move_frames = 0
 	rec.move_frame_seen = my_frame
-	if rec.own_state & 0x400000:
+	if rec.own_state & STATE_RECOVERS:
 		CpuOpponent.reset_approach(rec)
 	if my_first == 0:
 		if rec.own_word & HINT_MIDDLE == 0 and o.was_hit_this_move == 0:
@@ -748,7 +749,7 @@ func _counter() -> bool:
 	if ai.lcg_next() & 0xFFF < rec.word(AiRecord.Param.SIDE_STEP):
 		var ok := false
 		if (((rec.opp_until & 0xFFFF) - 9) & 0xFFFFFFFF) < 3 and rec.angle < FightMath.QUARTER_TURN:
-			ok = rec.own_state & 0x400000 == 0
+			ok = rec.own_state & STATE_RECOVERS == 0
 		if ok and rec.reach_band > 1:
 			ai.side_step(rec, -1)
 			rec.wait = Fx.s16(rec.wait - 10)
@@ -842,7 +843,7 @@ func _reaction_kind() -> int:
 		return _low_parry_or_escape()
 	var ok := false
 	if (((rec.opp_until & 0xFFFF) - 9) & 0xFFFFFFFF) < 3 and rec.angle < FightMath.QUARTER_TURN:
-		ok = rec.own_state & 0x400000 == 0
+		ok = rec.own_state & STATE_RECOVERS == 0
 	if not ok or rec.reach_band != 2:
 		return 0
 	if rec.own_state & StateBit.CROUCHING or f.in_air != 0 or rec.attacking != 0 or rec.opp_attack != AttackWord.HIGH:
@@ -987,7 +988,7 @@ func _evade() -> bool:
 			ai.start_script(rec, t.back_dash)
 			return true
 		5:
-			if rec.own_state & 0x400000 or ai.lcg_next() & 7 or until < 7:
+			if rec.own_state & STATE_RECOVERS or ai.lcg_next() & 7 or until < 7:
 				rec.pad = PAD_FORWARD
 				return false
 			if facing >= FightMath.QUARTER_TURN:

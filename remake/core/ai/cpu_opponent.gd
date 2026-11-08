@@ -27,6 +27,7 @@ const SIT_HIGH_COMING := 8
 const SIT_FACING := 0x10
 const SITUATION_BITS := [SIT_TURNED_AWAY, SIT_SIDE_A, SIT_SIDE_B, SIT_HIGH_COMING, SIT_FACING]
 const BANK_HWOARANG_SLOT := 0xDE3
+const PAUL_SLOT := 0x2C7
 const YOSHIMITSU_STANCE := 0x456
 const FORCE_LEVELS := 4              ## Tekken Force's pattern words (0x80023210): levels per group
 const FORCE_LEVEL_WORDS := 3
@@ -44,6 +45,7 @@ var force_timers := PackedInt32Array([-1, -1, -1, -1])   ## 0x8009F6A8 (Tekken F
 
 func _init(fight_state: FightState, move_system: MoveSystem) -> void:
 	super(fight_state, move_system)
+	step_buttons = PackedInt32Array([PadState.SQUARE, PadState.TRIANGLE, PadState.CROSS, PadState.CIRCLE])
 	for i in 3:
 		records.append(AiRecord.new())
 
@@ -436,25 +438,6 @@ func hint_never_open(rec: AiRecord) -> bool:
 
 # ---- pad input -------------------------------------------------------------------------------
 
-## AiPadFromStep (0x80061AC4): numpad direction in bits 0–3, buttons in bits 8–11.
-func pad_from_step(step: int) -> int:
-	var pad := 0x80 if step & 0x100 else 0
-	if step & 0x200:
-		pad |= 0x10
-	if step & 0x400:
-		pad |= 0x40
-	if step & 0x800:
-		pad |= 0x20
-	return pad | t.numpad_pads[step & 0xF]
-
-
-## AiStartScript (0x80061B24): presses the first step now and keeps the rest pending.
-func start_script(rec: AiRecord, script: PackedInt32Array) -> void:
-	rec.script_steps = script
-	rec.script_at = 1 if script.size() > 1 else -1
-	rec.pad = pad_from_step(script[0] if not script.is_empty() else 0)
-
-
 ## FUN_8002CFD0: the steps of a motion command's input sequence (empty when it has none).
 func input_sequence(command: int) -> PackedInt32Array:
 	if command < 0xC00E:
@@ -478,14 +461,7 @@ func press_command(rec: AiRecord, command: int, target: MoveRow) -> int:
 	command &= 0xFFFF
 	var result := 0
 	if command & 0xC000 == 0:
-		var d := 9
-		while d > 0 and t.direction_masks[d] & (command >> 5) & 0x1FF == 0:
-			d -= 1
-		var buttons := 0
-		for k in 4:
-			if (command >> k) & 1:
-				buttons |= t.button_pads[k]
-		rec.pad = (t.direction_pads[d] | buttons) & 0xFFFF
+		rec.pad = command_pad(command)
 		result = rec.pad
 	else:
 		var seq := input_sequence(command)
@@ -497,26 +473,11 @@ func press_command(rec: AiRecord, command: int, target: MoveRow) -> int:
 	return result
 
 
-## FUN_80056A30: restarts the approach timers.
-static func reset_approach(rec: AiRecord) -> void:
-	rec.approach_hold = 0x28
-	rec.approach_kind = 0
-	rec.approach = 0
-	rec.direction_hold = -1
-
-
 ## AiSideStep (0x80061D40). `side` −1 chooses from the heading difference (random when nearly
 ## straight or reversed) and the fighters' order on screen.
 func side_step(rec: AiRecord, side: int) -> void:
-	if side == -1:
-		var h := ai_self.opp_heading_delta & 0xFFFF
-		side = 0
-		if ((h - 0x101) & 0xFFFFFFFF) > 0x7EFE:
-			side = 1
-			if ((h + 0x7FFF) & 0xFFFF) > 0x7EFD:
-				side = (fight.rng.next() >> 4) & 1
-		if Fx.s16(ai_opp.screen_x) < Fx.s16(ai_self.screen_x):
-			side = 1 - side
+	if side == SIDE_STEP_AUTO:
+		side = auto_side(ai_self.opp_heading_delta, ai_opp.screen_x, ai_self.screen_x)
 	start_script(rec, t.side_steps[side])
 	reset_approach(rec)
 
@@ -542,10 +503,7 @@ func after_attack(rec: AiRecord, row: PackedInt32Array) -> void:
 	rec.neutral_cooldown = -1
 	if rec.air_cooldown > 0:
 		rec.air_cooldown = -1
-	rec.approach_kind = 0
-	rec.approach = 0
-	rec.approach_hold = 0x28
-	rec.direction_hold = -1
+	reset_approach(rec)
 
 
 ## AiExecuteCandidate (0x80058D6C): picks the k-th marked candidate (k random below +0x72) and
@@ -688,12 +646,7 @@ func _run_hook(rec: AiRecord, hook: AiTables.Hook) -> int:
 
 
 func _hook_vs_paul(rec: AiRecord) -> int:
-	var opp := ai_opp
-	if Fx.s16(opp.cur_slot) == 0x2C7 and rec.reach_band < 3:
-		if Fx.s16(opp.pose_frame) > 15:
-			return PAD_BACK
-		rec.wait = -1
-	return -1
+	return vs_paul(rec, ai_opp, PAUL_SLOT, PAD_BACK)
 
 
 func _hook_vs_gon(rec: AiRecord) -> int:
@@ -707,12 +660,7 @@ func _hook_vs_gon(rec: AiRecord) -> int:
 
 ## Reacts to its own slot 0xDE3, which no bank defines (bug #11).
 func _hook_as_hwoarang(rec: AiRecord) -> int:
-	var f := ai_self
-	if Fx.s16(f.cur_slot) != BANK_HWOARANG_SLOT:
-		return -1
-	if ((f.pose_frame & 0xFFFF) - 0xD) & 0xFFFFFFFF > 4 or rec.opp_until > 9:
-		return -1 if fight.rng.next() & 0xF == 0 else PAD_FORWARD
-	return -1
+	return as_hwoarang(rec, ai_self, BANK_HWOARANG_SLOT, PAD_FORWARD)
 
 
 func _hook_vs_yoshimitsu(rec: AiRecord) -> int:
@@ -798,20 +746,9 @@ func _hook_vs_yoshimitsu(rec: AiRecord) -> int:
 ## Inlined in the hook against Ogre: a side from the heading unless the CPU's own move has state
 ## bit 22, the fighters are 7,001+ apart or the heading is ambiguous; side-steps at once.
 func _ogre_side(rec: AiRecord) -> int:
-	var f := ai_self
-	if f.pose_move.state & 0x400000 or (rec.distance & 0xFFFFFFFF) >= 0x1B59:
-		return -1
-	var h := f.opp_heading_delta & 0xFFFF
-	var side := 0
-	if ((h - 0x101) & 0xFFFFFFFF) < 0x7EFF:
-		side = 0
-	elif ((h + 0x7FFF) & 0xFFFF) < 0x7EFE:
-		side = 1
-	else:
-		return -1
-	if Fx.s16(ai_opp.screen_x) < Fx.s16(f.screen_x):
-		side = 1 - side
-	side_step(rec, side)
+	var side := ogre_breath_side(ai_self, ai_opp, ai_self.opp_heading_delta, rec.distance)
+	if side != NO_SIDE:
+		side_step(rec, side)
 	return side
 
 
@@ -871,22 +808,19 @@ func _hook_vs_ogre(rec: AiRecord) -> int:
 	elif move == 0x16E:
 		rec.guard_suspend = 8
 		if frame < pm.active_first - 8:
-			var side := -1
-			if ((f.heading_delta & 0xFFFF) + 0x2000) & 0xFFFF < 0x4001 \
-					and f.pose_move.state & 0x400000 == 0 and (rec.distance & 0xFFFFFFFF) < 0x1B59:
-				side = 1 if Fx.s16(f.screen_x) < Fx.s16(opp.screen_x) else 0
+			var side := ogre_sweep_side(f, opp, rec.distance)
 			if band < 1:
 				rec.wait = -1
 				return PAD_FORWARD
 			if band < 3:
 				return PAD_FORWARD
-			if fight.rng.next() & 7 == 0 and f.facing_quadrant == 0 and side != -1:
+			if fight.rng.next() & 7 == 0 and f.facing_quadrant == 0 and side != NO_SIDE:
 				return _step_again(rec, side)
 		else:
 			if pm.active_last <= frame:
 				return -1
 			if f.facing_quadrant == 0:
-				return PAD_DOWN_FORWARD if rec.distance < 0x1B59 else 0
+				return PAD_DOWN_FORWARD if rec.distance < OGRE_NEAR else 0
 			if band < 2:
 				return t.ogre_escapes[fight.rng.next() & 3]
 			if band < 3:
