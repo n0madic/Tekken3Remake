@@ -2,7 +2,7 @@ class_name GameSettings
 extends Node
 ## The remake's own settings (autoload `Settings`, remake-plan.md#save-data-and-settings): the
 ## Gameplay fixes, the game texts' language (English: the USA release's), the graphics preset and its options, the texture pack, audio
-## volumes, touch controls, the keyboard layouts, the interface language and the memory
+## volumes, the arcade build's attract sound, touch controls, the keyboard layouts, the interface language and the memory
 ## card in use (its progress is ProgressCard's). They are kept in
 ## `user://settings.json` apart from the game's progress. The game's own options (difficulty,
 ## rounds, the key configuration, vibration, ...) stay on its OPTIONS screen and in the progress block.
@@ -32,6 +32,7 @@ const SCHEMA := {
 	"volume_sfx": [VOLUME_STEPS, []],
 	"volume_voices": [VOLUME_STEPS, []],
 	"volume_system": [VOLUME_STEPS, []],
+	"attract_sound": [true, [true, false]],
 	"touch_controls": ["auto", ["auto", "on", "off"]],
 	"touch_macros": ["throws", ["throws", "all", "none"]],
 	"touch_size": [100, [70, 85, 100, 115, 130]],
@@ -274,6 +275,9 @@ func _offered(key: String) -> Array:
 			return [false] if Assets.arcade_only() else list
 		"memory_card":
 			return [1] if Assets.arcade_only() else list
+		"attract_sound":
+			# The cabinet's operator switch (ArcadeSettings.attract_sound); the PlayStation's attract always plays.
+			return list if Assets.arcade_only() else [true]
 		"fullscreen":
 			return list if OS.has_feature("pc") else [false]
 	return list

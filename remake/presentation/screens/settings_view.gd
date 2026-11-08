@@ -22,6 +22,7 @@ const ROWS := [
 	["SETTINGS_GAME", ""], ["gameplay_fixes", "SETTINGS_FIXES_HELP"], ["game_texts", "SETTINGS_TEXTS_HELP"],
 	["language", "SETTINGS_LANGUAGE_HELP"], ["memory_card", "SETTINGS_CARD_HELP"],
 	["SETTINGS_SOUND", ""], ["volume_music", ""], ["volume_sfx", ""], ["volume_voices", ""], ["volume_system", ""],
+	["attract_sound", "SETTINGS_ATTRACT_SOUND_HELP"],
 	["SETTINGS_DISPLAY", ""], ["fullscreen", "SETTINGS_FULLSCREEN_HELP"],
 	["graphics", "SETTINGS_GRAPHICS_HELP"], ["texture_filter", "SETTINGS_FILTER_HELP"],
 	["shading", "SETTINGS_SHADING_HELP"],
@@ -104,7 +105,7 @@ var cursor := 1
 var tab := GAME
 var listening := -1                    ## the key field waiting for its new key
 var keyboard := true                   ## the key fields are shown (a keyboard can be at hand)
-var pad_texture: Texture2D             ## the pad picture (none: a frame stands for it)
+var pad_texture: Texture2D             ## the pad picture (none: PadDrawing stands for it)
 var font: Font
 var _held := 0
 var _held_frames := 0
@@ -378,7 +379,8 @@ func neighbour(from: int, direction: Vector2) -> int:
 	if _rects.size() != item_count or _rects[from].size == Vector2.ZERO:
 		return from
 	var origin := _rects[from].get_center()
-	var found := _nearest(from, origin, direction)
+	# Up and down stay in the column: a shorter column's end goes on at the other's top, not beside.
+	var found := _nearest(from, origin, direction, columns() == 2 and direction.y != 0.0)
 	if found < 0 and direction.y != 0.0:
 		if columns() == 2:
 			found = _end_of_other_column(from, direction.y > 0.0)
@@ -412,15 +414,18 @@ func _end_of_other_column(from: int, top: bool) -> int:
 
 
 ## The nearest in a direction: first among those facing `from` (across the line of sight from its
-## edge), else by distance with the sideways one counted too.
-func _nearest(from: int, origin: Vector2, direction: Vector2) -> int:
+## edge), else by distance with the sideways one counted too; `own_half`: only in `from`'s half of the panel.
+func _nearest(from: int, origin: Vector2, direction: Vector2, own_half := false) -> int:
 	var best := -1
 	var best_score := INF
 	var source := _rects[from]
+	var middle := _panel.get_center().x
 	for i in _rects.size():
 		if i == from or _rects[i].size == Vector2.ZERO or not _selectable(i):
 			continue
 		var r := _rects[i]
+		if own_half and (r.get_center().x < middle) != (source.get_center().x < middle):
+			continue
 		var along := (r.get_center() - origin).dot(direction)
 		if along <= 1.0:
 			continue
@@ -673,7 +678,7 @@ func _draw_pad(layout: int) -> void:
 	if pad_texture != null:
 		draw_texture_rect(pad_texture, picture, false)
 	else:
-		draw_rect(picture, EDGE, false, 1.0)
+		PadDrawing.draw(self, picture, BUTTON_SPOTS, PAD_SIZE)
 	for k in FIELD_BUTTONS.size():
 		var bit: int = FIELD_BUTTONS[k]
 		var i := field_of(layout, bit)

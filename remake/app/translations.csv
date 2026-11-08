@@ -42,6 +42,8 @@ SETTING_VOLUME_MUSIC,Music,音楽
 SETTING_VOLUME_SFX,Effects,効果音
 SETTING_VOLUME_VOICES,Voices,ボイス
 SETTING_VOLUME_SYSTEM,System sounds,システム音
+SETTING_ATTRACT_SOUND,Attract sound,アトラクトサウンド
+SETTINGS_ATTRACT_SOUND_HELP,"Music and sounds in the attract: the demonstration, the movie and the demo fights, as the cabinet's operator setting allows. Off is silent, as cabinets often are. Takes effect from the next scene.","アトラクト（デモンストレーション、ムービー、デモ対戦）で音楽と効果音を鳴らします。筐体のオペレーター設定にあたります。オフでは無音です。次の場面から有効です。"
 SETTING_TOUCH_CONTROLS,Touch controls,タッチ操作
 SETTINGS_TOUCH_HELP,"The on-screen stick and buttons. Auto shows them on touch screens.",画面上のスティックとボタン。自動ではタッチスクリーンで表示します。
 SETTING_TOUCH_MACROS,Touch macros,タッチのマクロ

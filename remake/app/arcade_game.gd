@@ -120,7 +120,9 @@ func _load() -> void:
 	var seed_value := options.seed if options.seed >= 0 else Time.get_ticks_usec() & 0x7FFFFFFF
 	Log.debug("arcade game: seed %d" % seed_value)
 	var data := ArcadeFlowData.load_from(Assets.path(ArcadeFlowData.FILE))
-	flow = ArcadeGameFlow.new(content, data, _rules(), ArcadeSettings.new(), seed_value)
+	var operator := ArcadeSettings.new()
+	operator.attract_sound = _attract_sound()
+	flow = ArcadeGameFlow.new(content, data, _rules(), operator, seed_value)
 	flow.progress.day = day
 	flow.progress.apply_schedule(data)
 	# A session that is a test of something leaves the records file as it is.
@@ -145,6 +147,11 @@ func _write_records() -> void:
 
 func _rules() -> RuleSet:
 	return RuleSet.with_gameplay_fixes() if Settings.flag("gameplay_fixes") else RuleSet.original()
+
+
+## The operator's attract sound switch (EEPROM 0x8036EC59), which the remake's setting stands for.
+func _attract_sound() -> int:
+	return 1 if Settings.flag("attract_sound") else 0
 
 
 ## A development pad script (game.gd's format): lines `<steps> <pad 1> [<pad 2>]` in hex words.
@@ -194,6 +201,8 @@ func _on_settings_closed() -> void:
 func _on_setting_changed(key: String) -> void:
 	if key == "stage_backdrops" or key == "graphics":
 		RenderQuality.apply_viewport(get_viewport())
+	elif key == "attract_sound" and flow != null:
+		flow.settings.attract_sound = _attract_sound()
 
 
 func _physics_process(_delta: float) -> void:

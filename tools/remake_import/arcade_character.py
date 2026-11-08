@@ -7,9 +7,10 @@ across up to three joints. They replace the PlayStation's mesh and texture atlas
 which the fight code builds its joints from (character.ps1_parts), so gameplay is unchanged.
 
 As the arcade loads a model, the vertices and normals of its swinging attachments are turned by
-angles of their enable value (arcade_kmd.turn_attachments, FUN_80197578); so are they here. The
-feet's vertices and normals are turned into the PlayStation's foot frames
-(arcade_kmd.playstation_frame): the arcade's foot joints turn 90° about y against them.
+angles of their enable value (arcade_kmd.turn_attachments, FUN_80197578); so are they here. With
+a disc, which keeps the PlayStation's motions, the feet's vertices and normals are turned into the
+PlayStation's foot frames (arcade_kmd.playstation_frame): the arcade's foot joints turn 90° about
+y against them. From the set alone the motions are the arcade's, and the feet stay as modelled.
 
 The arcade's own attachments (rows 18–23: hair, sashes, tails, skirts) hang from joints
 ATTACHMENT_JOINT + i, which the remake moves with the arcade's attachment dynamics
@@ -188,7 +189,8 @@ def convert(disc: Disc | None, out: Output, arc: arcade.ArcadeSet, name: str, sl
     enable = arc.prog(arcade_kmd.ATTACHMENT_ENABLE + arcade_kmd.ATTACHMENTS * slot, arcade_kmd.ROWS)
     sine = list(arc.prog_table(f"<{arcade_kmd.SINE_ENTRIES}h", arcade_kmd.SINE))
     turns = arcade_kmd.load_turns(arc.prog_values, slot, enable)
-    model, drawn, faces, local, normal, groups = model_faces(data, enable, turns, sine, name, slot)
+    model, drawn, faces, local, normal, groups = model_faces(data, enable, turns, sine, name, slot,
+                                                             playstation_motions=disc is not None)
     vram = load_textures(blocks)
     if disc is None:
         scale_percent, parts = model.scale_percent, parts_from_rows(model)
@@ -212,29 +214,39 @@ def convert(disc: Disc | None, out: Output, arc: arcade.ArcadeSet, name: str, sl
                           groups=groups)
 
 
+def row_frame(playstation_motions: bool) -> Callable[[int, tuple[int, int, int]], tuple[int, int, int]]:
+    """The joint frame a row's vertices and normals are written in: the PlayStation's foot frames
+    when the mesh goes with the PlayStation's motions (arcade_kmd.playstation_frame), the arcade's
+    own with the arcade's motions, whose foot rotations the arcade's feet are modelled for."""
+    return arcade_kmd.playstation_frame if playstation_motions else lambda row, v: v
+
+
 def model_faces(data: bytes, enable: bytes, turns: dict[int, tuple[int, int, int]], sine: list[int],
-                name: str, slot: int) -> tuple[arcade_kmd.Model, set[int], character.FaceList, Callable, Callable,
-                                                list[character.VariantGroup]]:
+                name: str, slot: int, playstation_motions: bool = True
+                ) -> tuple[arcade_kmd.Model, set[int], character.FaceList, Callable, Callable,
+                           list[character.VariantGroup]]:
     """A model's drawn rows and its faces for character.write_model, with `local` and `normal`
     and the variant groups the faces belong to (`pose_groups`): the swinging attachments turned
-    as the model loads (`turns`, arcade_kmd.load_turns) and the feet in the PlayStation's frames."""
+    as the model loads (`turns`, arcade_kmd.load_turns) and the rows in the frames of the motions
+    the mesh goes with (`row_frame`)."""
     model = arcade_kmd.parse(data)
     arcade_kmd.turn_attachments(model, turns, sine)
     drawn = {row.index for row in model.rows
              if row.verts is not None and (row.index < arcade_kmd.JOINTS or enable[row.index])}
     positions = arcade_kmd.slot_weights(model, drawn)
     colours = arcade_kmd.colour_terms(model, drawn)
-    groups = pose_groups(data, model, slot)
+    groups = pose_groups(data, model, slot, playstation_motions)
+    frame = row_frame(playstation_motions)
 
     def term(key: tuple[int, int]) -> character.Term:
         row, index = key
         return character.Term(joint_of_row(row), row, index)
 
     def local(t: character.Term) -> tuple[int, int, int]:
-        return arcade_kmd.playstation_frame(t.row, model.rows[t.row].verts.coords[t.index])
+        return frame(t.row, model.rows[t.row].verts.coords[t.index])
 
     def normal(t: character.Term) -> tuple[float, float, float]:
-        return character.unit(arcade_kmd.playstation_frame(t.row, model.rows[t.row].normals.coords[t.index]))
+        return character.unit(frame(t.row, model.rows[t.row].normals.coords[t.index]))
 
     faces = character.FaceList()
     for row in model.rows:
@@ -253,15 +265,18 @@ def model_faces(data: bytes, enable: bytes, turns: dict[int, tuple[int, int, int
     return model, drawn, faces, local, normal, groups
 
 
-def pose_groups(data: bytes, model: arcade_kmd.Model, slot: int) -> list[character.VariantGroup]:
+def pose_groups(data: bytes, model: arcade_kmd.Model, slot: int,
+                playstation_motions: bool = True) -> list[character.VariantGroup]:
     """The faces the fight view swaps per vertex variant (character.write_model's `groups`) of a
     model of costume `slot` parsed from `data` and turned as it loads: the hands (or the jaw) with
     all the arcade's variants (`hand_rows`), then True Ogre's wings and tail (WING_GROUPS) where the
-    model has their variants."""
+    model has their variants; in the frames of the motions the mesh goes with (`row_frame`)."""
+    frame = row_frame(playstation_motions)
+
     def group(key: str, channel: int, part: int, rows: list[int], count: int, packed: bool) -> character.VariantGroup:
-        variants = {row: [[arcade_kmd.playstation_frame(row, v) for v in arcade_kmd.variant(data, model, row, k).coords]
+        variants = {row: [[frame(row, v) for v in arcade_kmd.variant(data, model, row, k).coords]
                           for k in range(count)] for row in rows}
-        base = {row: [arcade_kmd.playstation_frame(row, v) for v in model.rows[row].verts.coords] for row in rows}
+        base = {row: [frame(row, v) for v in model.rows[row].verts.coords] for row in rows}
         return character.variant_group(key, channel, part, variants, base, packed)
 
     groups = [group(character.HANDS, channel, part, [row], arcade_kmd.VARIANTS, True)

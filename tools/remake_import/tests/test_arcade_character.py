@@ -162,6 +162,14 @@ class ArcadeCharacterTest(unittest.TestCase):
         self.assertEqual(local(terms[1][0]), (-3, 2, 1), "the foot in the PlayStation's frame")
         self.assertEqual(normal(nt), (0.0, 0.0, -1.0), "its normal turned too")
 
+    def test_feet_stay_in_the_arcades_frames_for_its_motions(self) -> None:
+        _, _, faces, local, normal, _ = arcade_character.model_faces(self.data, self.enable, self.turns, SINE, "test", 0,
+                                                                     playstation_motions=False)
+        _, terms, nt, _, _ = faces[1][2][0]
+        self.assertEqual(local(terms[1][0]), (1, 2, 3), "the foot as modelled")
+        self.assertEqual(local(terms[2][0]), (0, 0, -7), "the attachment still turned as the model loads")
+        self.assertEqual(normal(nt), (0.0, 0.0, -1.0))
+
     def test_mesh_carries_the_third_joint(self) -> None:
         model, drawn, faces, local, normal, _ = arcade_character.model_faces(self.data, self.enable, self.turns, SINE, "test", 0)
         with tempfile.TemporaryDirectory() as tmp:

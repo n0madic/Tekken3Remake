@@ -1,7 +1,7 @@
 extends TestSuite
 ## The settings screen's layout (SettingsView): two tabs (General: the game and sound settings,
 ## the display ones beside them; Controls: the touch controls and the keyboard layouts'
-## key fields beside their pad pictures); two columns on landscape windows, one on narrow windows; every row and
+## key fields beside their pad pictures, or a drawn pad holding every button place); two columns on landscape windows, one on narrow windows; every row and
 ## field inside the panel and the panel inside the window, none overlapping, on both tabs; the
 ## settings with a single choice not shown; a tap or a drag on a volume's bar sets it there; a key
 ## field takes the next key, Escape keeps its key.
@@ -157,7 +157,10 @@ func test_down_and_up_visit_every_row_of_both_columns() -> void:
 
 func test_down_leaves_a_column_for_the_other() -> void:
 	var view := _view(Vector2(1280, 720), SettingsView.GAME)
-	var volume := SettingsView.ROWS.find(["volume_system", ""])
+	var volume := -1                       # the left column's end: the attract sound in the arcade build
+	for i in SettingsView.column_break[SettingsView.GAME]:
+		if view._rects[i].size != Vector2.ZERO and view._selectable(i):
+			volume = i
 	var top_right := -1
 	for i in range(SettingsView.column_break[SettingsView.GAME], SettingsView.item_count):
 		if view._rects[i].size != Vector2.ZERO and view._selectable(i):
@@ -243,3 +246,19 @@ func test_volume_by_touch() -> void:
 	Settings.set_value("volume_music", saved)
 	Settings._dirty = false
 	view.free()
+
+
+func test_drawn_pad_holds_every_button_place() -> void:
+	var bounds := Rect2(Vector2.ZERO, SettingsView.PAD_SIZE)
+	var body := PadDrawing.body()
+	expect(body.size() > 8, "the slab and the grips merge into one outline")
+	for p in body:
+		expect(bounds.has_point(p), "the body %s inside the picture" % p)
+	for bit: int in SettingsView.BUTTON_SPOTS:
+		var spot: Vector2 = SettingsView.BUTTON_SPOTS[bit]
+		var shape := PadDrawing.button_shape(bit, SettingsView.BUTTON_SPOTS)
+		expect(Geometry2D.is_point_in_polygon(spot, shape), "button %x's leader line ends on its shape" % bit)
+		for p in shape:
+			expect(bounds.has_point(p), "button %x inside the picture" % bit)
+		if not PadDrawing.SHOULDERS.has(bit):
+			expect(Geometry2D.is_point_in_polygon(spot, body), "button %x on the body" % bit)

@@ -116,12 +116,14 @@ func test_game_texts_follow_the_source() -> void:
 	expect_equal(Settings.choices("stage_backdrops"), ["arcade"], "the arcade's scenes are the only backdrops")
 	expect_equal(Settings.choices("gameplay_fixes"), [false], "the fixes are the PlayStation's")
 	expect_equal(Settings.choices("memory_card"), [1], "the arcade has no memory cards")
+	expect_equal(Settings.choices("attract_sound"), [true, false], "the cabinet's operator switch")
 	Assets.manifest["gaps"] = ["flow"]
 	expect_equal(Array(Assets.gaps()), ["flow"], "what the conversion could not produce")
 	Assets.manifest.erase("gaps")
 	Assets.manifest.erase("source")
 	expect_equal(Assets.source(), "jp_rev1", "a folder converted before sources were recorded")
 	expect(not Assets.arcade_only(), "a disc's conversion")
+	expect_equal(Settings.choices("attract_sound"), [true], "the PlayStation's attract always plays")
 	Assets.manifest = saved
 	Settings.values["game_texts"] = saved_texts
 
