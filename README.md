@@ -8,10 +8,15 @@ code's documented rules and checked frame by frame against the original running 
 CPU. The graphics are modernised: shadows, bloom, smooth textures, any window shape, high frame
 rates. The remake runs on macOS, Windows, Linux, the web, Android and iOS.
 
+It is also the arcade version: converted from MAME's `tekken3` ROM set alone, with no disc, the
+remake becomes the arcade game with its own fighters, rules and screens (see
+[The arcade-only build](#the-arcade-only-build)).
+
 **No game data is included.** The remake uses your own copy of the game: a converter reads the
-disc image and writes the models, stages, sounds, music and movies the remake uses into
-`remake/imported/`. That folder, and every build made with it, contains Namco's data: build it for
-yourself from your own disc image and do not publish or share it (see [Legal](#legal)).
+disc image (or the arcade ROM set) and writes the models, stages, sounds, music and movies the
+remake uses into `remake/imported/`. That folder, and every build made with it, contains Namco's
+data: build it for yourself from your own copy and do not publish or share it (see
+[Legal](#legal)).
 
 ## What is in the game
 
@@ -35,7 +40,8 @@ Additions of the remake:
 
 ## What you need
 
-- **A game disc image.** Any one of these releases is enough:
+- **A game disc image** for the console game (the arcade-only build needs none, see the next item).
+  Any one of these releases is enough:
   - *Tekken 3 (Japan) (Rev 1)* (SLPS-91202, the PlayStation the Best re-release): the release the
     remake is built on.
   - *Tekken 3 (Japan)*, the original pressing (SLPS-01300): the same game with a few differences of
@@ -53,11 +59,13 @@ Additions of the remake:
   `.wav` are found under the sheet's names), single data tracks (`.bin`, `.ecm`), `.iso` files
   (without music and movies: an ISO does not keep them) or `.chd` files (these need MAME's
   `chdman`).
-- **The arcade ROM set** (optional): MAME's `tekken3.zip` (World ver. E1). With `--arcade` the
-  converter adds the arcade version's stage scenes, skies and floors (stages 0–12), which the remake
-  draws instead of the PlayStation's backdrops (the *Stage backdrops* setting switches back), and
-  the arcade's character models for costume slots 0–40. It does not replace the disc image: the
-  game itself still comes from a disc.
+- **The arcade ROM set** (optional next to a disc, enough on its own): MAME's `tekken3.zip` (World
+  ver. E1).
+  - With a disc and `--arcade`, the converter adds the arcade version's stage scenes, skies and
+    floors (stages 0–12), which the remake draws instead of the PlayStation's backdrops (the *Stage
+    backdrops* setting switches back), the arcade's character models for costume slots 0–40 and its
+    effect flipbooks. The game itself is still the console's, from the disc.
+  - Without a disc, `make convert-arcade` converts the set alone into the arcade-only build.
 - **Python 3** with NumPy and Pillow, for the converter (and xxhash to convert DuckStation
   texture packs, `tools/remake/texture_pack.py import-duckstation`):
 
@@ -110,6 +118,36 @@ make convert CONVERT_ARGS='--image "/path/to/Tekken 3 (Japan) (Rev 1).cue" --arc
 
 Run the conversion again after updating the project: it rewrites only what changed and removes
 files it no longer produces.
+
+## The arcade-only build
+
+The remake can be built from MAME's `tekken3` ROM set (World ver. E1) alone, without a disc. It is
+the arcade version, not the console game: the fighters, stages, rules, CPU opponent, screens, attract
+movie, music and sounds all come from the set, and the fights are checked frame by frame against the
+arcade program the way the console's are.
+
+```sh
+make convert-arcade ARCADE=/path/to/tekken3.zip   # into remake/imported/ (ARCADE defaults to tekken3.zip)
+make import     # once
+make run        # play
+```
+
+The game starts as the arcade build when `remake/imported/` was converted from the set alone.
+That folder holds one conversion: converting the set alone replaces a disc conversion's files, and a
+disc conversion replaces the arcade's, so convert again to switch. The Python, Godot and FFmpeg
+requirements are those above; `CONVERT_ARGS='--no-music --no-movies'` leaves out the music and the
+attract movie.
+
+- **What it has:** the attract with its demonstration fights and movie, the title, character select,
+  the ladder with the Ogre scene and True Ogre, continue, a second player joining a fight, the
+  ranking with name entry, and the ending with the staff roll. It runs on free play, with no coins.
+  All of the arcade's fighters are open; `--day=<n>` sets the operator's day counter that opens them.
+- **What it lacks:** the main menu and the console's other modes (VS, Team Battle, Time Attack,
+  Survival, Practice, Tekken Ball, Tekken Force, Theater), its Options and memory card, and anything
+  else the arcade does not have. Settings open with Select on the attract and the title; records are
+  kept in `arcade_records.json` in the user data folder.
+- **Options and status:** [`remake/README.md`](remake/README.md) lists the command-line options of
+  this build, and [the plan](docs/remake-plan.md#m6-arcade-only-build) its state.
 
 ## Controls
 
@@ -197,7 +235,8 @@ Builds contain the converted game data. They are for your own devices only.
 - `remake/README.md`: the remake's layout, all command-line options and the tests.
 - `docs/remake-plan.md`: the plan, architecture and decisions.
 - `docs/research/`: the documentation of the original game: file formats, fight logic,
-  AI, camera, modes and the register of the original's bugs.
+  AI, camera, modes and the register of the original's bugs; the arcade version's is in
+  `docs/research/arcade/`.
 - `CLAUDE.md`: a condensed guide to the repository.
 
 ```sh

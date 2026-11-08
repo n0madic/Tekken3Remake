@@ -15,7 +15,8 @@ PRESET_linux := Linux
 PRESET_web := Web
 PRESET_android := Android
 PRESET_ios := iOS
-# The disc conversion's options, the images required: CONVERT_ARGS='--image "<disc>.cue" [--image ...]'.
+# The conversion's options. A disc conversion requires its images: CONVERT_ARGS='--image "<disc>.cue" [--image ...]';
+# convert-arcade takes none, only options such as --no-music, --no-movies or --out.
 CONVERT_ARGS ?=
 # MAME's set, for the conversion without a disc.
 ARCADE ?= tekken3.zip
@@ -38,7 +39,8 @@ help:
 	@echo "                        (CONVERT_ARGS='--image \"<disc>.cue\" ...': the images and options)"
 	@echo "  make convert-nomovies the same without movies (music kept)"
 	@echo "  make convert-lite     the same without music and movies"
-	@echo "  make convert-arcade   convert MAME's tekken3 set alone, no disc (ARCADE=<set>.zip; default tekken3.zip)"
+	@echo "  make convert-arcade   convert MAME's tekken3 set alone, no disc (ARCADE=<set>.zip; default tekken3.zip;"
+	@echo "                        CONVERT_ARGS: only options, no --image); it replaces a disc conversion in remake/imported"
 	@echo "  make import           import the converted assets into the Godot project"
 	@echo "  make traces           golden traces for the tests (work/ tree required)"
 	@echo "  make layouts          remake the other releases' layouts (LAYOUT_ARGS: Japan Rev.1 and their images)"
