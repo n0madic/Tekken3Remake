@@ -68,7 +68,7 @@ func _ready() -> void:
 		p.bus = &"SFX"
 		add_child(p)
 		voices.append(p)
-	music_available = Assets.has_group("music")
+	music_available = Assets.has_group("music") and FileAccess.file_exists(Assets.path("music/music.json"))
 	if music_available:
 		var data: Dictionary = JsonFile.read(Assets.path("music/music.json"))
 		tracks = data.get("tracks", {})

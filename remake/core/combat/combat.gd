@@ -318,6 +318,11 @@ func collision_shapes(f: FighterState, joints: Array[JointFrame]) -> void:
 					seg[0] = q[0]
 					seg[1] = q[1]
 					seg[2] = q[2]
+	_body_shapes(f, joints)
+
+
+## The hurt cylinders and the body spheres from the joints.
+func _body_shapes(f: FighterState, joints: Array[JointFrame]) -> void:
 	for k in 14:
 		var p := joints[t.hurt_zone_joints[k]].t
 		var zone := f.hurt_zones[k]
@@ -463,8 +468,27 @@ static func _place(out: PackedInt32Array, at: int, p: PackedInt32Array, origin: 
 
 ## BodySphereProfile (0x8003EEFC): the body sphere radii by the move's profile (+0x30).
 func body_sphere_profile(f: FighterState) -> void:
+	_apply_profile(f, f.pose_move.body_profile)
+
+
+func _apply_profile(f: FighterState, profile: int) -> void:
 	var pose := f.pose_move
-	var profile := pose.body_profile
+	var r := _profile_radii(f, profile)
+	for k in 8:
+		var zero := false
+		if pose.active_first == 0:
+			if f.in_air == 0 or f.was_hit_this_move == 0:
+				if pose.flags & MoveFlag.BODY_ADJUST and (k >= 6 or k == 4 or k == 5):
+					zero = true
+			elif k >= 6:
+				zero = true
+		elif k == 1 or k == 2:
+			zero = true
+		f.body_points[k][3] = 0 if zero else Fx.s16(r[k])
+
+
+func _profile_radii(f: FighterState, profile: int) -> PackedInt32Array:
+	var pose := f.pose_move
 	var radii := t.body_radii[f.char_id]
 	var r := PackedInt32Array()
 	r.resize(8)
@@ -499,17 +523,7 @@ func body_sphere_profile(f: FighterState) -> void:
 		_:
 			for k in 8:
 				r[k] = radii[k]
-	for k in 8:
-		var zero := false
-		if pose.active_first == 0:
-			if f.in_air == 0 or f.was_hit_this_move == 0:
-				if pose.flags & MoveFlag.BODY_ADJUST and (k >= 6 or k == 4 or k == 5):
-					zero = true
-			elif k >= 6:
-				zero = true
-		elif k == 1 or k == 2:
-			zero = true
-		f.body_points[k][3] = 0 if zero else Fx.s16(r[k])
+	return r
 
 
 # ---- body separation --------------------------------------------------------------------------
@@ -651,9 +665,13 @@ func _overlap_solve(a: FighterState, b: FighterState) -> void:
 		var f: FighterState = a if k == 0 else b
 		var px := Fx.w32((ax if k == 0 else bx) - f.root_x)
 		var pz := Fx.w32((az if k == 0 else bz) - f.root_z)
-		f.body_push_x = px if charging else px >> 1
-		f.body_push_z = pz if charging else pz >> 1
+		f.body_push_x = px if charging else _half_push(px)
+		f.body_push_z = pz if charging else _half_push(pz)
 		f.body_push_y = 0
+
+
+func _half_push(v: int) -> int:
+	return v >> 1
 
 
 # ---- hits -------------------------------------------------------------------------------------
@@ -718,10 +736,9 @@ func hit_test(attacker: FighterState, defender: FighterState, events: SimEvents)
 ## Projectile descriptors (first joint ≥ 0x18) use the segments their owner's effect objects
 ## published this frame (fire, breath and gas clouds) instead.
 func _hit_segments(attacker: FighterState, defender: FighterState, slot: HitSlot) -> bool:
-	var d := AttackRecords.header(attacker.pose_move, t)
 	var segments: Array = attacker.attack_segs
 	var count := mini(attacker.active_segs, 4)
-	if d[0] >= PROJECTILE_JOINT:
+	if _is_projectile(attacker):
 		segments = fight.effects.segments[mini(attacker.index, 1)]
 		count = segments.size()
 	for k in count:
@@ -736,6 +753,10 @@ func _hit_segments(attacker: FighterState, defender: FighterState, slot: HitSlot
 					slot.direction[c] = Fx.s16(s[3 + c] - s[c])
 				return true
 	return false
+
+
+func _is_projectile(attacker: FighterState) -> bool:
+	return AttackRecords.header(attacker.pose_move, t)[0] >= PROJECTILE_JOINT
 
 
 ## HitExtraDamage (0x80044C4C).
@@ -911,16 +932,16 @@ func _spawn_effect(f: FighterState, slot: HitSlot, total: int, events: SimEvents
 	if slot.hit == 0 and f.ko == 0:
 		if slot.guarded != 0:
 			_spark_event(events, f, slot, 2, 0, slot.attacker)
-			fight.replay.log_effect(3, 2, slot.point, slot.direction, 0)
+			fight.replay.log_effect(EffectLog.SYSTEM_SET, 2, slot.point, slot.direction, 0)
 		elif slot.no_damage != 0:
 			_spark_event(events, f, slot, 1, 0, slot.attacker)
-			fight.replay.log_effect(3, 1, slot.point, slot.direction, 0)
+			fight.replay.log_effect(EffectLog.SYSTEM_SET, 1, slot.point, slot.direction, 0)
 		return
 	var damage := maxi(total, Fx.s16(slot.base_damage))
 	# Tekken Ball flips the spark's side by the defender (the attacker may be the ball's record).
 	var side := 1 - f.index if fight.mode == GameMode.BALL else slot.attacker
 	_spark_event(events, f, slot, 0, damage, side)
-	fight.replay.log_effect(3, 0, slot.point, slot.direction, 0)
+	fight.replay.log_effect(EffectLog.SYSTEM_SET, 0, slot.point, slot.direction, 0)
 	if damage >= EffectObjects.SPARK_DAMAGE:
 		fight.replay.log_effect(side, 0, slot.point, slot.direction, 0)
 	EffectObjects.hit_objects(fight, damage, f, side, slot.point, events)

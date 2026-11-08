@@ -266,7 +266,14 @@ func _offered(key: String) -> Array:
 		"game_texts":
 			return list if Assets.japanese_texts() else ["english"]
 		"stage_backdrops":
+			if Assets.arcade_only():
+				return ["arcade"]
 			return list if Assets.has_group("arcade") else ["playstation"]
+		"gameplay_fixes":
+			# The fixes are named and proven for the PlayStation's rules, the arcade's trace plays the original.
+			return [false] if Assets.arcade_only() else list
+		"memory_card":
+			return [1] if Assets.arcade_only() else list
 		"fullscreen":
 			return list if OS.has_feature("pc") else [false]
 	return list

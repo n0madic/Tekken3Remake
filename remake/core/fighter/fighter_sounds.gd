@@ -81,12 +81,12 @@ static func run(fight: FightState, f: FighterState, opp: FighterState, events: S
 						f.sound_script_pos = 0
 						f.sound_script_frame = Fx.s16(f.pose_frame - 1)
 				9:
-					_special(fight, f, opp, code & 0xFFF, events)
+					special(fight, f, opp, code & 0xFFF, events)
 	if f.got_hit != 0:
 		script_stop(f)
 	if f.sound_script != -1 and fight.camera_phase in [CameraPhase.RESET, CameraPhase.INTRO, CameraPhase.FIGHT,
 			CameraPhase.WINNER]:
-		_run_script(fight, f, opp, events)
+		run_script(fight, f, opp, events)
 	else:
 		_ambient(fight, f, opp, voices, voiced, events)
 	if fight.voice_cooldown[p] > 0:
@@ -137,7 +137,7 @@ static func _ambient(fight: FightState, f: FighterState, opp: FighterState, voic
 
 
 ## The running sound script: every entry of the script's frame counter.
-static func _run_script(fight: FightState, f: FighterState, opp: FighterState, events: SimEvents) -> void:
+static func run_script(fight: FightState, f: FighterState, opp: FighterState, events: SimEvents) -> void:
 	var script: PackedInt32Array = fight.tables.sound_scripts[f.sound_script]
 	var p := f.player_index
 	var q := opp.player_index
@@ -166,7 +166,7 @@ static func _run_script(fight: FightState, f: FighterState, opp: FighterState, e
 					else:
 						_sound(fight, q, code, events)
 				3:
-					_special(fight, f, opp, code & 0xFFF, events)
+					special(fight, f, opp, code & 0xFFF, events)
 		f.sound_script_pos += 1
 	script_stop(f)
 
@@ -230,7 +230,7 @@ static func _strike(fight: FightState, f: FighterState, events: SimEvents) -> vo
 ## FUN_80041C48: 0 holds the jump and landing sounds this frame, 1 answers the opponent's sound
 ## script with the special voice and stops it, 2 starts a one-frame voice cooldown, 3 plays one
 ## of three special sounds for the opponent.
-static func _special(fight: FightState, f: FighterState, opp: FighterState, n: int, events: SimEvents) -> void:
+static func special(fight: FightState, f: FighterState, opp: FighterState, n: int, events: SimEvents) -> void:
 	var p := f.player_index
 	match n:
 		0:
@@ -277,7 +277,7 @@ static func _voice(fight: FightState, player: int, voice_set: int, id: int, even
 	for k in c:
 		index += voices.counts[k]
 	var code := voices.voices[index]
-	events.add(SimEvents.Kind.SOUND, player, code, player)
+	events.add(SimEvents.Kind.SOUND, player, code, player).id = id
 	if c + VOICE_FIRST == SHOUT_CATEGORY:
 		events.add(SimEvents.Kind.SHOUT, player, id, player)
 	if c + VOICE_FIRST == THROW_VOICE:
@@ -297,8 +297,8 @@ static func _sound(fight: FightState, player: int, id: int, events: SimEvents) -
 		return
 	var code := fight.tables.sound_codes[index]
 	if id >> 12 == 0:
-		events.add(SimEvents.Kind.SOUND_STOP, player, code, player)
+		events.add(SimEvents.Kind.SOUND_STOP, player, code, player).id = id
 	else:
-		events.add(SimEvents.Kind.SOUND, player, code, player)
+		events.add(SimEvents.Kind.SOUND, player, code, player).id = id
 		if fight.replay_playing != 0:
 			EffectObjects.voice_echo(fight, player, code, true)

@@ -4,6 +4,8 @@ extends RefCounted
 ## (`imported/tables/camera.json`, camera.md): the octant table of `Atan2Units4096` and the
 ## director's presets, choice lists, hit cameras, round intro offsets and winner camera choices.
 
+const STREAMS_FILE := "camera_streams.bin.gz"
+
 ## A hit camera script (camera.md#hit-cameras).
 class HitScript:
 	var kind := -1                ## 0 preset-style framing, 1 contact-point view, −1 none
@@ -25,18 +27,28 @@ var hit_lists: Array = []                      ## per list id − 300: records (
 var hit_scripts: Array[HitScript] = []
 var intro_offsets: Array[PackedInt32Array] = []
 var intro_offset_ball := PackedInt32Array()
+var reels: Array[PackedInt32Array] = []         ## the arcade scenes' lists of scripts (FUN_801D3554)
 var attract_styles := PackedInt32Array()        ## the demonstration camera's styles (FUN_800693E8)
 var attract_pitches := PackedInt32Array()       ## the circling camera's pitches (FUN_80068E90)
 var attract_speeds := PackedInt32Array()        ## its yaw steps
 var winner_lateral := PackedInt32Array()
 var winner_forward := PackedInt32Array()
 var winner_height := PackedInt32Array()
+# The arcade director's (tools/remake_import/arcade_camera_tables.py).
+var stage_rows: Array[PackedInt32Array] = []    ## per stage: H, lowest H, highest H, stream rescale, mode
+var script_kinds := PackedInt32Array()          ## the preset (or −stream id) of the scripts below 0x1E
+var blend_outs := PackedInt32Array()            ## FUN_801D4B2C's word per −kind
+var choice_rows: Array[PackedInt32Array] = []   ## per camera id: first entry, threshold of modes 1 and 2
+var choice_entries: Array[PackedInt32Array] = []    ## flags, cumulative weight, script, mirrored script
+var stream_offsets := PackedInt32Array()        ## per stream id − 1, into `streams`
+var streams := PackedByteArray()                ## the camera streams (camera_streams.bin.gz)
 
 
 static func load_from(path: String) -> CameraTables:
 	var data: Dictionary = JsonFile.read(path)
 	var t := CameraTables.new()
 	t.atan_table = JsonFile.ints(data["atan"])
+	t._load_arcade(data, path.get_base_dir().path_join(STREAMS_FILE))
 	for row: Array in data.get("presets", []):
 		t.presets.append(JsonFile.ints(row))
 	t.preset_index = JsonFile.ints(data.get("preset_index", []))
@@ -65,6 +77,9 @@ static func load_from(path: String) -> CameraTables:
 	for row: Array in data.get("intro_offsets", []):
 		t.intro_offsets.append(JsonFile.ints(row))
 	t.intro_offset_ball = JsonFile.ints(data.get("intro_offset_ball", [0, 0, 0]))
+	var reels: Array = data.get("reels", [])
+	for list: Array in reels:
+		t.reels.append(JsonFile.ints(list))
 	t.attract_styles = JsonFile.ints(data.get("attract_styles", []))
 	t.attract_pitches = JsonFile.ints(data.get("attract_pitches", []))
 	t.attract_speeds = JsonFile.ints(data.get("attract_speeds", []))
@@ -72,3 +87,17 @@ static func load_from(path: String) -> CameraTables:
 	t.winner_forward = JsonFile.ints(data.get("winner_forward", []))
 	t.winner_height = JsonFile.ints(data.get("winner_height", []))
 	return t
+
+
+func _load_arcade(data: Dictionary, streams_path: String) -> void:
+	for row: Array in data.get("stage_rows", []):
+		stage_rows.append(JsonFile.ints(row))
+	for row: Array in data.get("choice_rows", []):
+		choice_rows.append(JsonFile.ints(row))
+	for row: Array in data.get("choice_entries", []):
+		choice_entries.append(JsonFile.ints(row))
+	script_kinds = JsonFile.ints(data.get("script_kinds", []))
+	blend_outs = JsonFile.ints(data.get("blend_outs", []))
+	stream_offsets = JsonFile.ints(data.get("stream_offsets", []))
+	if not stream_offsets.is_empty():
+		streams = DataFile.read(streams_path)

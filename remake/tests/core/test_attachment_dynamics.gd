@@ -2,6 +2,7 @@ extends TestSuite
 ## AttachmentDynamics against the game's FUN_80037F10 run in the CPU harness on random
 ## fighter states (`work/traces/attachments.bin`, tools/research/attachment_cases.py).
 
+const DISC_DATA := true
 const FILE := "attachments.bin"
 const RECORD := 12
 const JOINTS := 6          ## previous own joint, parent, joints 12, 15, 13, 16

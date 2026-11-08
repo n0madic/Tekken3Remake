@@ -37,44 +37,49 @@ var anim_bytes: Dictionary = {}      ## stream offset → Vector2i(first byte of
 ## A converted bank by name from a folder (`<name>.json.gz`, `.poses.bin.gz`, `.camera.bin`,
 ## `.attacks.bin`).
 static func load_named(folder: String, bank_name: String) -> MotionBank:
-	var base := folder.path_join(bank_name)
-	var data: Dictionary = JsonFile.read(base + ".json.gz")
 	var bank := MotionBank.new()
-	bank.name = data.get("name", "")
-	bank.type_code = data.get("type", -1)
+	bank._read(folder.path_join(bank_name))
+	return bank
+
+
+## Reads the files of `base`; returns the bank's JSON.
+func _read(base: String) -> Dictionary:
+	var data: Dictionary = JsonFile.read(base + ".json.gz")
+	name = data.get("name", "")
+	type_code = data.get("type", -1)
 	for row: Array in data.get("moves", []):
-		bank.moves.append(PackedInt64Array(row))
+		moves.append(PackedInt64Array(row))
 	var index: Array = data.get("move_index", [])
-	bank.move_index = PackedInt64Array(index)
+	move_index = PackedInt64Array(index)
 	var anim_table: Dictionary = data.get("anims", {})
 	for key: String in anim_table:
 		var entry: Array = anim_table[key]
 		var first: int = entry[0]
 		var frames: int = entry[1]
-		bank.anims[int(key)] = Vector2i(first, frames)
+		anims[int(key)] = Vector2i(first, frames)
 		if entry.size() >= 4:
 			var first_byte: int = entry[2]
 			var tag: int = entry[3]
-			bank.anim_bytes[int(key)] = Vector2i(first_byte, tag)
-	bank.poses = DataFile.read(base + ".poses.bin.gz")
-	bank.events = JsonFile.ints(data.get("events", []))
+			anim_bytes[int(key)] = Vector2i(first_byte, tag)
+	poses = DataFile.read(base + ".poses.bin.gz")
+	events = JsonFile.ints(data.get("events", []))
 	for choice: Array in data.get("camera_choices", []):
-		bank.camera_choices.append(JsonFile.ints(choice))
+		camera_choices.append(JsonFile.ints(choice))
 	var streams: Dictionary = data.get("camera_streams", {})
 	for key: String in streams:
 		var s := JsonFile.ints(streams[key])
-		bank.camera_streams[int(key)] = Vector3i(s[0], s[1], s[2])
+		camera_streams[int(key)] = Vector3i(s[0], s[1], s[2])
 	var camera_path := base + ".camera.bin"
 	if FileAccess.file_exists(camera_path):
-		bank.camera_samples = FileAccess.get_file_as_bytes(camera_path)
+		camera_samples = FileAccess.get_file_as_bytes(camera_path)
 	for row: Array in data.get("branches", []):
-		bank.branches.append(JsonFile.ints(row))
-	bank.sounds = JsonFile.ints(data.get("sounds", []))
-	bank.empty_slots = JsonFile.ints(data.get("empty_slots", []))
+		branches.append(JsonFile.ints(row))
+	sounds = JsonFile.ints(data.get("sounds", []))
+	empty_slots = JsonFile.ints(data.get("empty_slots", []))
 	var attacks_path := base + ".attacks.bin"
 	if FileAccess.file_exists(attacks_path):
-		bank.attacks = FileAccess.get_file_as_bytes(attacks_path)
-	return bank
+		attacks = FileAccess.get_file_as_bytes(attacks_path)
+	return data
 
 
 ## DivmotLinkBank: every move row decoded and linked (`common` is the common bank, this bank

@@ -14,11 +14,14 @@ must never be published.
 
     python3 tools/remake_import/convert.py --image IMAGE [--image IMAGE] [--out DIR] [--no-music]
                                            [--no-movies] [--ffmpeg PATH] [--arcade ZIP]
+    python3 tools/remake_import/convert.py --arcade ZIP [--out DIR]
 
 `--arcade` adds the arcade version's polygonal stage scenes, skies and floors from MAME's
 `tekken3` ROM set (arcade.py), which the remake draws instead of the PlayStation's backdrops,
 replaces the character models of costume slots 0–40 with the arcade's (arcade_character.py), and
-the effect flipbooks with the arcade's 64 × 64 frames (arcade_effects.py).
+the effect flipbooks with the arcade's 64 × 64 frames (arcade_effects.py). Without any `--image`,
+the game is converted from that set alone: the arcade version, with its modes and fighters only
+(arcade_game.py).
 """
 
 from __future__ import annotations
@@ -34,6 +37,7 @@ import common  # noqa: F401  (puts tools/research on the import path first)
 import ai
 import arcade
 import arcade_character
+import arcade_game
 import character
 import effects
 import enbu
@@ -95,26 +99,56 @@ def texture_index(out: Output) -> dict[str, str]:
     return index
 
 
+def convert_arcade_only(args: argparse.Namespace) -> int:
+    """The game from MAME's set alone: no disc."""
+    start = time.time()
+    try:
+        arc = arcade.open_set(args.arcade, flash=True)
+    except arcade.ArcadeError as e:
+        log.error("arcade: %s", e)
+        return 1
+    log.info("the game from %s (the arcade version, no disc)", args.arcade.name)
+    out = Output(args.out)
+    out.invalidate_manifest()
+    out.mark()
+    try:
+        tool = None if args.no_movies and args.no_music else media.find_ffmpeg(args.ffmpeg)
+        fields = arcade_game.convert(arc, out, STAGE_LETTERS, arcade.sound_chips(args.arcade),
+                                     None if args.no_movies else tool, None if args.no_music else tool)
+    except (arcade.ArcadeError, media.MediaError) as e:
+        log.error("arcade: %s", e)
+        return 1
+    out.write_json("texture_index.json", texture_index(out))
+    out.write_json("manifest.json", {"converter_version": CONVERTER_VERSION, **fields})
+    removed = out.prune()
+    log.info("%d files written, %d unchanged, %d stale removed in %s (%.1f s); not converted yet: %s",
+             out.written, out.unchanged, removed, args.out, time.time() - start, ", ".join(fields["gaps"]) or "nothing")
+    return 0
+
+
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--image", type=Path, action="append", required=True,
+    parser.add_argument("--image", type=Path, action="append", default=[],
                         help="a disc image (.cue, .chd, or a data track .bin, .ecm, .iso), one per release: "
                         "the game from Japan Rev.1, else the original Japanese release, else USA; a USA "
-                        "image with a Japanese one adds its English texts, move lists and text pictures")
+                        "image with a Japanese one adds its English texts, move lists and text pictures. "
+                        "Required unless --arcade is given")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
-    parser.add_argument("--no-music", action="store_true", help="skip XA and CD-DA music")
-    parser.add_argument("--no-movies", action="store_true", help="skip STR movies")
+    parser.add_argument("--no-music", action="store_true", help="skip the music (XA and CD-DA, or the arcade's)")
+    parser.add_argument("--no-movies", action="store_true", help="skip the movies (STR, or the arcade's attract movie)")
     parser.add_argument("--ffmpeg", type=Path, help="the FFmpeg to use (default: the first on the PATH with "
                         "the Theora and Vorbis encoders, else the first one; without them music is WAV "
                         "and movies are JPEG frames)")
     parser.add_argument("--arcade", type=Path, help="MAME's tekken3 ROM set (a .zip, World ver. E1): adds "
                         "the arcade stage scenes, skies and floors (stages 0–12), character models (costume slots 0–40) "
-                        "and 64 × 64 effect flipbooks")
+                        "and 64 × 64 effect flipbooks; alone, without --image, the game is converted from it")
     parser.add_argument("--texture-sources", type=Path, help="also record where each picture's texels come "
                         "from in VRAM, to this file (for tools/remake/texture_pack.py import-duckstation; "
                         "game data: keep it private)")
     args = parser.parse_args()
+    if not args.image and args.arcade is None:
+        parser.error("give --image, one per release, or --arcade")
 
     # The run deletes files it did not produce; never do that in a folder it did not create.
     if is_foreign_folder(args.out):
@@ -127,6 +161,9 @@ def main() -> int:
         log.error("--texture-sources %s is inside --out %s, which the run prunes; give a path outside it",
                   args.texture_sources, args.out)
         return 1
+
+    if not args.image:
+        return convert_arcade_only(args)
 
     start = time.time()
     try:

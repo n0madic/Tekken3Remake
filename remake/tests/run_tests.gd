@@ -7,7 +7,9 @@ extends SceneTree
 ## Finds every `test_*.gd` below res://tests, runs each `test_*` method of its TestSuite
 ## and exits with 0 when nothing failed, 1 otherwise. A test fails on a failed expectation
 ## or on any engine or script error logged while it runs. `--quick` leaves out the suites that
-## declare `const SLOW := true` (the comparisons with the game's traces). With `--claim=<dir>`
+## declare `const SLOW := true` (the comparisons with the game's traces). On a conversion from the
+## arcade's set alone, the tests a suite's `const DISC_DATA` names (or all, if `true`) are skipped:
+## they read what only a disc's conversion has. With `--claim=<dir>`
 ## several runners share one run (tools/remake/run_tests.sh): each runs the tests it claims first
 ## in that directory, the longest first by the times of earlier runs (`--times=<file>`, lines
 ## `<path> <test>\t<ms>`), so the runners end close together; `--times-out=<file>` writes this
@@ -139,6 +141,10 @@ func _run() -> int:
 			failed += 1
 			continue
 		var suite: TestSuite = suites[path]
+		if _arcade_only() and _needs_disc(suite, name):
+			skipped += 1
+			print("SKIP   %s::%s — needs a conversion from a disc" % [path.get_file(), name])
+			continue
 		suite.reset()
 		var t := Time.get_ticks_msec()
 		suite.call(name)
@@ -196,6 +202,20 @@ func _claim(key: String) -> bool:
 	if _claims.is_empty():
 		return true
 	return DirAccess.make_dir_absolute(_claims.path_join(key.md5_text())) == OK
+
+
+## This script compiles before the autoloads exist, so it asks for them by name.
+func _arcade_only() -> bool:
+	var assets := root.get_node_or_null("Assets")
+	return assets != null and assets.call("arcade_only") as bool
+
+
+func _needs_disc(suite: TestSuite, name: String) -> bool:
+	var script := suite.get_script() as Script
+	var marked: Variant = script.get_script_constant_map().get("DISC_DATA", false)
+	if marked is Array:
+		return name in (marked as Array)
+	return marked as bool
 
 
 func _selected(path: String, name: String, filters: PackedStringArray) -> bool:

@@ -30,6 +30,7 @@ CHARACTER_RECORDS = 0x80175510
 CHARACTER_RECORD_BYTES = 0x18
 SYSTEM_RECORDS = (0x80175720, 0x80175738, 0x80175750, 0x80175798)
 RECORD = "<I4h3h"
+RECORD_LIGHT = 0x14                     # R, G, B of the character's dynamic light
 FACTOR_SHIFT = 7
 # The PlayStation's charId 19 (costume slots 44, 45) is not the arcade's: its flipbook is the Mishima
 # lightning, as charId 9's; the arcade's record 19 holds another character's set.
@@ -82,6 +83,11 @@ def flipbook(arc: arcade.ArcadeSet, record: int) -> tuple[np.ndarray, int]:
 
 def character_record(char_id: int) -> int:
     return CHARACTER_RECORDS + CHARACTER_RECORD_BYTES * CHARACTER_RECORD_OF.get(char_id, char_id)
+
+
+def light_of(arc: arcade.ArcadeSet, char_id: int) -> list[int]:
+    """The dynamic light of a character's flipbook (the same colours as the PlayStation's records)."""
+    return list(arc.prog(character_record(char_id) + RECORD_LIGHT, 3))
 
 
 def flipbook_or_none(arc: arcade.ArcadeSet | None, record: int, name: str) -> tuple[np.ndarray, int] | None:

@@ -9,6 +9,7 @@ const COMMON_FLAG := 0x40000000
 const NO_LIST := 0xFFFFFFFF
 const THROW_DAMAGE_EVENT := 0x0B
 const DAMAGE_MASK := 0x3FFF
+const ATTACK_JOINTS_WORD := 14
 
 var bank: MotionBank              ## the bank the row belongs to
 var index := 0                    ## row number in its bank
@@ -38,6 +39,7 @@ var active_last := 0              ## +0x2E
 var body_profile := 0             ## +0x30
 var reaction := 0                 ## +0x32
 var close_reaction := 0           ## +0x34
+var attack_joints := 0            ## the arcade's +0x32: joints a0, b0, a1, b1 (the attack record's on the PlayStation)
 
 
 ## Decodes row `row_index` of `owner` (words as converted) and links it; `common` is the common
@@ -80,6 +82,8 @@ static func link(owner: MotionBank, row_index: int, common: MotionBank, builtins
 	r.body_profile = w[12] & 0xFFFF
 	r.reaction = (w[12] >> 16) & 0xFFFF
 	r.close_reaction = w[13] & 0xFFFF
+	if w.size() > ATTACK_JOINTS_WORD:
+		r.attack_joints = w[ATTACK_JOINTS_WORD]
 	# MoveTotalDamage: the u16 damage word plus the arguments of the 0x0Bxx events.
 	var damage := w[5] & 0xFFFF
 	if r.events >= 0:

@@ -2,6 +2,7 @@ extends TestSuite
 ## FighterSkeleton builds every joint the mesh can reference, and FighterView keeps its
 ## culling bounds on the joints wherever the fighter stands.
 
+const DISC_DATA := true
 const TABLES := AssetCatalog.ROOT + "tables/pose.json"
 const MODEL := AssetCatalog.ROOT + "characters/costume_00"
 const BANK := "divmot00"

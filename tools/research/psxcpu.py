@@ -428,6 +428,10 @@ class PsxCpu:
         self.uc = Uc(UC_ARCH_MIPS, UC_MODE_MIPS32 | UC_MODE_LITTLE_ENDIAN)
         self.uc.mem_map(0, RAM_SIZE)
         self.uc.mem_map(SCRATCH_BASE, SCRATCH_SIZE)
+        # Unicorn leaves mapped memory as the host allocator gave it: a routine reading memory the
+        # game never wrote would see host bytes, different from run to run.
+        self.uc.mem_write(0, bytes(RAM_SIZE))
+        self.uc.mem_write(SCRATCH_BASE, bytes(SCRATCH_SIZE))
         self.gte = GTE()
         self.cop2_sites: dict[int, int] = {}
         self.stubs: dict[int, object] = {}

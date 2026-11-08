@@ -4,6 +4,10 @@ extends TestSuite
 ## additive page from its globals (DAT_800ae250 = 0x7DC8, DAT_800ae338 = 0x3F); an object without
 ## them was skipped by the view, so a ball that should burn showed nothing.
 
+const DISC_DATA := [
+	"test_a_flame_on_the_ball_is_drawn",
+]
+
 
 func test_the_flame_has_the_fire_clut_and_the_additive_page() -> void:
 	if not require(AssetCatalog.ROOT + "tables/fighter.json"):

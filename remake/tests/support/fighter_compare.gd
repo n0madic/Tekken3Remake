@@ -77,6 +77,13 @@ func differences(f: FighterState, frame: int, index: int, banks: Array[MotionBan
 		var actual_v := RecordTrace.width(value as int, size)
 		if actual_v != expected_v:
 			out.append("%s: %d ≠ %d" % [d["name"], actual_v, expected_v])
+	out.append_array(_body_differences(f, frame, index))
+	return out
+
+
+## The hands and the world joints, at their places in a PlayStation record.
+func _body_differences(f: FighterState, frame: int, index: int) -> PackedStringArray:
+	var out := PackedStringArray()
 	var h := f.hands
 	var hands := {
 		"hands current": [PackedInt32Array([Fx.s16(h.current[0]), Fx.s16(h.current[1])]), 0x127C, -2, 2],

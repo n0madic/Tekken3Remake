@@ -2,6 +2,7 @@ extends TestSuite
 ## The pause menu (PauseMenu, FUN_8007854C): Start pauses a running round, CANCEL resumes it at
 ## the next pause check, RESET and Start + Select leave the fight.
 
+const DISC_DATA := true
 
 var _content: FightContent
 

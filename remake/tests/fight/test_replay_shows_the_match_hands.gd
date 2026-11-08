@@ -5,6 +5,7 @@ extends TestSuite
 ## (as the combat code does on a lethal hit) and the replay is stepped to its end, each frame's
 ## `FighterHands.shown` compared with the channel values of the match frame it plays.
 
+const DISC_DATA := true
 const FRAMES := 300                     ## the replay's ring (ReplayState.FRAMES)
 const PUNCH_FROM := 250
 const KO_STEP := 500

@@ -2,6 +2,7 @@ extends TestSuite
 ## The ROUND TIME option: 20–60 s count down; the sixth value (∞) sets the infinite-time flag
 ## (0x800958D4, FUN_800DAF2C) and the timer stands still.
 
+const DISC_DATA := true
 const INFINITE := 5
 
 var _content: FightContent

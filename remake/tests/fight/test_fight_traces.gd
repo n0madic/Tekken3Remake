@@ -7,6 +7,7 @@ extends TestSuite
 ## the simulation with RuleSet.with_gameplay_fixes().
 
 const SLOW := true                  ## the runner's --quick leaves the trace comparisons out
+const DISC_DATA := true
 const MAX_REPORTED := 40
 ## Round-flow and camera globals compared each frame (address, size; negative: signed).
 const GLOBALS := {

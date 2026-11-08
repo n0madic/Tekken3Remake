@@ -81,8 +81,8 @@ A branch row's first `u16` is the command.
 | `0xC000` | End of list (default continuation). |
 | `0xC001` | Forward double tap: history shows 6, then neutral, then 6 within 20 frames. |
 | `0xC002` | Back double tap (4, neutral, 4). |
-| `0xC00C` | Use common row `row[3]` from the EXE table `0x80017C78` (12-byte rows). |
-| `0xC00D` | No input (condition only). |
+| `0xC00C` | Call: the list continues at common row `row[3]` of the EXE table `0x80017C78` (12-byte rows, `BranchFind`). |
+| `0xC00D` | Return: the list goes back to the row after the call. |
 | `0xC00E–0xC04C`, `0xC7FF–0xC827` | Motion sequences from tables `0x800958F4` (63) and `0x800959F0` (41). |
 
 A **sequence** is `s16 window` followed by `u16` steps ending with 0; a step is `(buttons << 8) | direction` with the same button encoding as a command. The last step is tested on the current frame (like a command word); earlier steps are searched backwards through the history within `window` frames, skipping frames that do not match only if no button was pressed on them. `python3 tools/research/input_sequences.py` prints both tables; examples: `0xC015` = `5 2 3 6+LP` (quarter circle forward + LP, 25 frames), `0xC01F` = a 59-frame ten-string button chain, `0xC7FF` = `4 6 2 1 4 8 9` in 40 frames.

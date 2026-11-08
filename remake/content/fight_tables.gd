@@ -32,6 +32,8 @@ var hurt_radii: Array[PackedInt32Array] = []        ## per character, 14 radii
 var body_radii: Array[PackedInt32Array] = []        ## per character, 8 body sphere radii
 var camera: CameraTables
 var health := PackedInt32Array()
+var health_one_player := PackedInt32Array()  ## the arcade's mode 0: by the operator's setting, one human
+var health_two_players := PackedInt32Array() ## ... two humans
 var recovery_team := PackedInt32Array()      ## FUN_80051AD4: the team winner's recovery (1/256 of full) by eighths left
 var recovery_survival := PackedInt32Array()  ## by the survival fight's time (300-frame steps)
 var reversal_lists: Array[PackedInt32Array] = []    ## animation tags (reversal condition 0x4B)
@@ -46,6 +48,8 @@ var round_voices := PackedInt32Array()              ## FUN_8003DCE0: "ROUND n" b
 var result_voices := PackedInt32Array()             ## FUN_8003E158: 0x8009749A, by round result
 var strike_sounds := PackedInt32Array()             ## FUN_80041F4C
 var special_sounds := PackedInt32Array()            ## FUN_80041C48 case 3
+var swing_sounds := PackedInt32Array()               ## the arcade's FUN_801A1EAC: fast swings of some characters
+var swing_sounds_slow := PackedInt32Array()          ## ... every other swing
 var effects := EffectTables.new()
 var vibration := VibrationTables.new()
 var ai: AiTables
@@ -117,6 +121,8 @@ static func load_from(folder: String) -> FightTables:
 	t.body_radii = _rows(d["body_radii"])
 	t.camera = CameraTables.load_from(folder.path_join("camera.json"))
 	t.health = JsonFile.ints(d["health"])
+	t.health_one_player = JsonFile.ints(d.get("health_one_player", []))
+	t.health_two_players = JsonFile.ints(d.get("health_two_players", []))
 	t.recovery_team = JsonFile.ints(d["recovery_team"])
 	t.recovery_survival = JsonFile.ints(d["recovery_survival"])
 	t.reversal_lists = _rows(d["reversal_lists"])
@@ -147,6 +153,8 @@ static func load_from(folder: String) -> FightTables:
 	t.result_voices = JsonFile.ints(d["result_voices"])
 	t.strike_sounds = JsonFile.ints(d["strike_sounds"])
 	t.special_sounds = JsonFile.ints(d["special_sounds"])
+	t.swing_sounds = JsonFile.ints(d.get("swing_sounds", []))
+	t.swing_sounds_slow = JsonFile.ints(d.get("swing_sounds_slow", []))
 	var e: Dictionary = d["effects"]
 	for pair: Array in e["breath_offsets"]:
 		t.effects.breath_offsets.append(_rows(pair))

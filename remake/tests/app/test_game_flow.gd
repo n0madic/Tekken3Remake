@@ -5,6 +5,7 @@ extends TestSuite
 ## screens' state and, in fights, the fighters are compared with the game's.
 
 const SLOW := true                  ## the runner's --quick leaves the trace comparisons out
+const DISC_DATA := true
 const MAX_REPORTED := 30
 const REFILL_RULE := 4               ## flow_trace.py's refill header: HEALTH, REFILL_BELOW, TIMER_BELOW, TIMER_REFILL
 const DRAIN_RULE := 3                ## flow_trace.py's drain header: HEALTH, IS_CPU, DRAIN_TO

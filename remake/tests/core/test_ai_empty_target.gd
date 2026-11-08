@@ -4,6 +4,7 @@ extends TestSuite
 ## the banks of Ogre and Yoshimitsu, and 0xDC5 is empty in both too): the CPU's follow-up lists
 ## and candidates used to dereference the missing move.
 
+const DISC_DATA := true
 const FRAMES := 4000
 ## (AI group, CPU level, seed) of the runs that crashed.
 const RUNS := [[2, 9, 1194], [3, 0, 1971]]

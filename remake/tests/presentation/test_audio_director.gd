@@ -2,6 +2,10 @@ extends TestSuite
 ## AudioDirector plays sound codes on emulated SPU voices as SoundPlayFighter does: the voice is
 ## keyed off before the key-on, so a code with no tone behind it still cuts the old sound.
 
+const DISC_DATA := [
+	"test_a_prepared_track_is_silent_until_the_volume_call",
+	"test_the_current_track_is_not_restarted",
+]
 const COMBAT_TONE := 0x4000 | 8 << 10 | 15 << 6       ## combat bank, voice 8, program 0 tone 0
 const MISSING_TONE := COMBAT_TONE | 3 << 4 | 15       ## program 3 tone 15: not in the bank
 

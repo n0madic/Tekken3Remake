@@ -4,10 +4,12 @@ extends RefCounted
 ## records (GameProgress.save_data) in `user://progress.json` (card 1) or `progress2.json` (card 2,
 ## ProgressCard), and the remake's own settings
 ## (window, audio, input) in `user://settings.json`. The progress file keeps the bytes as the
-## game's card file holds them, so a load restores exactly what was saved.
+## game's card file holds them, so a load restores exactly what was saved. The arcade build has no
+## cards: what the cabinet keeps of its players goes to `user://arcade_records.json`.
 
 const PROGRESS_PATHS: Array[String] = ["user://progress.json", "user://progress2.json"]
 const SETTINGS_PATH := "user://settings.json"
+const ARCADE_RECORDS_PATH := "user://arcade_records.json"
 const VERSION := 1
 const TEMPORARY_SUFFIX := ".tmp"
 ## The memory card results the options screen shows (menu_sim CardStub).
@@ -16,6 +18,7 @@ const CARD_ERROR := 5
 
 var progress_path := PROGRESS_PATHS[0]
 var settings_path := SETTINGS_PATH
+var arcade_records_path := ARCADE_RECORDS_PATH
 
 
 ## The saved progress, or an empty array when there is none (or it is unreadable). A complete
@@ -35,15 +38,28 @@ func save_progress(bytes: PackedByteArray) -> int:
 
 
 func load_settings() -> Dictionary:
-	for path: String in _candidates(settings_path):
-		var d: Variant = _parse(path)
-		if d is Dictionary:
-			return d
-	return {}
+	return _load_document(settings_path)
 
 
 func save_settings(settings: Dictionary) -> bool:
 	return _write(settings_path, JSON.stringify(settings, "\t"))
+
+
+## The arcade's records, or an empty dictionary when there are none (ArcadeProgress.restore_records).
+func load_arcade_records() -> Dictionary:
+	return _load_document(arcade_records_path)
+
+
+func save_arcade_records(records: Dictionary) -> bool:
+	return _write(arcade_records_path, JSON.stringify(records, "\t"))
+
+
+static func _load_document(path: String) -> Dictionary:
+	for candidate: String in _candidates(path):
+		var d: Variant = _parse(candidate)
+		if d is Dictionary:
+			return d
+	return {}
 
 
 ## The files a document may be in, the newest first: the temporary file of a write that was

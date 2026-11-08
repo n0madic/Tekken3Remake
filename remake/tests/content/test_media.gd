@@ -1,6 +1,10 @@
 extends TestSuite
 ## The converted music and movies (optional groups) load and last as long as converted.
 
+const DISC_DATA := [
+	"test_movies_load_with_their_duration",
+	"test_music_tracks_load",
+]
 const MOVIES := AssetCatalog.ROOT + "movies"
 const MUSIC := AssetCatalog.ROOT + "music"
 const DURATION_TOLERANCE := 0.1

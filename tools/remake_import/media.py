@@ -168,7 +168,8 @@ def _vorbis(tool: FFmpeg, pcm: bytes, rate: int, channels: int) -> bytes:
     with tempfile.TemporaryDirectory() as tmp:
         source, dest = Path(tmp) / "in.wav", Path(tmp) / "out.ogg"
         source.write_bytes(wav_bytes(pcm, rate, channels))
-        tool.run(["-i", str(source), "-c:a", VORBIS, "-q:a", str(VORBIS_QUALITY), str(dest)])
+        # bitexact: otherwise the Ogg stream's serial number is random and no two conversions are equal.
+        tool.run(["-i", str(source), "-c:a", VORBIS, "-q:a", str(VORBIS_QUALITY), "-fflags", "+bitexact", str(dest)])
         return dest.read_bytes()
 
 
@@ -384,14 +385,19 @@ def _link(source: Path, dest: Path) -> None:
 
 
 def _frame_container(tool: FFmpeg, raw: bytes, arrivals: list[int]) -> bytes:
-    """The fallback "T3MV" container: the frames as JPEG with the sector at which each arrives."""
+    """The fallback container of an STR range: its frames as JPEG with the sector at which each arrives."""
     with tempfile.TemporaryDirectory() as tmp:
         frames_dir = Path(tmp)
         _decode(tool, raw, ["-map", "0:v:0", "-q:v", str(JPEG_QUALITY), "-frames:v", str(len(arrivals)),
                             str(frames_dir / "%05d.jpg")])
         jpegs = [(frames_dir / f"{i + 1:05d}.jpg").read_bytes() for i in range(len(arrivals))]
+    return frame_container(jpegs, arrivals, SECTORS_PER_SECOND)
+
+
+def frame_container(jpegs: list[bytes], arrivals: list[int], rate: int) -> bytes:
+    """The fallback "T3MV" container: JPEG frames with the time at which each arrives, in `rate`ths of a second."""
     width, height = _jpeg_size(jpegs[0])
-    table = bytearray(MOVIE_MAGIC + struct.pack("<IHHII", MOVIE_VERSION, width, height, len(jpegs), SECTORS_PER_SECOND))
+    table = bytearray(MOVIE_MAGIC + struct.pack("<IHHII", MOVIE_VERSION, width, height, len(jpegs), rate))
     offset = len(table) + 12 * len(jpegs)
     for jpeg, sector in zip(jpegs, arrivals):
         table += struct.pack("<III", offset, len(jpeg), sector)

@@ -4,6 +4,7 @@ extends TestSuite
 ## sword points CollisionShapesUpdate writes into joint blocks 18 and 19 for that bank.
 ## The seeds pick the banks the harness picks (tools/research/fight_harness.py, P1 Mokujin vs Paul).
 
+const DISC_DATA := true
 const SEED_YOSHIMITSU := 1234          ## the round's bank is 4
 const SEED_OTHER := 1                  ## the round's bank is 1
 const FRAMES := 60

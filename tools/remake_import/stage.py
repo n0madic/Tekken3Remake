@@ -174,7 +174,11 @@ def smooth_seams(picture: np.ndarray, period: int = TILE_TEXELS, band: int = SEA
 
 def lighting(disc: Disc, stage: int) -> dict:
     """The stage's light rig record (stages.md#lighting)."""
-    rec = disc.exe_bytes(LIGHT_RECORDS + LIGHT_RECORD_BYTES * stage, LIGHT_RECORD_BYTES)
+    return lighting_record(disc.exe_bytes(LIGHT_RECORDS + LIGHT_RECORD_BYTES * stage, LIGHT_RECORD_BYTES))
+
+
+def lighting_record(rec: bytes) -> dict:
+    """A light rig record's fields (the arcade's records begin the same way)."""
     ambient = struct.unpack_from("<i", rec, 0)[0]
     pitch, yaw = struct.unpack_from("<hh", rec, 0x0C)
     return {

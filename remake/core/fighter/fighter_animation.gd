@@ -597,9 +597,9 @@ func _head_look_at(f: FighterState, opp: FighterState) -> void:
 	var o1 := opp.body.joints[CHEST_JOINT].t
 	var o2 := opp.body.joints[HEAD_JOINT].t
 	var head := body.joints[HEAD_JOINT].t
-	var tx := Fx.s16(Fx.s16(o1[0] + ((o2[0] - o1[0]) >> 1)) - head[0])
-	var ty := Fx.s16(Fx.s16(o1[1] + ((o2[1] - o1[1]) >> 1)) - head[1])
-	var tz := Fx.s16(Fx.s16(o1[2] + ((o2[2] - o1[2]) >> 1)) - head[2])
+	var tx := Fx.s16(Fx.s16(_look_midpoint(o1[0], o2[0])) - head[0])
+	var ty := Fx.s16(Fx.s16(_look_midpoint(o1[1], o2[1])) - head[1])
+	var tz := Fx.s16(Fx.s16(_look_midpoint(o1[2], o2[2])) - head[2])
 	# FUN_8004B4B0: the chest's axes, then the target in the chest frame (MAC results).
 	var chest := body.joints[CHEST_JOINT].rot
 	var ax := Fx.mvmva(chest, 0x1000, 0, 0)
@@ -656,6 +656,11 @@ func _head_look_at(f: FighterState, opp: FighterState) -> void:
 			look.current[k] = Fx.s16(look.current[k] + step)
 		look.current[0] = look.target[0]
 	body.local_mats[HEAD_SLOT] = Fx.mul_matrix(look_base, _angles_to_matrix(look.current))
+
+
+## The opponent's middle point of joints 1 and 2 on an axis.
+func _look_midpoint(a: int, b: int) -> int:
+	return a + ((b - a) >> 1)
 
 
 ## The three angles of the head's animated local matrix, so the look-at starts without a pop.

@@ -3,6 +3,8 @@ extends TestSuite
 ## again, in the old one's place among the view's children, hidden until the next step shows it;
 ## the other fighters and the stage stay.
 
+const DISC_DATA := true
+
 
 func test_replace_fighter_keeps_the_rest() -> void:
 	var effects_dir := AssetCatalog.ROOT.path_join("effects")

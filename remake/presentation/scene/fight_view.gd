@@ -71,7 +71,9 @@ func setup(stage: StageData, effect_data: EffectData, models: Array[CharacterMod
 	# The arcade draws the wind's direction with rand(); here it follows from the match, so that
 	# runs (screenshots, replays) repeat.
 	_wind_rng.seed = hash([stage.number, costume_slots])
-	_wind.start(stage.number, _wind_rng)
+	if stage.number == ArcadeWind.STAGE:
+		_wind.tables = ArcadeAttachmentTables.shared()
+		_wind.blow(_wind_rng.randi())
 	# stages.md#clear-colour: no panorama in True Ogre fights; stage 11's blue otherwise (the
 	# arcade's stages have their sky instead, also gone in True Ogre fights).
 	stage_view.panorama.visible = not true_ogre
@@ -99,8 +101,9 @@ func _new_fighter(model: CharacterModel, rank: int) -> FighterView:
 
 
 ## A record's model swapped in during the fight (Tekken Force's enemies and boss, the Ogre scene):
-## only its view is built again; it shows from the next step.
-func replace_fighter(i: int, model: CharacterModel, costume_slot: int) -> void:
+## only its view is built again; it shows from the next step. `keeps_books`: the flipbooks stay
+## those of the fight (the arcade's scenes change them on their own).
+func replace_fighter(i: int, model: CharacterModel, costume_slot: int, keeps_books := false) -> void:
 	var old := fighters[i]
 	var view := _new_fighter(model, i)
 	view.visible = false
@@ -109,7 +112,8 @@ func replace_fighter(i: int, model: CharacterModel, costume_slot: int) -> void:
 	remove_child(old)
 	old.queue_free()
 	_costume_slots[i] = costume_slot
-	effects.set_costumes(_costume_slots)
+	if not keeps_books:
+		effects.set_costumes(_costume_slots)
 
 
 ## Tekken Ball's and Tekken Force's parts: the tile-map backdrop (drawn into a viewport and
@@ -177,7 +181,7 @@ func apply(sim: FightSimulation) -> void:
 			sword_glow.set_ribbon(i, null)
 			continue
 		view.set_wind(_wind.vector)
-		view.set_joints(f.body.draw_joints.slice(0, FighterView.JOINT_SLOTS), appearing)
+		view.set_joints(f.body.view_joints(), appearing)
 		sword_glow.set_ribbon(i, _glow_ribbon(view, f, sim), appearing)
 		view.set_hidden_joints(0 if f.body.stick_shown else 1 << FighterView.STICK_JOINT)
 		view.set_overhead(sim.camera.overhead != 0, f.pose_move.flags & MoveFlag.REACT_CHAIN != 0)
@@ -192,7 +196,8 @@ func apply(sim: FightSimulation) -> void:
 			view.set_eyes_closed(f.hands.face == 1)
 		var freeze: Color = sim.fight.signal_colour[f.player_index] if sim.fight.mode == GameMode.PRACTICE else StageLighting.NO_SIGNAL
 		view.set_back_colour(StageLighting.fighter_back_colour(_ambient_level, sim.fight.flash_level[i], freeze))
-	_wind.step()
+	if _wind.tables != null:
+		_wind.step()
 	effects.step(sim.events)
 	effects.objects.show_pool(sim.fight.effects)
 	var view := sim.camera.view.copy()
@@ -276,7 +281,7 @@ func interpolate(weight: float, window: Vector2) -> void:
 		if view.visible:
 			view.show_between(weight)
 	rig.place(weight, window)
-	sword_glow.show_between(weight, rig.frame_tan)
+	sword_glow.show_between(weight, rig.layout_tan)
 	stage_view.place_sky(rig.camera, rig.frame_tan)
 	# FUN_80036254: under the overhead KO camera the fighters are drawn ViewMatrix.OVERHEAD_DEPTH
 	# units nearer to it (along the view axis).

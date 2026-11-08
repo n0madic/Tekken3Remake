@@ -89,7 +89,7 @@ func setup(character: CharacterModel) -> void:
 		materials.append(material)
 	_apply_lighting()
 	_albedo = texture_open
-	_arcade = ArcadeAttachments.new(model) if not model.arcade_attachments.is_empty() else null
+	_arcade = ArcadeAttachments.new(model, ArcadeAttachmentTables.shared()) if not model.arcade_attachments.is_empty() else null
 	_build_meshes()
 	_previous_rows = PackedVector4Array()
 
@@ -365,7 +365,7 @@ func set_hidden_joints(mask: int) -> void:
 ## again from their rest (the fighter appears: their last step is stale).
 func set_joints(joints: Array[JointFrame], snap: bool = false) -> void:
 	var all := joints
-	if _arcade != null:
+	if _arcade != null and joints.size() < CharacterModel.JOINT_COUNT:
 		if snap:
 			_arcade.reset()
 		all = _arcade.update(joints)
@@ -377,7 +377,7 @@ func set_joints(joints: Array[JointFrame], snap: bool = false) -> void:
 		rows[3 * j] = r[0]
 		rows[3 * j + 1] = r[1]
 		rows[3 * j + 2] = r[2]
-		if j >= joints.size() and not _arcade.has_joint(j):
+		if j >= JOINT_SLOTS and (_arcade == null or not _arcade.has_joint(j)):
 			continue                    # an attachment the model does not have, at the origin
 		var origin := Vector3(r[0].w, r[1].w, r[2].w)
 		bounds = AABB(origin, Vector3.ZERO) if j == 0 else bounds.expand(origin)

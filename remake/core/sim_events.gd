@@ -33,6 +33,8 @@ enum Kind {
 	FORCE_NAMES,  ## Tekken Force: fighter `a`'s name plate changes to character `b` (FUN_800B362C)
 	SHOUT,        ## a: the voice id (0x2nnn) of an attack shout that plays, b: player (the arcade models' face: ArcadeFace)
 	STAFF_ROLL_BANK, ## FUN_8007517c: the staff roll's bank (ending.ovl) replaces the first voice bank
+	MUSIC_SECTION, ## a: the arcade BGM's section variable (ArcadeRoundSounds)
+	EFFECT_BOOK,  ## a: flipbook set (0, 1), b: the costume slot whose flipbook it now is (the arcade's FUN_801ACA14)
 }
 
 ## EFFECTS_DRAW modes: the game's flipbook and dust ring draw calls (FUN_80077744,
@@ -49,6 +51,7 @@ class Event:
 	var a: int
 	var b: int
 	var c := 0
+	var id := 0                       ## SOUND, SOUND_STOP of a fighter: the 16-bit id the code came from (the arcade's board routes by it)
 	var point := PackedInt32Array()   ## world position (game units) where the event happens
 	var vector := PackedInt32Array()  ## HIT_SPARK: the hit direction (the hit slot's), for the drift
 	var mirrored := false             ## HIT_SPARK, EFFECT, SPARK: the flipbook is drawn mirrored (EffectObjects.spawn_mirrored)

@@ -19,10 +19,10 @@ from __future__ import annotations
 import struct
 
 import numpy as np
-from PIL import Image
 
 from common import Disc, Output
 from vram import Vram, png_bytes, rgba, unpack_indices
+import icons
 import overlay_images
 import sources
 import system_textures
@@ -37,10 +37,6 @@ OPTIONS_STRIPS = 9                 # title.ovl's archive: the options backdrop's
 PAD_ARCHIVE = 0x800D5384           # title.ovl: the key configuration's pad pictures (digital, analog)
 LOGO_AT = (0x97, 0x184)
 ICON_CROP = (28, 44, 312)          # the title picture's logo: x, y and side of the square
-ICON_SIZE = 256
-ADAPTIVE_SIZE = 432                # Android's adaptive layers (108 dp at xxxhdpi)
-ADAPTIVE_SAFE = 0.64               # the share of the layer a launcher's mask always shows
-MONOCHROME_LEVEL = 110             # the luminance from which the logo counts in the monochrome layer
 FONT_TABLE = 0x80021FD0            # 16 bytes per font; +0xE CLUT offset
 FONTS = 3
 COLOURS = 16
@@ -127,39 +123,13 @@ def _colours(disc: Disc) -> list[list[list[list[int]]]]:
     return fonts
 
 
-def _icon(picture: np.ndarray) -> np.ndarray:
-    """The application icon: the logo square of the title picture, scaled to ICON_SIZE."""
-    x, y, side = ICON_CROP
-    square = Image.fromarray(np.ascontiguousarray(picture[y:y + side, x:x + side]), "RGBA")
-    return np.asarray(square.resize((ICON_SIZE, ICON_SIZE), Image.LANCZOS))
-
-
-def _adaptive(icon: np.ndarray) -> dict[str, np.ndarray]:
-    """Android's adaptive icon layers from the square icon."""
-    inner = int(ADAPTIVE_SIZE * ADAPTIVE_SAFE)
-    at = (ADAPTIVE_SIZE - inner) // 2
-    logo = np.asarray(Image.fromarray(icon, "RGBA").resize((inner, inner), Image.LANCZOS))
-    foreground = np.zeros((ADAPTIVE_SIZE, ADAPTIVE_SIZE, 4), dtype=np.uint8)
-    foreground[at:at + inner, at:at + inner] = logo
-    background = np.zeros((ADAPTIVE_SIZE, ADAPTIVE_SIZE, 4), dtype=np.uint8)
-    background[..., 3] = 255
-    monochrome = np.zeros_like(foreground)
-    luminance = foreground[..., :3].astype(np.uint16).max(axis=-1)
-    monochrome[..., :3] = 255
-    monochrome[..., 3] = np.where(luminance >= MONOCHROME_LEVEL, 255, 0)
-    return {"foreground": foreground, "background": background, "monochrome": monochrome}
-
-
 def convert(disc: Disc, out: Output) -> None:
     for name, block, archive in (("", "title", TITLE_ARCHIVE), ("_enbu", "enbu", ENBU_ARCHIVE)):
         members = overlay_images.archive_members(*disc.source(block, archive))
         picture, logo = _title(out, f"screens/title{name}.png", f"screens/namco{name}.png", members)
         out.write(f"screens/title{name}.png", png_bytes(picture))
         if not name:
-            icon = _icon(picture)
-            out.write("icon.png", png_bytes(icon))
-            for layer, pixels in _adaptive(icon).items():
-                out.write(f"icon_{layer}.png", png_bytes(pixels))
+            icons.write(out, picture, ICON_CROP)
         out.write(f"screens/namco{name}.png", png_bytes(logo))
         if not name:
             backdrop = np.zeros((SCREEN_H, SCREEN_W, 4), dtype=np.uint8)

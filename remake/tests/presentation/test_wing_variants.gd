@@ -4,6 +4,9 @@ extends TestSuite
 ## given (the wing sequence's variant and the level channel's value >> 4), and the values the
 ## simulation produces stay inside the variants the converter writes (arcade/README.md#true-ogres-wings).
 
+const DISC_DATA := [
+	"test_simulation_values_stay_in_the_converted_variants",
+]
 const STRIDE := 28
 const WING_VARIANTS := 40
 const TAIL_VARIANTS := 17

@@ -18,6 +18,10 @@ rest angles and dynamics record.
 
 Slots kept from the PlayStation (PLAYSTATION_SLOTS): Mokujin's, whose stick the arcade model
 does not have.
+
+Converted from the arcade's set alone (no disc), `model.json` takes its skeleton from the arcade's
+rows (`parts_from_rows`): the joints have the PlayStation's offsets and parents, within a model unit.
+Mokujin is the arcade's model then, without the stick.
 """
 
 from __future__ import annotations
@@ -154,22 +158,50 @@ def convert_or_keep(disc: Disc, out: Output, arc: arcade.ArcadeSet, name: str, s
         character.convert_model(disc, out, name, slot, disc.bns(kmd_id), character.model_textures(disc, slot, arc_id))
 
 
-def convert(disc: Disc, out: Output, arc: arcade.ArcadeSet, name: str, slot: int, kmd_id: int) -> None:
-    """Writes costume `slot`'s arcade mesh and atlas with the PlayStation's skeleton."""
+def parts_from_rows(model: arcade_kmd.Model) -> list[dict]:
+    """The skeleton the fight code builds (the shape of character.ps1_parts) from an arcade model:
+    the PlayStation's draw parts over the arcade's joints. A part's `row` is its joint, its parent a
+    part as on the PlayStation; the attachment parts have no parent, the arcade's attachments being
+    `arcade_attachments`."""
+    part_of_joint = {joint: part for part, joint in enumerate(kmdlib.PART_MATRIX)}
+    parts = []
+    for part, joint in enumerate(kmdlib.PART_MATRIX):
+        if part >= character.FIRST_ATTACHMENT_PART:
+            parts.append({"row": joint, "parent": -1, "offset": [0, 0, 0], "joint": joint, "drawn": False,
+                          "rest": [0, 0, 0], "dynamics": None})
+            continue
+        row = model.rows[joint]
+        parts.append({
+            "row": joint,
+            "parent": part_of_joint[row.parent] if row.parent >= 0 else -1,
+            "offset": list(row.offset),
+            "joint": joint,
+            "drawn": True,
+        })
+    return parts
+
+
+def convert(disc: Disc | None, out: Output, arc: arcade.ArcadeSet, name: str, slot: int, kmd_id: int | None = None) -> None:
+    """Writes costume `slot`'s arcade mesh and atlas, with the PlayStation's skeleton when converted
+    with a disc (`disc`, `kmd_id`), else with the arcade's."""
     data, blocks = costume(arc, slot)
     enable = arc.prog(arcade_kmd.ATTACHMENT_ENABLE + arcade_kmd.ATTACHMENTS * slot, arcade_kmd.ROWS)
     sine = list(arc.prog_table(f"<{arcade_kmd.SINE_ENTRIES}h", arcade_kmd.SINE))
     turns = arcade_kmd.load_turns(arc.prog_values, slot, enable)
     model, drawn, faces, local, normal, groups = model_faces(data, enable, turns, sine, name, slot)
     vram = load_textures(blocks)
-    ps1 = kmdlib.parse(disc.bns(kmd_id))
-    order = character.drawn_rows(ps1, character.enabled_attachments(disc, slot))
+    if disc is None:
+        scale_percent, parts = model.scale_percent, parts_from_rows(model)
+    else:
+        ps1 = kmdlib.parse(disc.bns(kmd_id))
+        order = character.drawn_rows(ps1, character.enabled_attachments(disc, slot))
+        scale_percent, parts = ps1.scale_percent, character.ps1_parts(disc, slot, ps1, order)
     record = {
         "name": name,
         "costume_slot": slot,
-        "scale_percent": ps1.scale_percent,
+        "scale_percent": scale_percent,
         "source": "arcade",
-        "parts": character.ps1_parts(disc, slot, ps1, order),
+        "parts": parts,
         "arcade_attachments": attachments(arc, model, slot, drawn),
     }
     eyes = arcade_eyes.record(arc, slot)

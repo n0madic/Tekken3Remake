@@ -57,7 +57,7 @@ func _ready() -> void:
 	add_child(info)
 	info.position = Vector2(12, 8)
 	if not Assets.is_available():
-		info.text = AssetCatalog.missing_message()
+		info.text = Assets.missing_message()
 		return
 	var content := FightContent.load_from(AssetCatalog.ROOT)
 	var record := content.tables.character(costume_key)

@@ -18,6 +18,11 @@ var h := 500                        ## the GTE projection plane of the frame
 ## fight camera's roll is always 0, which makes Rz the identity.
 static func build(view: CameraView, tables: FightTables) -> ViewMatrix:
 	var m := ViewMatrix.new()
+	m._fill(view, tables, ASPECT)
+	return m
+
+
+func _fill(view: CameraView, tables: FightTables, aspect: int) -> void:
 	var yaw := -view.yaw & 0xFFF
 	var sy := FightMath.sin12(yaw, tables)
 	var cy := FightMath.cos12(yaw, tables)
@@ -33,11 +38,10 @@ static func build(view: CameraView, tables: FightTables) -> ViewMatrix:
 	var rx := PackedInt32Array([Fx.ONE, 0, 0, 0, cx, sx, 0, -sx, cx])
 	var r := Fx.mul_matrix(rx, ry)
 	for k in range(3, 6):
-		r[k] = Fx.s16(Fx.trunc12(r[k] * ASPECT))
-	m.rot = r
-	m.t = Gte.apply_lv(r, PackedInt32Array([-view.x, -view.y, -view.z]))
-	m.h = view.h
-	return m
+		r[k] = Fx.s16(Fx.trunc12(r[k] * aspect))
+	rot = r
+	t = Gte.apply_lv(r, PackedInt32Array([-view.x, -view.y, -view.z]))
+	h = view.h
 
 
 ## FUN_80036254: the matrix the fighters are drawn with. The overhead KO camera
@@ -57,4 +61,8 @@ func fighter_view(overhead: bool) -> ViewMatrix:
 func screen_of(joint: JointFrame) -> PackedInt32Array:
 	var v := Gte.apply_lv(rot, joint.t)
 	var tr := PackedInt32Array([Fx.w32(v[0] + t[0]), Fx.w32(v[1] + t[1]), Fx.w32(v[2] + t[2])])
+	return _rtps(tr)
+
+
+func _rtps(tr: PackedInt32Array) -> PackedInt32Array:
 	return Gte.rtps_origin(tr, h, SCREEN_OFFSET_X, SCREEN_OFFSET_Y)

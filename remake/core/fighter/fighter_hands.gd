@@ -14,6 +14,9 @@ const FIST := 0x200              ## channel value of the closed fist; shapes 2â€
 const FACE_OPEN := 10
 const FACE_CLOSED := 11
 const OGRE_LEVEL := 0x100
+const EVENT_FIRST := 14
+const EVENT_OPEN := 20
+const EVENT_COSTUME := 21
 
 var current := PackedInt32Array([0, 0])
 var target := PackedInt32Array([0, 0])
@@ -37,6 +40,17 @@ var replay_levels := PackedInt32Array()   ## the channel values a replay shows; 
 ## replay (the traces compare it), so the recorded values are held apart (ReplayState.hand_levels).
 func shown() -> PackedInt32Array:
 	return current if replay_levels.is_empty() else replay_levels
+
+
+## A move event's hand command as (shape, speed): `command` is the event's number from 14, `value`
+## its byte (MoveEvents): event 20 opens the hands, event 21 takes the costume's shape.
+func event_command(command: int, value: int, tables: FighterTables, slot: int) -> Vector2i:
+	match command + EVENT_FIRST:
+		EVENT_OPEN:
+			return Vector2i(0, value)
+		EVENT_COSTUME:
+			return Vector2i(tables.hand_shape(slot), value)
+	return Vector2i(command & 7, Fx.s8(value))
 
 
 ## HandFaceCommand for `hands` (bit 0 channel 0, bit 1 channel 1), a shape and a speed: shapes

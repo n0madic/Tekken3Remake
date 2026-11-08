@@ -4,6 +4,17 @@ The arcade Tekken 3 runs on Namco System 12. That board has the PlayStation chip
 
 Status: ROM layout, program compression and file system `confirmed` (decoded and compared with MAME RAM dumps); stage formats in [stages.md](stages.md); character models, their attachment dynamics and the motion streams below; the program's structure in [Program structure](#program-structure).
 
+The arcade's game logic is documented against the PlayStation build, subsystem by subsystem. The remake's arcade build ([remake-plan.md](../../remake-plan.md#m6-arcade-only-build)) is written from these:
+
+| Document | Subject | How far it is proven |
+|---|---|---|
+| [fight-frame.md](fight-frame.md) | The fight frame, round flow, round HUD, camera director | Read on both builds; the frame's order and the round flow by the fight traces. |
+| [moves.md](moves.md) | Move rows, slots, branch lists, tables | Read and measured on the data; the running fighters by the fight traces. |
+| [combat.md](combat.md) | Attacks, collision, reactions, physics, skeleton and pose | Read; the pose pipeline and combat by the fight traces. |
+| [ai.md](ai.md) | The CPU opponent | Read on both builds; the port's own trace in progress. |
+| [flow-and-screens.md](flow-and-screens.md) | The whole game's states, ladder, unlocks, 2D screens, asset catalogue, text system | Read and observed in MAME; the flow by the flow traces, [section 6](flow-and-screens.md#6-proof-and-corrections). |
+| [audio-and-effects.md](audio-and-effects.md) | C352 bank, the H8's sequencer, sound commands, effect objects | Read; nothing of the sound is ported. |
+
 ## Source set
 
 The set is MAME's `tekken3`, *Tekken 3 (World, TET2/VER.E1)*. It has nine clones (`tekken3a`…`tekken3ud`) that differ only in the program ROM pair, plus `tekken3a`'s own flash pair. MAME 0.289 verifies the set (`mame -verifyroms tekken3`).
@@ -49,7 +60,7 @@ All game data is read through one file table (`FUN_801BB748` builds it at start-
 
 | Category | Entries | Content (`confirmed` unless marked) |
 |---:|---:|---|
-| 0 | 261 | MDEC pictures played in sequence (4.5 MB). `FUN_801BE3EC` loads the next entry and `FUN_801BE474` decodes it (`DecDCTvlc`, `DecDCTin`, `DecDCTout`); `FUN_801BE180` restarts at entry 0. Every entry has the bitstream frame header: `u16` length, `0x3800`, `u16` quantiser (1–6), `u16` version (1). `inferred`: a movie; where it plays is `unknown`. |
+| 0 | 261 | MDEC pictures played in sequence (4.5 MB). `FUN_801BE3EC` loads the next entry and `FUN_801BE474` decodes it (`DecDCTvlc`, `DecDCTin`, `DecDCTout`); `FUN_801BE180` restarts at entry 0. Every entry has the bitstream frame header: `u16` length, `0x3800`, `u16` quantiser (1–6), `u16` version (1). The attract movie: [flow-and-screens.md](flow-and-screens.md#movie). |
 | 1–18 | 1–59 each | One compressed TIM per entry (273 entries, 2.3 MB decoded). Their use is `unknown`. |
 | 19 | 64 | Character models of costume slots 0–31: entry `2·slot` a TIM block, `2·slot + 1` its `3DMK` model ([models](#character-models)). |
 | 20 | 82 | The same pairs for slots 0–40, compressed; 4-byte entries are empty. A model here replaces category 19's (slots 7, 15, 21, 29 and 32–40 have one); a TIM block here is uploaded after category 19's (`FUN_80197e88`, `FUN_80197b38`). |
@@ -76,7 +87,7 @@ The format is the PlayStation's `3DMK` ([3dmk-models.md](../formats/3dmk-models.
 - **Vertex variants.** The 41 variant blocks (the hands in rows 6 and 10, Kuma's and Panda's jaw in row 2, True Ogre's wings in row 1 and rows 18–19) are in the file with the base block's lists; how the game selects them is [below](#true-ogres-wings-and-the-variant-selection).
 - **Feet.** The feet's frames (rows 14 and 17) turn 90° about y against the PlayStation's: in every frame of every motion the arcade's local foot rotation is the PlayStation's times Ry(−90°) (`inferred` from the motion comparison below), so a foot vertex `v` is `Ry(−90°) · v` in the PlayStation's frame.
 - **Attachments.** The enable table at `0x801FD2E6` (`u8` per costume slot × 6 + row) is 0 (hidden), 1 (static) or above 1 (swinging). Several costumes have more attachments than on the PlayStation (Hwoarang's first, Xiaoyu's, Julia's second, Anna's), and they are part of the seam exchange. As a model loads, `FUN_80197578` turns the vertices, variants and normals of every swinging attachment by the Euler angles at `0x801FD3E4 + 8 · enable` (`EulerToMatrix`, then MVMVA, IR saturated): most turn 180° about y, so their stored geometry points along −x (`confirmed`: the turned blocks equal the loaded model in RAM dumps of ten costumes).
-- **Attachment dynamics.** `FUN_8019b6d8` (each step, rows 18–23 after the skeleton) is the PlayStation's `FUN_80037F10` with other tables: the local rotation is `Euler(rest + record[0..2]) · Euler(0, yaw, pitch)`, the yaw and pitch from a blend of the direction to the attachment's tip of the last step (smoothed over `record[4]` steps), gravity (with the wind) and the rest direction; mode 1 (`FUN_8019bed0`) aims at a point on another joint, mode 2 (`FUN_8019c15c`) keeps the tip off a line fixed to another joint, slot 0x24's second attachment leans between joints 13 and 16 (`FUN_8019c598`), slots 0x1A and 0x24 clamp the angles, slot 0x26 flips its axis record. Records (s16) at `0x801FDC88 + 4 · (slot × 6 + attachment)`; axis records (six `s8`) at `0x801FD170`; clamps at `0x801FD2F0`. `confirmed`: the remake's port reproduces 3,000 random calls of the routine in the harness and 24 runs of 40 steps of the whole loop (the routine, then `CompMatrix` `0x801EF684`, for every drawn attachment in row order; `tools/research/arcade_attachment_cases.py`), and given a RAM dump's skeleton it settles on the dump's attachment joints. The wind (`FUN_8019c738`, every step after the fighters) is nonzero only on stage 11 (the helicopter's downwash): `FUN_801e6acc` picks one of eight directions with `rand()` when the fight starts, and the gust is a triangle wave of period 16 steps.
+- **Attachment dynamics.** `FUN_8019b6d8` (each step, rows 18–23 after the skeleton) is the PlayStation's `FUN_80037F10` with other tables: the local rotation is `Euler(rest + record[0..2]) · Euler(0, yaw, pitch)`, the yaw and pitch from a blend of the direction to the attachment's tip of the last step (smoothed over `record[4]` steps), gravity (with the wind) and the rest direction; mode 1 (`FUN_8019bed0`) aims at a point on another joint, mode 2 (`FUN_8019c15c`) keeps the tip off a line fixed to another joint, slot 0x24's second attachment leans between joints 13 and 16 (`FUN_8019c598`), slots 0x1A and 0x24 clamp the angles, slot 0x26 flips its axis record. Records (s16) at `0x801FDC88 + 4 · (slot × 6 + attachment)`; axis records (six `s8`) at `0x801FD170`; clamps at `0x801FD2F0`. `confirmed`: the remake's port reproduces 3,000 random calls of the routine in the harness and 24 runs of 40 steps of the whole loop (the routine, then `CompMatrix` `0x801EF684`, for every drawn attachment in row order; `tools/research/arcade_attachment_cases.py`), and given a RAM dump's skeleton it settles on the dump's attachment joints. The wind (`FUN_8019c738`, every step before the skeleton, in the replay's frames too) blows sideways only on stage 11 (the helicopter's downwash; elsewhere the normalised vector points straight up, and only its x and z are read): `FUN_801e6acc`, at the end of each model's set-up, picks one of eight directions (`rand() & 0xE00`, then two more draws) for the first fighter when the game state is 4, slots 0x20 and 0x21 (True Ogre) still the air again, and every fighter takes four more draws, `inferred` from reading until the traces' `rand` check runs. The gust is a triangle wave of period 16 steps, which `FUN_8019c72c` starts again each round. The remake runs all this in `core` (`ArcadeBody`, `ArcadeAttachments`, `ArcadeWind`), and every fight trace compares the wind and the rows' translations with the original's joints: those depend on the parent's rotation, so they also proved the round start's head reset `FUN_801992B0`. On rows held by a freeze, an ending or a replay `FUN_8019B6D8` returns at once and keeps the local matrix of `+0x728`.
 - **Eyes.** 8 `s8` per costume slot at `0x801FE370`: the eyes' rectangle and size (`0x801FCE98`, `0x801FCF1C`) and six eye shapes; see [Eye shapes](#eye-shapes).
 
 ### True Ogre's wings and the variant selection
@@ -138,7 +149,7 @@ Compared frame by frame, 96–100 % of each PlayStation bank's animations have a
 
 ## Program structure
 
-How the program runs, as far as reading it shows. Here `confirmed` means read in the decompile, and in the disassembly where it says so. Nothing here has been run in the harness or compared with MAME, except where it points to another section.
+How the program runs, as far as reading it shows. Here `confirmed` means read in the decompile, and in the disassembly where it says so. This section is the overview from reading; the documents listed above go further and prove what they say they prove.
 
 ### Main loop
 
@@ -170,7 +181,7 @@ How the program runs, as far as reading it shows. Here `confirmed` means read in
 | `FUN_8018B500` (`FUN_801D009C`), `FUN_801AE9DC`, `FUN_801A6DBC` | Camera director and camera frame. |
 | `FUN_801E2114` (stages 6 and 12 only), `FUN_801E3D0C` | Stage objects. |
 | `FUN_80198A48` × 2, `FUN_8018C498` (`FUN_80190FF8`) | Sides, move start. |
-| `FUN_8018B050`, `FUN_8018B124`, `FUN_8019F3FC`, `FUN_801A5B00` | `unknown`. |
+| `FUN_8018B050`, `FUN_8018B124`, `FUN_8019F3FC`, `FUN_801A5B00` | Direction and distances, saved positions, physics, the round's body-pair step ([fight-frame.md](fight-frame.md#1-fight-frame)). |
 | `FUN_8019C738`, `FUN_8018B388`, `FUN_801D8FD0` | Wind (`confirmed` above), skeleton, stage drawing. |
 | `FUN_801DC758` × 2, `FUN_801DC990`, `FUN_8018B430` × 2 | Effect objects. |
 | `FUN_80198BF8` × 2, `FUN_8019EF90`, `FUN_8018B808`, `FUN_8018B91C`, `FUN_8018B47C` × 2, `FUN_8018C2DC` | Collision shapes and what follows them. |
@@ -276,6 +287,16 @@ So values from the PlayStation's tables hold for the arcade only where they were
 
 - MAME (`brew install mame`, 0.289) runs the set. Lua autoboot scripts dump the RAM through the CPU's program space (`read_range`) and the VRAM through the GPU save item `0/p_vram` (`emu.item(...):read_block(0, count * size)`, 1024 × 1024 halfwords). Write taps and watchpoints on RAM never fire for this CPU (MAME accesses its RAM directly), but breakpoints and `trace` work through `manager.machine.debugger:command(...)` with `-debug -debugger none`.
 - The decompressed program is analysed in Ghidra as a synthetic PS-X EXE (entry `0x801E7888`, BSS as above).
+- Ghidra folds BSS words to 0 and then drops blocks it believes unreachable (`Removing unreachable block` at the top of a function). Every such warning in the routines the remake ports was checked with capstone (`arcade.open_set(...).prog(addr, n)`), 18 routines and about 60 blocks (`confirmed`). Most cannot run:
+  - the divide traps (`break 7`, `break 6`) behind a constant divisor;
+  - the sign fix-up before an arithmetic shift (`addiu 0x7FFF`, `0xFFF`, `0x3F`, `0x1F` when negative) on a value that is never negative, such as `((rand() + lcg) & 0x7FFF) · k` in the AI's draws or an 18-bit masked difference in the camera.
+
+  Real code dropped this way:
+  - `FUN_801B9138`'s button-wait restart and `FUN_801C241C`'s entry sounds ([flow-and-screens.md](flow-and-screens.md)); both were missing from the port;
+  - `FUN_801B8A44`'s VS background by kind, from file `0x11` `min(kind, 2)`, plus file 3 for kind 3 (in the converter);
+  - the rounding toward zero in `FUN_801984E8` (root position), `FUN_801D3970` and `FUN_801D3D14` (stream camera).
+
+  Ghidra's whole output for `FUN_801D3970` and `FUN_801D3D14` is wrong, because it folds the sample buffer `0x8029E074` to 0. `FUN_801D4100`'s test `0x8029E07E + 0x8029E076 < 0` (the reel stream's end) is shown as unconditional.
 - The CPU harness (`tools/research/psxcpu.py`) runs arcade routines too: the System 12 CPU is the PlayStation's R3000A with a GTE. The decompressed program is loaded at `0x80010000` behind a synthetic PS-X EXE header, with 4 MB of RAM and the stack moved above the BSS (`0x803FF000`). `tools/research/verify_arcade_sky.py` runs the sky's setup and drawing this way, takes the primitives from the ordering table and draws them from the stage's VRAM.
 - Ghidra's COP2 site list misses libgte's register moves (VectorNormal's LZCS / LZCR); `arcade_cpu.py` adds every COP2 encoding of libgte's code (`0x801EFC00`–`0x801F1400`).
 - A costume can be put into the attract mode's fights by a debugger breakpoint on the texture loader that rewrites the fighter's costume slot (`bpset 80197a08,(w@(8031e172+a0*1ae4))==a,{w@(8031e172+a0*1ae4)=24;g}` turns Nina into Anna); the RAM dumps of such frames, with the primitives of their double buffer, give the arcade's own joints and screen positions to compare with.

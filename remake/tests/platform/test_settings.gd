@@ -110,8 +110,18 @@ func test_game_texts_follow_the_source() -> void:
 	expect(Assets.japanese_texts(), "the original Japanese release has them")
 	expect_equal(Settings.choices("game_texts"), ["english", "japanese"], "both")
 	expect_equal(Settings.text("game_texts"), "japanese", "the saved choice again")
+	Assets.manifest["source"] = AssetCatalog.ARCADE_SOURCE
+	expect(Assets.arcade_only(), "converted from MAME's set alone")
+	expect(not Assets.japanese_texts(), "the arcade's set has no Japanese texts")
+	expect_equal(Settings.choices("stage_backdrops"), ["arcade"], "the arcade's scenes are the only backdrops")
+	expect_equal(Settings.choices("gameplay_fixes"), [false], "the fixes are the PlayStation's")
+	expect_equal(Settings.choices("memory_card"), [1], "the arcade has no memory cards")
+	Assets.manifest["gaps"] = ["flow"]
+	expect_equal(Array(Assets.gaps()), ["flow"], "what the conversion could not produce")
+	Assets.manifest.erase("gaps")
 	Assets.manifest.erase("source")
 	expect_equal(Assets.source(), "jp_rev1", "a folder converted before sources were recorded")
+	expect(not Assets.arcade_only(), "a disc's conversion")
 	Assets.manifest = saved
 	Settings.values["game_texts"] = saved_texts
 

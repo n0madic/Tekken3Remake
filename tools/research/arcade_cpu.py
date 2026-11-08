@@ -13,6 +13,8 @@ import struct
 import sys
 from pathlib import Path
 
+from unicorn import UC_HOOK_MEM_WRITE
+
 import psxcpu
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -29,6 +31,7 @@ SINE = 0x80175944              # 4096 s16, 4096 = 1.0
 # 0x801F0508 / 0x801F0514): every COP2 encoding there is a site too.
 LIBGTE = (0x801EFC00, 0x801F1400)
 COP2, LWC2, SWC2 = 0x12, 0x32, 0x3A
+UNUSED_ADDRESS = 0x7FFFFFF0    # in kuseg, where the game has nothing
 
 
 def arcade_cpu(arc: arcade.ArcadeSet) -> psxcpu.PsxCpu:
@@ -39,7 +42,14 @@ def arcade_cpu(arc: arcade.ArcadeSet) -> psxcpu.PsxCpu:
     struct.pack_into("<I", header, 0x14, GP)
     sites = psxcpu.read_sites(COP2_SITES, psxcpu.TEXT_BASE, psxcpu.TEXT_BASE + len(arc.program))
     sites |= libgte_sites(arc)
-    return psxcpu.PsxCpu(bytes(header) + arc.program, exe_cop2=sites)
+    cpu = psxcpu.PsxCpu(bytes(header) + arc.program, exe_cop2=sites)
+    # A memory hook, on addresses nothing uses, makes the translated code go through the memory
+    # helpers. Without one, loads at 0x801C30B0 in FUN_801C3178 (the AI parameter copy) returned host
+    # machine code in Unicorn 2.1 on arm64, and later code crashed with a bus error, differently from
+    # run to run; the same memory read correctly through `mem_read` and through any other routine.
+    # The cause inside Unicorn's translated fast path is not known.
+    cpu.uc.hook_add(UC_HOOK_MEM_WRITE, lambda *_: None, begin=UNUSED_ADDRESS, end=UNUSED_ADDRESS)
+    return cpu
 
 
 def libgte_sites(arc: arcade.ArcadeSet) -> set[int]:

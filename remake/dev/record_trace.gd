@@ -37,8 +37,8 @@ func _unpack(data: PackedByteArray, magic: String, version: int) -> bool:
 	if body.size() != raw_size:
 		return false
 	frames = header["frames"]
-	fighter_size = header["fighter_size"]
-	var kinds: Array = header["call_kinds"]
+	fighter_size = header.get("fighter_size", 0)
+	var kinds: Array = header.get("call_kinds", [])
 	call_kinds = PackedStringArray(kinds)
 	_read_fields()
 	return true
@@ -86,8 +86,13 @@ func _range_of(address: int, size: int) -> int:
 	return -1
 
 
+## The file naming the fields of the trace's fighter records.
+func _fields_file() -> String:
+	return FIELDS
+
+
 func _read_fields() -> void:
-	var tsv := FileAccess.get_file_as_string(ProjectSettings.globalize_path("res://").path_join("../" + FIELDS))
+	var tsv := FileAccess.get_file_as_string(ProjectSettings.globalize_path("res://").path_join("../" + _fields_file()))
 	for line in tsv.split("\n"):
 		if line.begins_with("#") or line.strip_edges().is_empty():
 			continue

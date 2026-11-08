@@ -15,7 +15,6 @@ rotation as Euler(x, −y, −z) (`FUN_801984a0`, `FUN_8019a498`).
 from __future__ import annotations
 
 import struct
-import zipfile
 from pathlib import Path
 
 import arcade_cpu
@@ -39,15 +38,11 @@ CHANNELS = 57
 ROOT_CHANNELS = 3
 JOINTS = 18
 OUT = 0x80300000
-FLASH_CHIPS = (("tet1fl3l.12", 0x45513073), ("tet1fl3u.13", 0x1917D993))   # banked 0x1800000
 
 
 def open_with_flash(path: Path) -> arcade.ArcadeSet:
     """The set with its flash bank after the three banked pairs (some streams live there)."""
-    arc = arcade.open_set(path)
-    with zipfile.ZipFile(path) as archive:
-        arc.banked += arcade.interleave(*(arcade._chip(archive, n, c) for n, c in FLASH_CHIPS))
-    return arc
+    return arcade.open_set(path, flash=True)
 
 
 class ArcadeMotion:

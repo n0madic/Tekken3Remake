@@ -9,7 +9,7 @@ extends RefCounted
 ## value, on the first played frame it also saves the live state (restored when the replay
 ## ends), while playing it returns the recorded one.
 
-const FRAMES := 300
+const FRAMES := EffectLog.FRAMES
 const HALF_FRAMES := 600
 const WRAP := 0x4B00                ## the game adds 0x4B00 before its modulo
 const RECORDING := 7
@@ -43,13 +43,24 @@ class Frame:
 	var power := 0                   ## +0x31
 	var blend_bits := 0              ## +0x33: blend mode << 4 | blend active & 0xF
 
-## One effect log entry (0x1C bytes): a flipbook (mode 0) or a landing dust ring (mode 1).
-class LogEntry:
-	var point := PackedInt32Array([0, 0, 0])
-	var direction := PackedInt32Array([0, 0, 0])   ## s16 direction (or damage in the third)
-	var mode := 0
-	var set := 0
-	var index := 0
+	func copy() -> Frame:
+		var out := Frame.new()
+		out.pose_move = pose_move
+		out.blend_src = blend_src
+		out.blend_dst = blend_dst
+		out.root = root.duplicate()
+		out.pos = pos.duplicate()
+		out.angles = angles.duplicate()
+		out.hands = hands.duplicate()
+		out.levels = levels.duplicate()
+		out.src_frame = src_frame
+		out.dst_frame = dst_frame
+		out.pose_frame = pose_frame
+		out.blend_frames = blend_frames
+		out.wings = wings
+		out.power = power
+		out.blend_bits = blend_bits
+		return out
 
 var stage := 0x17                   ## 0x8009C040 (ReplayInit(0) sets 0x17)
 var mode := RECORDING               ## 0x8009C050
@@ -63,25 +74,15 @@ var recorded := 0                   ## 0x8009C078: frames recorded this round
 var sounds := PackedInt32Array()    ## per frame: code | kind << 16 | player << 24
 var frames: Array[Array] = [[], []] ## per fighter: FRAMES × Frame
 var saved: Array[Frame] = [Frame.new(), Frame.new()]   ## the live state (0x79E0)
-# The effect log (0x8009EBD8 …).
-var log_on := 0
-var log_frame := 0                  ## the frame slot being written
-var log_read := 0                   ## the frame slot being played
-var log_cycle := 0                  ## entries written since the frame ring last wrapped
-var log_write := 0                  ## the next entry
-var log_frames := PackedInt32Array()      ## per frame slot: first entry | count << 16
-var log_entries: Array[LogEntry] = []
+var effect_log := EffectLog.new(LOG_ENTRIES, LOG_CYCLE_LIMIT)   ## 0x8009EBD8 …
 var balls: Array[PackedByteArray] = []   ## Tekken Ball: per frame of the ball's ring, 0x24 bytes
 
 
 func _init() -> void:
 	sounds.resize(FRAMES)
-	log_frames.resize(FRAMES)
 	for p in 2:
 		for i in FRAMES:
 			frames[p].append(Frame.new())
-	for i in LOG_ENTRIES:
-		log_entries.append(LogEntry.new())
 	for i in BALL_FRAMES:
 		var r := PackedByteArray()
 		r.resize(0x24)
@@ -110,54 +111,31 @@ func reset() -> void:
 
 ## FUN_8004A6A4 (FUN_800777AC at a round start): the effect log starts empty.
 func log_reset() -> void:
-	log_on = 1
-	log_frame = 0
-	log_cycle = 0
-	log_write = 0
-	log_frames[0] = 0
+	effect_log.reset()
 
 
 ## FUN_8004A700: logs an effect (mode 0: a flipbook of `set` and `index`; mode 1: a dust ring).
-## At most 64 entries per cycle of the frame ring; the entries themselves are a ring of 64.
 func log_effect(set: int, index: int, point: PackedInt32Array, direction: PackedInt32Array, log_mode: int) -> void:
-	if log_on == 0:
-		return
-	log_cycle += 1
-	if log_cycle >= LOG_CYCLE_LIMIT:
-		return
-	log_frames[log_frame] += 1 << 16
-	var e := log_entries[log_write]
-	e.mode = log_mode
-	if log_mode == 0:
-		e.point = point.duplicate()
-		e.direction = direction.duplicate()
-		e.set = set
-		e.index = index
-	elif log_mode == 1:
-		e.point = point.duplicate()
-	log_write = (log_write + 1) % LOG_ENTRIES
+	effect_log.add(set, index, point, direction, log_mode)
 
 
 ## FUN_8004A8AC: the effect log's next frame slot.
 func log_advance() -> void:
-	if log_on == 0:
-		return
-	log_frame += 1
-	if log_frame >= FRAMES:
-		log_frame = 0
-		log_cycle = 0
-	log_frames[log_frame] = log_write
+	effect_log.advance()
 
 
 ## FUN_8004A954's read side: the entries of the frame slot being played, then the next slot.
-func log_take() -> Array[LogEntry]:
-	var out: Array[LogEntry] = []
-	var slot := log_frames[log_read]
-	var at := slot & 0xFFFF
-	for k in (slot >> 16) & 0xFFFF:
-		out.append(log_entries[(at + k) % LOG_ENTRIES])
-	log_read = (log_read + 1) % FRAMES
-	return out
+func log_take() -> Array[EffectLog.Entry]:
+	return effect_log.take()
+
+
+## FUN_8004A91C: the effect log is played from `back` frames ago.
+func log_rewind(back: int) -> void:
+	effect_log.rewind(back)
+
+
+func log_stop() -> void:
+	effect_log.on = 0
 
 
 ## ReplayRecordSound (0x80033780): while recording, a sound goes to the frame slot `record +
@@ -192,7 +170,7 @@ func start(fight: FightState, back: int) -> void:
 		if mark < 0:
 			mark = record * 2 + 0x49C0
 		mark %= HALF_FRAMES
-		log_on = 0
+		log_stop()
 		return
 	if back > LAST_FRAMES:
 		back = LAST_FRAMES
@@ -217,11 +195,9 @@ func start(fight: FightState, back: int) -> void:
 	if first < 0:
 		first += WRAP
 	mark = play
-	# FUN_8004A91C: the effect log is played from the same frame.
-	log_read = log_frame - first % FRAMES
-	if log_read < 0:
-		log_read += FRAMES
-	log_on = 0
+	# The effect log is played from the same frame.
+	log_rewind(first % FRAMES)
+	log_stop()
 
 
 ## ReplayUpdate (0x800323CC): the recording and playback step of the frame; non-zero while the

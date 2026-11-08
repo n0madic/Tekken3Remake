@@ -3,6 +3,9 @@ extends TestSuite
 ## the CPU harness on random head positions and rotations (`work/traces/gon_eyes.bin`,
 ## tools/research/gon_eyes_cases.py).
 
+const DISC_DATA := [
+	"test_matches_the_game",
+]
 const FILE := "gon_eyes.bin"
 const CASE := 46
 const SHAPE_3_VALUE := 0x202            ## HandFaceCommand shape 3 on a hand channel

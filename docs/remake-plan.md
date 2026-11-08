@@ -271,6 +271,7 @@ The original frames every shot for a 4:3 screen, and its scene only exists where
 
 - The camera logic computes the same camera as the original: position, orientation and projection distance.
 - Its 4:3 view rectangle is always fully visible, so the game shows at least what the player saw on the PlayStation, and never less.
+- The arcade's frame is not 4:3 in the world: its rows are 95/100 of what 4:3 would take (`0x980`, [fight-frame.md](research/arcade/fight-frame.md)), and its monitor stretches the frame to 4:3, so its scene shows 5.26 % wider than it is. A Godot camera has square pixels: the remake keeps the game's height and true proportions and shows that much more at the sides. The HUD and text stay at the monitor's 4:3.
 
 **2. The view extends only where the scene exists.**
 
@@ -329,6 +330,9 @@ Every entry of [game-bugs.md](research/code/game-bugs.md) is in one of three gro
 | 64, 65 | Gon's eyes' look direction moves each pupil strip from a neutral that is not the look 0, and his black eyelid palette is copied back by the hand channel's call | Reproduced as in the game: the intended mappings are not recoverable (no fix is known for 64), and both differences are a few pixels of his face. |
 | 67 | The arcade floor stays in world axes while the scene turns with the backdrop's turn: the floor's far edge meets the scene's ground at an angle after sideways camera slides | Fixed (cosmetic; reproduced by decision of 2026-10-05 until stage 11's ring corners were reported showing the sky, 2026-10-09): the floor's 10 × 10-tile square is centred on the fighters' midpoint and turned with the scene, its pattern still in world axes (`StageView.follow`, `set_backdrop_turn`). Documented in game-bugs.md (#67); `--stages` shows it (turn 0 against 400). |
 | 68 | The arcade sky's map skips the cells marked `'0'`, leaving the screen's black where the scene does not cover them | Retouched as the art meant: the converter draws the skipped cell's own tile (`arcade.sky_cell`), so the picture repeats round the horizon. The fills (`'d'`, `'t'`) are kept. Whether the arcade's cameras reach those cells is `unknown`. |
+| 69, 70, 71 | The arcade's staff roll replays to their 299th frame, a scene's events of both sides for each playing, a scene's stale event frame | 69 is reproduced, the pages' length depends on it. 70: each side's events fire once. 71: reproduced until a scene's trace says more. |
+| 76 | The arcade's two dead words when the wind starts on stage 11 | Their `rand` draws are reproduced, the sequence depends on them; the words themselves are not kept. |
+| 78, 79, 80, 81 | The arcade camera's blend out read before its table, an unset result and unset registers no list reaches, and its dead code | 78 is reproduced through the words the converter reads; the others are not implemented. |
 | 10–15, 22, 25, 38–40, 42, 43, 48 | Dead or unreachable code | Not implemented. Where the code hints at an unfinished feature (#10 AI strings, #22 keep-out tactic, #25 unused music), enabling it would be new behaviour, not a fix; it is out of scope. |
 
 **2. Gameplay fixes.** These change what happens in a match, in CPU behaviour or in progression. They are reproduced by default, and the **Gameplay fixes** option (off by default) switches them all to the fix suggested in the register.
@@ -343,6 +347,7 @@ Every entry of [game-bugs.md](research/code/game-bugs.md) is in one of three gro
 | 29 | Arcade unlock pace (the unlock step count). |
 | 30, 31 | Tekken Ball single-player opponent choice: least-met preference, Gon's counter. |
 | 41 | Tekken Force slot timers after nine minutes in one level. |
+| 72, 73, 74, 75, 77 | The arcade's camera preset side and throw view, the CPU's damage learning and round reset, the button taps after a held tap: reproduced in the arcade build, as its trace requires. The arcade build offers no Gameplay fixes option. |
 | 52 | Button taps after a frozen tap frame compare with a stale register value instead of the newest input. |
 | 60 | Team battle's CPU team takes one of the two least-used characters first (the game gives that rule to the human side, where it does nothing). |
 
@@ -514,6 +519,41 @@ Done after the M5 status (2026-09-29): the Ogre scene's camera (the reel of Ogre
 Deferred in the code (`TODO:`):
 
 - no bundled CJK font for the Japanese interface in the web builds: `platform/settings.gd`.
+
+### M6: arcade-only build
+
+The remake converted from MAME's `tekken3` set alone, without a disc (`make convert-arcade`, `manifest.source` "arcade"): the arcade's fighters, stages, rules, flow and screens. It offers what the arcade has. There is no main menu or other modes, and the fighters are those of the arcade's roster.
+
+**How it stays apart from the PlayStation's.** The source is chosen once, from the manifest, and the two never mix at run time:
+
+- `app/game.gd` changes to `app/arcade_game.tscn` at once when the conversion is the arcade's. `core/game/`, the PlayStation's screens and `GameRam` do not run.
+- Converter: the modules `arcade_*.py`, from `arcade_game.py`, through a narrow reading of the program by address. There is no executable image in `imported/`: every number and string a screen needs is a file (`screens/arcade/screens.json`, `hud/`, `tables/arcade_*.json`). What is not converted yet is listed in the manifest's `gaps`.
+- `core/`: a difference in numbers is data. A difference in logic is a subclass in `core/arcade/` (`ArcadeCombat`, `ArcadeMoveSystem`, `ArcadeCamera`, ...), and `ArcadeSimulation` is the one place that creates them; the PlayStation classes only gained the methods these override, with no test of the source inside. What differs too much has its own class: `ArcadeGameFlow` and its parts, `ArcadeCpu`, and `presentation/arcade/`.
+- `presentation/arcade/` lays its screens out in the arcade's 512 × 480 and shares the fight view.
+- Proof: the PlayStation's traces stay the regression gate of the common code. The arcade has its own, from its own program (`tools/research/arcade_fight_harness.py`, `arcade_flow_trace.py`).
+
+**Decisions.** Motions take the arcade's own bake (`arcade_motion_bake.py`: 57 channels, no IK) and skeleton step (`ArcadeAnimation`), not the PlayStation's pose solver. The fighters open by the operator's day counter ([flow-and-screens.md](research/arcade/flow-and-screens.md#2-arcade-ladder-and-unlocks)): the remake has no uptime, so the day is `--day=<n>` and all fighters are open by default (day 120). It runs on free play: no coins, the arcade's title prompts in their free-play form.
+
+**Status: in progress.**
+
+| Part | State |
+|---|---|
+| Converter without a disc | Done: models, stages, effects' flipbooks, motions, tables, 2D, music and sounds (`gaps` is empty). |
+| Fight | Ported and compared with the original frame by frame on 42 scenarios (`test_arcade_fight_traces.gd`): fighters, `rand` and the frame's generators, which run free from the round on, the camera, the wind. Mokujin's bank of the round and the helicopter stage's wind have their own. |
+| CPU opponent | `ArcadeCpu`: 17 scenarios compared frame by frame, `rand` included, replays too (`test_arcade_cpu_traces.gd`). The moves' hooks of Paul, Yoshimitsu, True Ogre, Hwoarang and King were reached in them; King's throw only briefly. |
+| Camera director | `ArcadeCamera`: compared frame by frame in the fight traces, the choice of the attract's and the loser's cameras, throws and replays included (186 of 226 blocks reached). Not reached by a scenario: `_switch_chain`, yaw mode 1, a stream's `BYTE_SKIP`, an interrupted throw, the hold on the victim at a throw's end, the loser's close head in mode 2, the skipping fighter in a replay. `FUN_801A4C78`'s framing of the round's first frame is not ported: the director overwrites it, and the comparison starts at its first frame. |
+| Whole-game flow | `ArcadeGameFlow`: boot to attract, select, VS, real rounds, continue, game over, ranking, compared frame by frame with the skeletons. `solo` (9,000 frames), `continued` (a continue with Start), `challenger` (a second player joins in a fight), `attract` (15,000 frames, the demonstration's fights) and `ladder` (40,000 frames: the ladder won by knock-outs, the Ogre scene, True Ogre, the ending's kept fights and pose, a new time record's name entry) match. |
+| Screens, HUD | Title, select, VS, HUD, ranking with its default records, name entry, ending with the staff roll over kept fights: written from the converted data and compared with MAME by eye. |
+| Records | `user://arcade_records.json` keeps the times, wins and play counts (`SaveStore`, `ArcadeProgress.saved_records`), written when the game changes state; the day counter stays a command-line value, default 120, every fighter open. |
+| Scenes | The attract's demonstration and the scene before True Ogre (`ArcadeScene`): the demonstration's timing and skeletons proven by the trace `attract`, pictures compared with MAME by eye. The scenes' camera is not compared by a trace. |
+| Effects | Flipbooks, dust rings and their replay logs (`EffectLog`, one per kind, kept with a fight), the demonstration's flipbook swap. `rand` runs free in the replays' frames too. |
+| Attachments | In the simulation: `ArcadeBody` runs rows 18–23 and the helicopter stage's wind (`ArcadeAttachments`, `ArcadeWind`) inside the skeleton's step, and every fight trace compares the wind and the rows' translations. |
+| Sound | Done: a port of the H8's driver over a chip model renders the music per sequence and section and reads the player sequences into plans, from the set alone (`arcade_sound_vm.py`, `arcade_c352.py`, `arcade_sounds.py`). `verify_arcade_sound_vm.py` compares every register write with MAME's logs (604,702 ticks identical; wrong inputs fail) and one mix with its WAV. `ArcadeRoundSounds` and `ArcadeGameFlow` ask, `ArcadeAudio` plays. Known differences from the board: [research](research/arcade/audio-and-effects.md#what-the-converter-writes). |
+| Attract movie | Done: `arcade_movie.py` decodes the 261 pictures from the set (every pixel equals MAME's frames over the timer's 264 values, `verify_arcade_movie.py`), Theora or JPEG frames in `movies/`; `ArcadeMovieView` follows the flow's timer. Its music is sequence 0x60, heard only with the operator's attract sound (off by default), as on the cabinet. |
+
+Deferred in the code (`TODO:`): the music's channels that change section a bar early (one file per section has them change together); `FUN_801A4C78` and a choice list's `$s4` in `arcade_camera.gd`; the operator's secret overlay in `arcade_screens.py`; the sound and effect calls in the fight harness's header (`call_kinds`).
+
+Scenarios not run yet: versus with the in-fight name entry of a wins record (`FUN_801B9138`; its rules are unit-tested from the disassembly in tests/game/test_arcade_records.gd, not traced), a name typed letter by letter, a day other than the trace's (`solo_day120` is defined but not recorded; the `ladder` trace in `work/` runs at day 0).
 
 ## Risks and open questions
 

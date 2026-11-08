@@ -10,8 +10,9 @@ const ROWS := 24
 func test_matches_the_arcade() -> void:
 	if not require(TraceFiles.path(FILE), "run tools/research/arcade_attachment_cases.py first"):
 		return
-	if not require(Assets.path(ArcadeAttachments.TABLES_FILE), "convert with --arcade first"):
+	if not require(Assets.path(ArcadeAttachmentTables.FILE), "convert with --arcade first"):
 		return
+	var tables := ArcadeAttachmentTables.shared()
 	var data := FileAccess.get_file_as_bytes(TraceFiles.path(FILE))
 	var count := data.decode_u32(8)
 	var pos := 12
@@ -44,7 +45,7 @@ func test_matches_the_arcade() -> void:
 		pos += 38
 		var model := CharacterModel.new()
 		model.costume_slot = slot
-		var a := ArcadeAttachments.new(model)
+		var a := ArcadeAttachments.new(model, tables)
 		a.wind = wind
 		a._tips[i] = tip
 		a._target_yaw = target[0]
@@ -53,7 +54,7 @@ func test_matches_the_arcade() -> void:
 		if slot in ArcadeAttachments.REST_ONLY_SLOTS and i < ArcadeAttachments.REST_ONLY_COUNT:
 			got = Fx.identity()
 		elif not started:
-			got = ArcadeAttachments.solver().euler_to_matrix(angles[0], angles[1], angles[2])
+			got = tables.solver.euler_to_matrix(angles[0], angles[1], angles[2])
 		else:
 			var own := joints[CharacterModel.ARCADE_JOINT + i]
 			got = a.swing(slot, i, angles, record, own, joints[ArcadeAttachments.joint_of_row(parent)], offset, joints)
@@ -81,13 +82,12 @@ static func _s32s(data: PackedByteArray, pos: int, count: int) -> PackedInt32Arr
 func test_wind_blows_on_the_helicopter_stage_only() -> void:
 	if not require(Assets.path("tables/fighter.json")):
 		return
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 3
 	var wind := ArcadeWind.new()
-	wind.start(0, rng)
+	wind.tables = ArcadeAttachmentTables.shared()
+	wind.calm()
 	wind.step()
-	expect_equal(wind.vector, PackedInt32Array([0, 0, 0]), "still air on stage 0")
-	wind.start(ArcadeWind.STAGE, rng)
+	expect(wind.vector[0] == 0 and wind.vector[2] == 0, "nothing blows sideways on stage 0: %s" % wind.vector)
+	wind.blow(0x600)
 	var gusts: Array[PackedInt32Array] = []
 	for i in 32:
 		wind.step()
@@ -106,8 +106,9 @@ func test_runs_match_the_arcade() -> void:
 	const RUNS := "arcade_attachment_steps.bin"
 	if not require(TraceFiles.path(RUNS), "run tools/research/arcade_attachment_cases.py first"):
 		return
-	if not require(Assets.path(ArcadeAttachments.TABLES_FILE), "convert with --arcade first"):
+	if not require(Assets.path(ArcadeAttachmentTables.FILE), "convert with --arcade first"):
 		return
+	var tables := ArcadeAttachmentTables.shared()
 	var data := FileAccess.get_file_as_bytes(TraceFiles.path(RUNS))
 	var count := data.decode_u32(8)
 	var steps := data.decode_u32(12)
@@ -119,7 +120,7 @@ func test_runs_match_the_arcade() -> void:
 		var wind := Traces.s16s(data, pos + 2, 3)
 		pos += 8
 		var model := CharacterModel.load_from(AssetCatalog.ROOT + "characters/costume_%02d" % slot)
-		var a := ArcadeAttachments.new(model)
+		var a := ArcadeAttachments.new(model, tables)
 		a.wind = wind
 		for step in steps:
 			var body: Array[JointFrame] = []

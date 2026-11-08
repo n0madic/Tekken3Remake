@@ -17,8 +17,6 @@ const EXTRA_FIRST := 11
 const EXTRA_LAST := 13
 const HAND_FIRST := 14
 const HAND_LAST := 61
-const HAND_RESET := 20                 ## both hands open
-const HAND_COSTUME := 21               ## both hands to the costume's own shape
 const VIBRATE_EFFECT := 1           ## FighterVibrate kinds
 const VIBRATE_IMPACT := 2
 
@@ -54,14 +52,9 @@ static func run(f: FighterState, tables: FighterTables, out: SimEvents) -> void:
 			var hands := cmd >> 4
 			if hands == 0:
 				hands = 3
-			var shape := cmd & 7
-			var speed := Fx.s8(lo)
-			if hi == HAND_RESET:
-				shape = 0
-				speed = lo
-			elif hi == HAND_COSTUME:
-				shape = tables.hand_shape(f.costume_slot)
-				speed = lo
+			var args := f.hands.event_command(cmd, lo, tables, f.costume_slot)
+			var shape := args.x
+			var speed := args.y
 			f.hands.command(hands, shape, speed, f.char_id)
 			out.add(SimEvents.Kind.HAND, f.index, hands, shape).c = speed
 		elif hi >= 1 and hi <= SHAKE_LAST:

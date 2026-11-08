@@ -14,15 +14,19 @@ const CONVERTER_VERSION := 3
 ## The message of the entry points when the converted assets are missing (translated as
 ## MISSING_ASSETS where the translations are imported).
 const MISSING_TEXT := "Converted assets are missing.\nRun: python3 tools/remake_import/convert.py"
+## The manifest's `source` of a conversion from MAME's set alone.
+const ARCADE_SOURCE := "arcade"
 
 var manifest: Dictionary = {}
 
 
 ## MISSING_TEXT in the interface language; as written before the project's first import, which
-## brings the translations.
-static func missing_message() -> String:
+## brings the translations. A conversion from the arcade's set that is not complete yet names what is
+## missing.
+func missing_message() -> String:
 	var translated := str(TranslationServer.translate(&"MISSING_ASSETS"))
-	return MISSING_TEXT if translated == "MISSING_ASSETS" else translated
+	var text := MISSING_TEXT if translated == "MISSING_ASSETS" else translated
+	return text if gaps().is_empty() else "%s\n(%s)" % [text, ", ".join(gaps())]
 
 
 func _ready() -> void:
@@ -66,9 +70,21 @@ func source() -> String:
 
 
 ## Whether the Japanese release's texts were converted (not when the game came from the USA disc,
-## whose texts are English).
+## whose texts are English, nor from the arcade's set).
 func japanese_texts() -> bool:
-	return source() != "usa"
+	return source() != "usa" and not arcade_only()
+
+
+## Whether the game was converted from MAME's set alone, without a disc (arcade_game.py).
+func arcade_only() -> bool:
+	return source() == ARCADE_SOURCE
+
+
+## What the conversion could not produce yet, by name (arcade_game.py GAPS); the arcade game starts
+## only without the ones it cannot run without (arcade_game.gd).
+func gaps() -> PackedStringArray:
+	var items: Array = manifest.get("gaps", [])
+	return PackedStringArray(items)
 
 
 func path(relative: String) -> String:

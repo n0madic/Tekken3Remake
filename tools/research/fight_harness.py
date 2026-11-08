@@ -573,6 +573,10 @@ class Bot:
     the game state from the harness (distance, side, the opponent's attack) to choose, so a trace
     records play with hits, guards, throws and juggles. Deterministic for a seed."""
 
+    # The pad's bits (the arcade's panel differs: arcade_fight_harness.ArcadeBot).
+    UP, RIGHT, DOWN, LEFT = UP, RIGHT, DOWN, LEFT
+    LP, RP, LK, RK = LP, RP, LK, RK
+
     def __init__(self, harness: FightHarness, index: int, seed: int, style: str = "random") -> None:
         import random
         self.h = harness
@@ -587,15 +591,30 @@ class Bot:
     def _opponent(self, off: int, fmt: str) -> int:
         return struct.unpack_from("<" + fmt, self.h.cpu.read(FIGHTERS[1 - self.index] + off, 4))[0]
 
+    def right_side(self) -> bool:
+        return self._field(0xC6, "B") != 0
+
+    def distance(self) -> int:
+        return self._field(0xF8, "I")
+
+    def knocked_down(self) -> bool:
+        return bool(self._field(0x60, "I") & 4)
+
+    def opponent_attacking(self) -> bool:
+        return self._opponent(0x5E, "h") != 0
+
     def _pad(self, direction: int, buttons: int) -> int:
-        right_side = self._field(0xC6, "B") != 0
         horizontal = {1: -1, 4: -1, 7: -1, 3: 1, 6: 1, 9: 1}.get(direction, 0)   # +1 forward
-        vertical = {7: UP, 8: UP, 9: UP, 1: DOWN, 2: DOWN, 3: DOWN}.get(direction, 0)
-        pad = vertical | buttons
+        vertical = {7: self.UP, 8: self.UP, 9: self.UP, 1: self.DOWN, 2: self.DOWN, 3: self.DOWN}.get(direction, 0)
+        pad = vertical | self._buttons(buttons)
         if horizontal:
-            forward_is_right = not right_side
-            pad |= RIGHT if (horizontal > 0) == forward_is_right else LEFT
+            forward_is_right = not self.right_side()
+            pad |= self.RIGHT if (horizontal > 0) == forward_is_right else self.LEFT
         return pad
+
+    def _buttons(self, buttons: int) -> int:
+        """The plan's buttons (this module's LP, RP, LK, RK) as the pad's."""
+        return sum(bit for mine, bit in ((LP, self.LP), (RP, self.RP), (LK, self.LK), (RK, self.RK)) if buttons & mine)
 
     def _hold(self, direction: int, frames: int, buttons: int = 0) -> None:
         self.queue += [(direction, buttons)] * frames
@@ -613,14 +632,14 @@ class Bot:
             return
         if self.style == "spam":
             # One move again and again (the CPU's adaptive difficulty learns repeated moves).
-            if self._field(0xF8, "I") > 0x900:
+            if self.distance() > 0x900:
                 self._hold(6, 10)
             else:
                 self._tap(6, RP, 12)
             return
-        dist = self._field(0xF8, "I")
-        down = self._field(0x60, "I") & 4
-        opp_attacking = self._opponent(0x5E, "h") != 0
+        dist = self.distance()
+        down = self.knocked_down()
+        opp_attacking = self.opponent_attacking()
         if down:
             # Knocked down: mash, roll or get up with a kick.
             choice = rng.random()

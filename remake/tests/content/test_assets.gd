@@ -1,6 +1,11 @@
 extends TestSuite
 ## The converted asset folder: manifest, character model and stage are consistent.
 
+const DISC_DATA := [
+	"test_stage_loads",
+	"test_floor_pattern_is_composed_and_smoothed",
+	"test_floor_reaches_under_the_panorama_walls",
+]
 const MODEL := AssetCatalog.ROOT + "characters/costume_00"
 const STAGE := AssetCatalog.ROOT + "stages/e"
 

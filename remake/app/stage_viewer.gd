@@ -45,7 +45,7 @@ func _ready() -> void:
 	label.add_theme_color_override("font_outline_color", Color.BLACK)
 	label.add_theme_constant_override("outline_size", 6)
 	if not Assets.is_available():
-		label.text = AssetCatalog.missing_message()
+		label.text = Assets.missing_message()
 		set_process(false)
 		set_physics_process(false)
 		return

@@ -99,3 +99,39 @@ func test_settings_recover_the_same_way() -> void:
 	expect_equal(store.load_settings(), {"volume_music": 5.0}, "a partial one is ignored")
 	DirAccess.remove_absolute(path + SaveStore.TEMPORARY_SUFFIX)
 	DirAccess.remove_absolute(path)
+
+
+func test_arcade_records_round_trip() -> void:
+	var path := PATH % "arcade"
+	var s := SaveStore.new()
+	s.arcade_records_path = path
+	DirAccess.remove_absolute(path)
+	expect(s.load_arcade_records().is_empty(), "no file yet")
+	var kept := ArcadeProgress.new()
+	kept.plays[5] = 7
+	kept.times[3].value = 1234
+	kept.times[3].name = "XIA"
+	kept.wins[9].value = 4
+	kept.wins[9].count = 11
+	expect(s.save_arcade_records(kept.saved_records()), "written")
+	var back := ArcadeProgress.new()
+	back.restore_records(s.load_arcade_records())
+	expect_equal(back.saved_records(), kept.saved_records())
+	DirAccess.remove_absolute(path)
+
+
+func test_arcade_records_of_another_shape_are_ignored() -> void:
+	var back := ArcadeProgress.new()
+	var fresh := back.saved_records()
+	back.restore_records({"plays": [1, 2], "times": [{}], "wins": []})
+	expect_equal(back.saved_records(), fresh)
+
+
+func test_arcade_records_with_a_damaged_row_are_ignored() -> void:
+	var back := ArcadeProgress.new()
+	var fresh := back.saved_records()
+	var times := []
+	times.resize(ArcadeProgress.CHARACTERS)
+	times.fill(0)
+	back.restore_records({"times": times})
+	expect_equal(back.saved_records(), fresh, "rows that are not objects leave a fresh cabinet's")

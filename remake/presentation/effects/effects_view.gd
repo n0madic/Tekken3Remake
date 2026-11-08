@@ -78,6 +78,11 @@ func set_costumes(slots: PackedInt32Array) -> void:
 	objects.set_costumes(character)
 
 
+## The set's flipbook from another costume slot's (the arcade's scenes).
+func set_book(set_index: int, slot: int) -> void:
+	character[set_index] = data.costume(slot)
+
+
 ## One simulation step: ends every effect on EFFECTS_CLEAR, advances the running ones when
 ## EFFECTS_DRAW says so, starts the step's new ones, and shows them only if the step draws them.
 func step(events: SimEvents) -> void:
@@ -88,6 +93,8 @@ func step(events: SimEvents) -> void:
 	if draw != null and draw.a == SimEvents.EFFECTS_ADVANCE:
 		_advance()
 	for e in events.items:
+		if e.kind == SimEvents.Kind.EFFECT_BOOK:
+			set_book(e.a, e.b)
 		if e.point.is_empty():
 			continue
 		var at := WorldSpace.point_i(e.point)

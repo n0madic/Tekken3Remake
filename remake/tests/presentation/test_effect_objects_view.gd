@@ -3,6 +3,10 @@ extends TestSuite
 ## every model's corners (model 0 has none), the models' own sprites and the UV tables' frames,
 ## as the pool is drawn from them each step.
 
+const DISC_DATA := [
+	"test_setup_reads_the_converted_objects",
+]
+
 
 func test_setup_reads_the_converted_objects() -> void:
 	var dir := AssetCatalog.ROOT.path_join("effects")

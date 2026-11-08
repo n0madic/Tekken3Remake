@@ -68,6 +68,13 @@ func _init(fight_content: FightContent, fight_setup: FightSetup, rules: RuleSet)
 	t = content.tables
 	fight = FightState.new(t, rules)
 	model_loads.resize(FightState.RECORDS)
+	_make_parts()
+	if fight_setup != null:
+		start_vs(fight_setup)
+
+
+## The simulation's parts, which the arcade's simulation replaces (`core/arcade/`).
+func _make_parts() -> void:
 	moves = MoveSystem.new(fight)
 	physics = FighterPhysics.new(fight, moves)
 	combat = Combat.new(fight, moves, physics)
@@ -78,8 +85,6 @@ func _init(fight_content: FightContent, fight_setup: FightSetup, rules: RuleSet)
 	round_flow = RoundFlow.new(fight)
 	ai = CpuOpponent.new(fight, moves)
 	cpu = AiDecision.new(ai)
-	if fight_setup != null:
-		start_vs(fight_setup)
 
 
 # ==== match and rounds ============================================================================
@@ -395,11 +400,7 @@ func round_start() -> void:
 	else:
 		RoundHud.reset_bars(fight)
 	fight.hud_wins_seen = PackedInt32Array([f0.round_wins, f1.round_wins])
-	for f in fight.active():
-		var look := f.body.look_at
-		look.current = PackedInt32Array([0, LOOK_START, 0, look.current[3]])
-		look.active = 0
-		look.snap = 1
+	_reset_look_at()
 	fight.replay_request = 0
 	if fight.mode == GameMode.BALL:
 		ball.drift_clear(0)
@@ -895,6 +896,15 @@ func background() -> void:
 		fight.backdrop.step(camera.view, fight.round_state, t.pose, t.camera)
 
 
+## At a round start the heads look ahead, and snap to their first target.
+func _reset_look_at() -> void:
+	for f in fight.active():
+		var look := f.body.look_at
+		look.current = PackedInt32Array([0, LOOK_START, 0, look.current[3]])
+		look.active = 0
+		look.snap = 1
+
+
 ## The effect log (FUN_8004A840 / FUN_8004A860) of the flipbooks and dust rings the events from
 ## `from` on start: move events 6–10 as flipbooks, ground impacts and landings as dust rings.
 func _log_effects(from: int) -> void:
@@ -905,7 +915,7 @@ func _log_effects(from: int) -> void:
 			SimEvents.Kind.EFFECT:
 				fight.replay.log_effect(e.a, 0, e.point, zero, 0)
 			SimEvents.Kind.SPARK:
-				fight.replay.log_effect(3, e.a, e.point, zero, 0)
+				fight.replay.log_effect(EffectLog.SYSTEM_SET, e.a, e.point, zero, 0)
 			SimEvents.Kind.DUST, SimEvents.Kind.LANDING_DUST:
 				fight.replay.log_effect(0, 0, e.point, zero, 1)
 

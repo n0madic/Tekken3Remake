@@ -3,6 +3,7 @@ extends TestSuite
 ## with the game's PoseBuildMatrices in the CPU harness). Every frame of every animation of
 ## the banks is replayed with slots carried over, as while one move plays.
 
+const DISC_DATA := true
 const TABLES := AssetCatalog.ROOT + "tables/pose.json"
 const BANKS: Array[String] = ["divmot00", "divmot99"]
 

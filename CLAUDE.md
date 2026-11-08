@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Two linked projects:
 
 1. **Research into Tekken 3 (PlayStation)** — `docs/research/` documents every format and all game logic; `tools/research/` holds verified Python ports of the game's routines and the harnesses that prove them against the original code.
-2. **A remake in Godot 4.7 (typed GDScript only)** — `remake/`, planned in `docs/remake-plan.md` (milestones M0–M5, architecture, decisions, bug policy). Gameplay must match the original frame for frame; visuals may be modernised.
+2. **A remake in Godot 4.7 (typed GDScript only)** — `remake/`, planned in `docs/remake-plan.md` (milestones M0–M6, architecture, decisions, bug policy). Gameplay must match the original frame for frame; visuals may be modernised.
 
 Japan Rev.1 is the baseline: every address in the code and docs is its own. The game can be converted from any one release (Japan Rev.1, the original Japanese SLPS-01300, or USA): the others' executable and overlays are rebased onto Rev.1's layout first. A USA disc next to a Japanese one adds the English texts (one unified interface: Japan's structure, USA wording where it exists).
 
@@ -17,6 +17,7 @@ The root `Makefile` wraps everything (`make help`). `GODOT` may point at the God
 
 ```sh
 make convert            # disc → remake/imported/ (python3 tools/remake_import/convert.py; CONVERT_ARGS='--image X.cue [--image Y.cue] ... [--arcade tekken3.zip]', one image per release, required; `--arcade` adds the arcade stages, character models and effect flipbooks from MAME's set)
+make convert-arcade    # MAME set alone, no disc (ARCADE=<set>.zip, default tekken3.zip): the arcade build; manifest `gaps` lists what is not converted yet
 make import             # Godot import of the converted assets (needed once before running/testing)
 make run                # the game (godot --path remake)
 make test               # every suite, ~3-4 min, parallel runners (JOBS=<n>)
@@ -46,6 +47,8 @@ Layers, dependencies pointing down only:
 - `presentation/` — views that read the sim after each step and consume its events: fighters (GPU skinning; seam corners blend two part-local positions, so meshes are not glTF), stages, effects, camera rig, HUD, 2D screens drawn with the game's own pictures/fonts in the 368 × 480 layout (`PsxCanvas`/`ScreenCanvas` transcribe the Python draw ports), audio, movies, settings screen, touch controls, `RenderQuality` presets and `TexturePacks`.
 - `platform/` — autoloads `Assets` (asset catalog + manifest groups: music, movies, usa), `Pads` (`InputRouter`: devices join on first press; keyboard layouts, pads, touch), `Settings` (`user://settings.json`).
 - `app/` — `game.gd`/`game.tscn` wires `GameFlow` to the views, audio, save file (`user://progress.json`), settings and movies; renders interpolate between sim steps.
+
+The arcade-only build (`manifest.source` "arcade", `docs/remake-plan.md#m6-arcade-only-build`) never mixes with the PlayStation's at run time: `app/game.gd` changes to `app/arcade_game.tscn` at once. A difference in numbers is data; a difference in logic is a subclass in `core/arcade/`, created in one place (`ArcadeSimulation`), with no test of the source in the PlayStation classes; what differs too much has its own class (`ArcadeGameFlow`, `ArcadeCpu`, `presentation/arcade/` in the 512 × 480 layout). The converter's `arcade_*.py` read the program by address (`arcade_game.py` is their entry) and leave no executable image in `imported/`. The arcade's addresses are World ver. E1's. Its oracle is `tools/research/arcade_fight_harness.py` and `arcade_flow_trace.py`; research in `docs/research/arcade/`.
 
 The converter (`tools/remake_import/`, one module per asset kind, `convert.py` entry) writes only what the remake uses straight to `remake/imported/` (the single copy; `Output.prune()` deletes stale files). There is no in-game importer. Lite builds exclude `imported/music` and `imported/movies` by export filters; nomovies builds exclude only `imported/movies`.
 

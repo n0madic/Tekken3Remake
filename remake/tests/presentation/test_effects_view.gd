@@ -3,6 +3,10 @@ extends TestSuite
 ## EFFECTS_ADVANCE, hold on EFFECTS_HOLD (pause), are hidden on steps without EFFECTS_DRAW (the
 ## loser camera), and all end on EFFECTS_CLEAR; ended sprites are reused.
 
+const DISC_DATA := [
+	"test_the_force_enemies_have_their_flipbook",
+]
+
 
 func test_flipbooks_follow_the_draw_events() -> void:
 	var data := EffectData.new()
@@ -35,6 +39,22 @@ func test_flipbooks_follow_the_draw_events() -> void:
 	events.add_at(SimEvents.Kind.SPARK, -1, PackedInt32Array([0, 0, 0]), 0)
 	view.step(events)
 	expect(view.sprites[0] == sprite, "the next spark reuses the ended sprite")
+	view.free()
+
+
+## A scene gives one side another character's flipbook (the arcade's FUN_801ACA14); the other keeps its own.
+func test_a_scene_swaps_one_sides_flipbook() -> void:
+	var data := EffectData.new()
+	var book := EffectData.Flipbook.new()
+	data._costumes[8] = book
+	var view := EffectsView.new()
+	view.setup(data)
+	view.set_costumes(PackedInt32Array([1, 2]))
+	var events := SimEvents.new()
+	events.add(SimEvents.Kind.EFFECT_BOOK, 1, 1, 8)
+	view.step(events)
+	expect(view.character[1] == book, "the side named takes the slot's flipbook")
+	expect(view.character[0] == null, "the other side keeps its own")
 	view.free()
 
 

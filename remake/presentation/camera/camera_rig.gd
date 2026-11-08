@@ -10,7 +10,13 @@ extends Node3D
 ## extends it sideways (up to 21:9); a taller one extends it upwards as far as the stage's
 ## backdrop reaches (its coverage data) and downwards over the endless floor for the rest, so
 ## the 4:3 frame sits higher in a tall window. What cannot be extended is framed.
+##
+## The monitor shows a frame at 4:3 whatever its pixels. The arcade's rows are scaled 95/100 of that
+## (ArcadeViewMatrix.ARCADE_ASPECT: ±256/H by ±202/H), so its scene is 5.26 % wider there than it
+## is: a Godot camera has square pixels, so here the scene keeps its height and true proportions and
+## shows that much more at the sides, while the 2D frame stays the monitor's.
 
+const DISPLAY_ASPECT := 4.0 / 3.0
 const HALF_WIDTH := 184.0            ## half the 368-pixel display width
 const HALF_HEIGHT := 138.0           ## 240 display lines / 1.739
 const MAX_ASPECT := 21.0 / 9.0
@@ -25,6 +31,8 @@ var visible_rect := Rect2(0, 0, 1, 1)
 var frame_rect := Rect2(0, 0, 1, 1)
 ## The 4:3 frame's half extent in view-plane units (±184/H, ±138/H): the arcade sky's screen.
 var frame_tan := Vector2(HALF_WIDTH, HALF_HEIGHT) / 500.0
+## The same in the PlayStation's layout whatever the view (the sword glow's points are in it).
+var layout_tan := Vector2(HALF_WIDTH, HALF_HEIGHT) / 500.0
 var _previous: CameraView
 var _current: CameraView
 
@@ -73,9 +81,10 @@ static func view_basis(pitch: float, yaw: float, roll := 0.0) -> Basis:
 
 
 func _project(h: float, pitch: float, yaw: float, window: Vector2) -> void:
-	var tan_x := HALF_WIDTH / h
-	var tan_y := HALF_HEIGHT / h
+	var tan_x := _current.half_width / h
+	var tan_y := _current.half_height / h
 	frame_tan = Vector2(tan_x, tan_y)
+	layout_tan = Vector2(HALF_WIDTH, HALF_HEIGHT) / h
 	var aspect := window.x / maxf(window.y, 1.0)
 	var base := tan_x / tan_y
 	if aspect >= base:
@@ -85,8 +94,8 @@ func _project(h: float, pitch: float, yaw: float, window: Vector2) -> void:
 		camera.fov = rad_to_deg(2.0 * atan(tan_y))
 		var shown := minf(aspect, MAX_ASPECT) / aspect
 		visible_rect = Rect2((1.0 - shown) / 2.0, 0, shown, 1)
-		var frame_width := base / aspect
-		frame_rect = Rect2((1.0 - frame_width) / 2.0, 0, frame_width, 1)
+		var frame_size := Vector2(minf(DISPLAY_ASPECT / aspect, 1.0), minf(aspect / DISPLAY_ASPECT, 1.0))
+		frame_rect = Rect2((Vector2.ONE - frame_size) / 2.0, frame_size)
 	else:
 		# Taller than 4:3: upwards as far as the backdrop covers, downwards over the floor
 		# for the rest of the window (an off-centre frustum).
@@ -99,7 +108,8 @@ func _project(h: float, pitch: float, yaw: float, window: Vector2) -> void:
 		camera.frustum_offset = Vector2(0, (up - down) / 2.0 * NEAR)
 		visible_rect = Rect2(0, 0, 1, 1)
 		var span := up + down
-		frame_rect = Rect2(0, (up - tan_y) / span, 1, 2.0 * tan_y / span)
+		var frame_height := aspect / DISPLAY_ASPECT
+		frame_rect = Rect2(0, up / span - frame_height / 2.0, 1, frame_height)
 
 
 ## The coverage direction the camera faces: coverage direction k points along the game's

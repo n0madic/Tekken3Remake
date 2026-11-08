@@ -1,9 +1,9 @@
 class_name ArcadeAttachments
 extends RefCounted
 ## The joints of an arcade model's own attachments (hair, sashes, tails, skirts:
-## CharacterModel.arcade_attachments), built after each simulation step from the fight's
-## skeleton. The fight keeps the PlayStation's skeleton and attachments for its own state; these
-## joints only carry the arcade mesh's faces.
+## CharacterModel.arcade_attachments). The arcade's fight composes them with its skeleton (`ArcadeBody`);
+## a PlayStation fight that shows an arcade model builds them after each step from its own skeleton
+## (`update`), where they only carry the mesh's faces.
 ##
 ## Each attachment hangs from its parent joint at its offset, turned by its rest angles plus its
 ## record's offsets (FUN_8019b634). A swinging one (FUN_8019b6d8) then turns towards a blend of
@@ -14,7 +14,6 @@ extends RefCounted
 ## towards a spot between joints 13 and 16. Verified case by case against the arcade's routine
 ## (tools/research/arcade_attachment_cases.py, tests/presentation/test_arcade_attachments.gd).
 
-const TABLES_FILE := "characters/arcade_attachments.json"
 const FIRST_ATTACHMENT_ROW := 18
 const REST_ONLY_SLOTS := [0x20, 0x21]      ## their first two attachments keep identity
 const REST_ONLY_COUNT := 2
@@ -44,12 +43,8 @@ const LEAN_MIN := 0x2400        ## squared distance below which there is no lean
 const LEAN_REACH := 0x60
 const LEAN_LIFT := 0x40
 
-static var _solver: PoseSolver
-static var _limits: Array[PackedInt32Array] = []
-static var _clamps := PackedInt32Array()
-static var _fighter_tables: FighterTables
-
 var model: CharacterModel
+var tables: ArcadeAttachmentTables
 var wind := PackedInt32Array([0, 0, 0])     ## FUN_8019c738's wind (x, y, z), the helicopter stage's
 var _started: Array[bool] = []
 var _tips: Array[PackedInt32Array] = []
@@ -59,8 +54,9 @@ var _previous: Array[JointFrame] = []       ## every joint of the last step
 var _joints := PackedInt32Array()           ## the joints the model's attachments hang from
 
 
-func _init(character: CharacterModel) -> void:
+func _init(character: CharacterModel, attachment_tables: ArcadeAttachmentTables) -> void:
 	model = character
+	tables = attachment_tables
 	for a in model.arcade_attachments:
 		_joints.append(a.joint)
 	reset()
@@ -83,29 +79,6 @@ func has_joint(joint: int) -> bool:
 	return _joints.has(joint)
 
 
-## The Euler conversion of the game's tables (PoseSolver.euler_to_matrix), loaded once.
-static func solver() -> PoseSolver:
-	if _solver == null:
-		_solver = PoseSolver.new(PoseTables.load_from(Assets.path("tables/pose.json")))
-	return _solver
-
-
-static func fighter_tables() -> FighterTables:
-	if _fighter_tables == null:
-		_fighter_tables = FighterTables.load_from(Assets.path("tables/fighter.json"))
-	return _fighter_tables
-
-
-## The arcade's axis records (0x801FD170: six signed bytes each) and clamps (0x801FD2F0).
-static func load_tables() -> void:
-	if not _limits.is_empty():
-		return
-	var data: Dictionary = JsonFile.read(Assets.path(TABLES_FILE))
-	for record: Array in data.get("limits", []):
-		_limits.append(JsonFile.ints(record))
-	_clamps = JsonFile.ints(data.get("clamps", []))
-
-
 ## The skeleton's `joints` followed by the attachments' joints, CharacterModel.JOINT_COUNT in all
 ## (identity where the model has no attachment).
 func update(joints: Array[JointFrame]) -> Array[JointFrame]:
@@ -118,23 +91,25 @@ func update(joints: Array[JointFrame]) -> Array[JointFrame]:
 	for a in model.arcade_attachments:
 		var offset := PackedInt32Array([a.offset.x, a.offset.y, -a.offset.z])
 		var previous := all[a.joint]
-		all[a.joint] = JointFrame.compose_offset(all[a.parent], _local(a, previous, offset, all), offset)
+		all[a.joint] = JointFrame.compose_offset(all[a.parent], local_of(a, previous, offset, all), offset)
 	_previous = all
 	return all
 
 
-func _local(a: CharacterModel.ArcadeAttachment, previous: JointFrame, offset: PackedInt32Array,
+## The local rotation of attachment `a` this step (FUN_8019B6D8), its own joint of the last step
+## `previous`, the others by CharacterModel's order.
+func local_of(a: CharacterModel.ArcadeAttachment, previous: JointFrame, offset: PackedInt32Array,
 		joints: Array[JointFrame]) -> PackedInt32Array:
 	var i := a.joint - CharacterModel.ARCADE_JOINT
 	var angles := PackedInt32Array([Fx.s16(a.rest[0] + a.record[0]), Fx.s16(a.rest[1] + a.record[1]),
 		Fx.s16(a.rest[2] + a.record[2])])
 	if a.static_record:
-		return solver().euler_to_matrix(angles[0], angles[1], angles[2])
+		return tables.solver.euler_to_matrix(angles[0], angles[1], angles[2])
 	if model.costume_slot in REST_ONLY_SLOTS and i < REST_ONLY_COUNT:
 		return Fx.identity()
 	if not _started[i]:
 		_started[i] = true
-		return solver().euler_to_matrix(angles[0], angles[1], angles[2])
+		return tables.solver.euler_to_matrix(angles[0], angles[1], angles[2])
 	return swing(model.costume_slot, i, angles, a.record, previous, joints[a.parent], offset, joints)
 
 
@@ -143,9 +118,7 @@ func _local(a: CharacterModel.ArcadeAttachment, previous: JointFrame, offset: Pa
 ## of this step, by joint. Updates the smoothed tip and mode 1's target angles.
 func swing(slot: int, i: int, angles: PackedInt32Array, record: PackedInt32Array, previous: JointFrame,
 		parent: JointFrame, offset: PackedInt32Array, joints: Array[JointFrame]) -> PackedInt32Array:
-	load_tables()
-	var tables := fighter_tables()
-	var r0 := solver().euler_to_matrix(angles[0], angles[1], angles[2])
+	var r0 := tables.solver.euler_to_matrix(angles[0], angles[1], angles[2])
 	var to_rest := Fx.transpose(Fx.mul_matrix(parent.rot, r0))
 	# The tip of the last step, smoothed over SMOOTHING steps.
 	var tip := Gte.apply_lv(previous.rot, PackedInt32Array([record[LENGTH], 0, 0]))
@@ -163,7 +136,7 @@ func swing(slot: int, i: int, angles: PackedInt32Array, record: PackedInt32Array
 		gravity_on = false
 		tip[1] = 0
 	var d := PackedInt32Array([Fx.w32(tip[0] - pivot[0]), Fx.w32(tip[1] - pivot[1]), Fx.w32(tip[2] - pivot[2])])
-	var dir := Gte.vector_normal(Gte.apply_lv(to_rest, d), tables.rsqrt)
+	var dir := Gte.vector_normal(Gte.apply_lv(to_rest, d), tables.fighter.rsqrt)
 	var down := PackedInt32Array([0, 0, 0])
 	if gravity_on:
 		var g := record[GRAVITY]
@@ -182,12 +155,12 @@ func swing(slot: int, i: int, angles: PackedInt32Array, record: PackedInt32Array
 	var axis := record[AXIS] & 0xFFFF
 	if slot == SLOT_FLIP and flipped:
 		axis = FLIP_AXIS
-	var lim := _limits[axis]
-	var yaw := Fx.w32(Gte.ratan2(Fx.w32(lim[0] * v[2]), Fx.w32(lim[1] * v[0]), tables.ratan) * lim[4])
-	var flat := solver().tables.square_root0(Fx.w32(v[0] * v[0] + v[2] * v[2]))
-	var pitch := Fx.w32(Gte.ratan2(Fx.w32(lim[2] * v[1]), Fx.w32(lim[3] * flat), tables.ratan) * lim[5])
+	var lim := tables.limits[axis]
+	var yaw := Fx.w32(Gte.ratan2(Fx.w32(lim[0] * v[2]), Fx.w32(lim[1] * v[0]), tables.fighter.ratan) * lim[4])
+	var flat := tables.solver.tables.square_root0(Fx.w32(v[0] * v[0] + v[2] * v[2]))
+	var pitch := Fx.w32(Gte.ratan2(Fx.w32(lim[2] * v[1]), Fx.w32(lim[3] * flat), tables.fighter.ratan) * lim[5])
 	if record[MODE] == MODE_TARGET:
-		var t := _limits[record[TARGET_AXIS]]
+		var t := tables.limits[record[TARGET_AXIS]]
 		if Fx.w32(t[5] * _target_yaw + t[4] * _target_pitch) < Fx.w32(t[5] * yaw + t[4] * pitch):
 			yaw = _target_yaw
 			pitch = _target_pitch
@@ -199,8 +172,8 @@ func swing(slot: int, i: int, angles: PackedInt32Array, record: PackedInt32Array
 	elif slot == SLOT_CLAMP_B and i < CLAMP_B_COUNT:
 		clamp_at = 2
 	if clamp_at >= 0:
-		var hi := _clamps[clamp_at]
-		var lo := _clamps[clamp_at + 1]
+		var hi := tables.clamps[clamp_at]
+		var lo := tables.clamps[clamp_at + 1]
 		if s_yaw > hi:
 			s_yaw = hi
 		elif s_yaw < lo:
@@ -209,7 +182,7 @@ func swing(slot: int, i: int, angles: PackedInt32Array, record: PackedInt32Array
 			s_pitch = hi
 		elif s_pitch < lo:
 			s_pitch = lo
-	return Fx.mul_matrix(r0, solver().euler_to_matrix(0, s_yaw, s_pitch))
+	return Fx.mul_matrix(r0, tables.solver.euler_to_matrix(0, s_yaw, s_pitch))
 
 
 ## Mode 1's target angles (FUN_8019bed0): towards the record's point on the target joint, seen
@@ -226,11 +199,10 @@ func _aim(slot: int, record: PackedInt32Array, to_rest: PackedInt32Array, pivot:
 	if slot == SLOT_FLIP and v[0] < 0:
 		flipped = true
 		axis = FLIP_AXIS
-	var lim := _limits[axis]
-	var tables := fighter_tables()
-	_target_yaw = Fx.w32(Gte.ratan2(Fx.w32(lim[0] * v[2]), Fx.w32(lim[1] * v[0]), tables.ratan) * lim[4])
-	var flat := solver().tables.square_root0(Fx.w32(v[0] * v[0] + v[2] * v[2]))
-	_target_pitch = Fx.w32(Gte.ratan2(Fx.w32(lim[2] * v[1]), Fx.w32(lim[3] * flat), tables.ratan) * lim[5])
+	var lim := tables.limits[axis]
+	_target_yaw = Fx.w32(Gte.ratan2(Fx.w32(lim[0] * v[2]), Fx.w32(lim[1] * v[0]), tables.fighter.ratan) * lim[4])
+	var flat := tables.solver.tables.square_root0(Fx.w32(v[0] * v[0] + v[2] * v[2]))
+	_target_pitch = Fx.w32(Gte.ratan2(Fx.w32(lim[2] * v[1]), Fx.w32(lim[3] * flat), tables.fighter.ratan) * lim[5])
 	return flipped
 
 
@@ -265,7 +237,7 @@ func _line(record: PackedInt32Array, to_rest: PackedInt32Array, v: PackedInt32Ar
 	var reach := record[TARGET_AXIS]
 	if sq >= reach * reach:
 		return v
-	var root := solver().tables.square_root0(sq)
+	var root := tables.solver.tables.square_root0(sq)
 	if root == 0:
 		root = 1
 	var out := PackedInt32Array([0, 0, 0])
@@ -283,7 +255,7 @@ func _lean(to_rest: PackedInt32Array, previous: JointFrame, joints: Array[JointF
 	var sq := Fx.w32(d[0] * d[0] + d[1] * d[1] + d[2] * d[2])
 	if sq < LEAN_MIN:
 		return v
-	var length := solver().tables.square_root0(sq)
+	var length := tables.solver.tables.square_root0(sq)
 	if length == 0:
 		length = 1
 	var w := PackedInt32Array([0, 0, 0])
@@ -292,7 +264,7 @@ func _lean(to_rest: PackedInt32Array, previous: JointFrame, joints: Array[JointF
 	w[2] = Fx.w32(w[2] + LEAN_LIFT)
 	for k in 3:
 		w[k] = Fx.w32(w[k] - previous.t[k])
-	return Gte.vector_normal(Gte.apply_lv(to_rest, w), fighter_tables().rsqrt)
+	return Gte.vector_normal(Gte.apply_lv(to_rest, w), tables.fighter.rsqrt)
 
 
 ## The joint of an arcade model row (rows 18–23 are the attachments, from ARCADE_JOINT).

@@ -55,6 +55,9 @@ BANK_CHIPS = (
     (("tet1rom2l.8", 0xE03B1C24), ("tet1rom2u.11", 0x75EB2AB3)),
 )
 BANK_BYTES = 0x800000          # each banked pair
+FLASH_CHIPS = (("tet1fl3l.12", 0x45513073), ("tet1fl3u.13", 0x1917D993))   # banked at 0x1800000
+SOUND_PROGRAM_CHIP = ("tet1vere.11s", 0xC92B98D1)    # the H8/3002's, words byte-swapped
+WAVE_CHIPS = (("tet1wave0.5", 0x77BA7975), ("tet1wave1.4", 0xFFEBA79F))      # the C352's, one after the other
 PRG_FILES = 0x2000000          # file-table addresses from here are program ROM offsets + this
 
 # The program (arcade/README.md#program-compression-and-boot).
@@ -239,15 +242,31 @@ def _chip(archive: zipfile.ZipFile, name: str, crc: int) -> bytes:
     raise ArcadeError(f"{name} (CRC {crc:08x}) is missing: give MAME's '{SET_NAME}' set, World ver. E1")
 
 
-def open_set(path: Path) -> ArcadeSet:
+def open_set(path: Path, flash: bool = False) -> ArcadeSet:
+    """The set; with `flash`, the flash bank after the three banked pairs (the motion streams and the
+    game's own data live there as well; stages and models do not need it)."""
+    pairs = BANK_CHIPS + ((FLASH_CHIPS,) if flash else ())
     try:
         with zipfile.ZipFile(path) as archive:
             program_rom = interleave(*(_chip(archive, n, c) for n, c in PROGRAM_CHIPS))
-            banked = b"".join(interleave(*(_chip(archive, n, c) for n, c in pair)) for pair in BANK_CHIPS)
+            banked = b"".join(interleave(*(_chip(archive, n, c) for n, c in pair)) for pair in pairs)
     except (OSError, zipfile.BadZipFile) as e:
         raise ArcadeError(f"{path}: {e}") from e
     program, _ = decompress(program_rom, PROGRAM_SOURCE)
     return ArcadeSet(program_rom, banked, program)
+
+
+def sound_chips(path: Path) -> tuple[bytes, bytes]:
+    """The sound CPU's program as the H8 reads it (big-endian words) and the C352's wave space."""
+    try:
+        with zipfile.ZipFile(path) as archive:
+            raw = _chip(archive, *SOUND_PROGRAM_CHIP)
+            wave = b"".join(_chip(archive, n, c) for n, c in WAVE_CHIPS)
+    except (OSError, zipfile.BadZipFile) as e:
+        raise ArcadeError(f"{path}: {e}") from e
+    program = bytearray(raw)
+    program[0::2], program[1::2] = raw[1::2], raw[0::2]
+    return bytes(program), wave
 
 
 # ---- scene TMD (stages.md#scene-tmd) ----
@@ -568,6 +587,13 @@ def floor(arc: ArcadeSet, vram: Vram, number: int) -> tuple[dict, np.ndarray]:
 
 
 # ---- conversion ----
+
+def floor_info(arc: ArcadeSet, number: int) -> dict:
+    """The record `floor` gives a stage's floor, without its pictures."""
+    category = arc.prog_values("<i", STAGE_CATEGORY + 4 * number)[0]
+    extra = [arc.category(EXTRA_TIMS[number])[0]] if number in EXTRA_TIMS else []
+    return floor(arc, stage_vram(arc.category(category), extra), number)[0]
+
 
 def convert_stage(arc: ArcadeSet, out: Output, number: int, letter: str) -> None:
     category = arc.prog_values("<i", STAGE_CATEGORY + 4 * number)[0]

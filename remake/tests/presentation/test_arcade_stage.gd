@@ -3,6 +3,10 @@ extends TestSuite
 ## the sky is laid out on the 4:3 frame and scrolled as FUN_801A7688 does, the pitch clamps move
 ## its top edge, and a converted arcade stage is placed as the arcade places it.
 
+const DISC_DATA := [
+	"test_converted_stage_is_placed_as_the_arcade_places_it",
+	"test_the_setting_offers_arcade_only_when_converted",
+]
 
 ## FUN_801A7688 lays the sky out on the screen: the frame's left edge shows strip pixel
 ## ((turn − yaw) & 0xFFF)·512 / step, whatever the zoom, for the camera of this frame.

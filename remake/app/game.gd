@@ -24,6 +24,7 @@ extends Node
 const M0_SCENE := "res://app/m0_viewer.tscn"
 const FIGHT_SCENE := "res://app/fight.tscn"
 const STAGES_SCENE := "res://app/stage_viewer.tscn"
+const ARCADE_SCENE := "res://app/arcade_game.tscn"
 ## The development scenes the command line opens at once, in priority order.
 const DEV_SCENES := {"--m0": M0_SCENE, "--stages": STAGES_SCENE, "--fight": FIGHT_SCENE}
 const FLOW_TRACE_READER := "res://dev/flow_trace.gd"
@@ -108,6 +109,12 @@ func _ready() -> void:
 			set_process(false)
 			get_tree().change_scene_to_file.call_deferred(DEV_SCENES[flag] as String)
 			return
+	# A conversion from MAME's set alone is another game: its own flow, views and rules.
+	if Assets.is_available() and Assets.arcade_only():
+		set_physics_process(false)
+		set_process(false)
+		get_tree().change_scene_to_file.call_deferred(ARCADE_SCENE)
+		return
 	_parse_arguments(args)
 	get_tree().auto_accept_quit = false
 	add_child(audio)
@@ -154,7 +161,7 @@ func _ready() -> void:
 	movie.visible = false
 	movie.finished.connect(_on_movie_finished)
 	if not Assets.is_available() or not FileAccess.file_exists(Assets.path("tables/flow.json")):
-		message.text = AssetCatalog.missing_message()
+		message.text = Assets.missing_message()
 		message.visible = true
 		set_physics_process(false)
 		return

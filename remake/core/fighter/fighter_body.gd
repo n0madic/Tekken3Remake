@@ -68,6 +68,11 @@ func _init(character: CharacterModel, fighter_tables: FighterTables, pose_tables
 		attach_local.append(Fx.identity())
 
 
+## The joints the view draws, in CharacterModel's order; it builds the rest.
+func view_joints() -> Array[JointFrame]:
+	return draw_joints.slice(0, PARTS)
+
+
 ## A reload into the same record (FighterSetupParts on a loaded fighter) sets only the model's
 ## offsets and parents: the matrices the record holds stay as they were.
 func keep_matrices(old: FighterBody) -> void:

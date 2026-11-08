@@ -1198,18 +1198,7 @@ static func spawn_mirrored(point: PackedInt32Array, direction: PackedInt32Array,
 ## 0x80+ re-create effect objects) and dust rings.
 static func play_log(fight: FightState, events: SimEvents, view: CameraView) -> void:
 	for e in fight.replay.log_take():
-		if e.mode == 1:
-			events.add_at(SimEvents.Kind.DUST, -1, e.point.duplicate())
-			continue
-		if e.mode != 0:
-			continue
-		if e.index & 0x80 == 0:
-			var spark: SimEvents.Event
-			if e.set == 3:
-				spark = events.add_at(SimEvents.Kind.SPARK, -1, e.point.duplicate(), e.index)
-			else:
-				spark = events.add_at(SimEvents.Kind.EFFECT, -1, e.point.duplicate(), e.set)
-			spark.mirrored = spawn_mirrored(e.point, e.direction, view)
+		if play_logged_flipbook(e, events, view) or e.mode != EffectLog.FLIPBOOK:
 			continue
 		var d := Vector2i(e.direction[0], e.direction[1])
 		match e.index & 0x7F:
@@ -1223,6 +1212,22 @@ static func play_log(fight: FightState, events: SimEvents, view: CameraView) -> 
 				_spray(fight, 12, 6, e.point, d)
 			4:
 				_spray(fight, 13, 20, e.point, d)
+
+
+## A logged dust ring or flipbook starts again; false when the entry is neither.
+static func play_logged_flipbook(e: EffectLog.Entry, events: SimEvents, view: CameraView) -> bool:
+	if e.mode == EffectLog.DUST:
+		events.add_at(SimEvents.Kind.DUST, -1, e.point.duplicate())
+		return true
+	if e.mode != EffectLog.FLIPBOOK or e.index & EffectLog.OBJECTS != 0:
+		return false
+	var spark: SimEvents.Event
+	if e.set == EffectLog.SYSTEM_SET:
+		spark = events.add_at(SimEvents.Kind.SPARK, -1, e.point.duplicate(), e.index)
+	else:
+		spark = events.add_at(SimEvents.Kind.EFFECT, -1, e.point.duplicate(), e.set)
+	spark.mirrored = spawn_mirrored(e.point, e.direction, view)
+	return true
 
 
 ## FUN_8006F4BC: the announcer's follow-up sound once its voice ends.

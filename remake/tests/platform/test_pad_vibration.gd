@@ -2,6 +2,9 @@ extends TestSuite
 ## PadVibration against the game's own VibrationUpdate (`work/traces/vibration.bin`,
 ## tools/research/vibration_trace.py): every pattern and some pairs, frame by frame.
 
+const DISC_DATA := [
+	"test_scripts_match_the_game",
+]
 const TRACE := "vibration.bin"
 const TABLES := AssetCatalog.ROOT + "tables"
 

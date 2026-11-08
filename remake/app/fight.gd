@@ -64,7 +64,7 @@ func _ready() -> void:
 	stats.visible = false
 	if not Assets.is_available():
 		var label := Label.new()
-		label.text = AssetCatalog.missing_message()
+		label.text = Assets.missing_message()
 		layer.add_child(label)
 		set_physics_process(false)
 		return

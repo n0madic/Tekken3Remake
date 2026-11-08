@@ -3,6 +3,10 @@ extends TestSuite
 ## the GPU's coordinate limits (the ball's streaks), and the one-sided panorama seen from the
 ## cameras that orbit inside it.
 
+const DISC_DATA := [
+	"test_backdrop_cameras_stay_inside_the_panorama",
+	"test_bonus_time_follows_the_first_enemy",
+]
 const FIGHT_STAGES := 15               ## FightContent.STAGE_LETTERS: stages 0–14
 
 

@@ -43,6 +43,31 @@ func test_wide_and_tall_windows() -> void:
 	rig.free()
 
 
+## The arcade's frame is 512 by 240 rows of 0x980/4096: not 4:3 in the world, 4:3 on the monitor.
+func test_the_arcade_frames_2d_at_the_monitors_shape() -> void:
+	var rig := CameraRig.new()
+	rig._ready()
+	var view := CameraView.new(0, 0, 0, -1000, -3000, 500)
+	view.half_width = ArcadeCamera.ARCADE_HALF_WIDTH
+	view.half_height = ArcadeCamera.ARCADE_HALF_HEIGHT
+	rig.set_view(view, true)
+	rig.place(1.0, Vector2(960, 720))
+	expect(rig.frame_rect.is_equal_approx(Rect2(0, 0, 1, 1)), "4:3 is the whole window: %s" % rig.frame_rect)
+	expect(rig.visible_rect.is_equal_approx(Rect2(0, 0, 1, 1)), "and the scene fills it")
+	expect(is_equal_approx(rig.camera.fov, rad_to_deg(2.0 * atan(ArcadeCamera.ARCADE_HALF_HEIGHT / 500.0))), "the height is the game's: %f" % rig.camera.fov)
+	rig.place(1.0, Vector2(1280, 720))
+	expect(rig.frame_rect.is_equal_approx(Rect2(0.125, 0, 0.75, 1)), "16:9 pillars it: %s" % rig.frame_rect)
+	rig.place(1.0, Vector2(940, 720))
+	expect(is_equal_approx(rig.frame_rect.size.x, 1.0), "between the two shapes the width fills: %s" % rig.frame_rect)
+	expect(is_equal_approx(rig.frame_rect.size.x * 940.0 / (rig.frame_rect.size.y * 720.0), 4.0 / 3.0), "at 4:3: %s" % rig.frame_rect)
+	expect(is_equal_approx(rig.frame_rect.get_center().y, 0.5), "centred: %s" % rig.frame_rect)
+	rig.place(1.0, Vector2(720, 1280))
+	expect(is_equal_approx(rig.frame_rect.size.y, 540.0 / 1280.0), "a tall window spans its width at 4:3: %s" % rig.frame_rect)
+	expect(is_equal_approx(rig.frame_rect.get_center().y, 0.5), "and extends evenly: %s" % rig.frame_rect)
+	rig.camera.free()
+	rig.free()
+
+
 ## Every stream of the reel starts with a cut, and only there: the rig must not interpolate
 ## across two shots.
 func test_the_reel_marks_its_cuts() -> void:

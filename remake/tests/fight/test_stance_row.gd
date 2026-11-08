@@ -2,6 +2,7 @@ extends TestSuite
 ## Bug #61 (not reproduced): a move whose stance slot 0xDC5 is empty in both banks has no stance
 ## row; the readers of that row treat it as standing instead of reading garbage.
 
+const DISC_DATA := true
 const EMPTY_STANCE_SLOT := 0x2BF     ## bank 0 (Paul): a move whose stance slot is 0xDC5
 
 

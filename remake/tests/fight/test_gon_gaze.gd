@@ -4,6 +4,7 @@ extends TestSuite
 ## and the fight runs, and kept when the body is rebuilt. The value itself is checked against the
 ## game in tests/core/test_gon_eyes.gd.
 
+const DISC_DATA := true
 const FRAMES := 90
 const HEAD := 2
 const MARKER := 99                      ## a gaze no fight produces (the shifts are −17 to 17)

@@ -24,7 +24,6 @@ const SOURCES := 5
 const DISTANCE := 0x158D           ## the fight camera's distance
 const MIN_DISTANCE := 800
 const MARGIN := 0x96
-const SPREAD_LIMIT := 0x119
 const SWING_CAP := 0xDDD0
 const SWING_KICK := 0x600
 const SWING_LIMITS := [[0x27, 0x200], [0x28, 0x180], [0x29, 0x80], [0x2A, 0x40]]
@@ -56,7 +55,19 @@ enum Cinematic {
 	TRANSITION = 5,            ## a frozen view fading into the fight camera
 	STREAM = 6,                ## a camera stream, weighted by its own channel
 	HIT = 8,                   ## a hit camera for its hold time
+	HIT_OUT = 9,               ## the arcade's blend back from a hit camera
 }
+
+
+## The framing's screen shape in pixels of the display (CameraFrameFighters); the arcade's wider
+## screen has its own.
+class FramingShape:
+	var spread := 0x118            ## the targets' widest spread on screen before the camera backs off
+	var band := 0x30               ## half the band in which the targets need no sideways move
+	var top := 100                 ## the highest target's lowest place from the screen's centre
+	var top_script := 0x80         ## the same for a script camera looking up
+	var bottom := 0x70             ## the other term of the vertical fit
+	var lift := 0x170              ## a script camera's lift per height, over 0x280
 
 
 ## Per-source framing state (0x800A06D0 + 0x30 · source).
@@ -79,6 +90,8 @@ class SourceState:
 var fight: FightState
 var t: FightTables
 var ct: CameraTables
+var shape := FramingShape.new()
+var swing_limits: Array = SWING_LIMITS
 
 # ---- view and projection
 var view := CameraView.new(0, 0, 0, 0, 0, 500)   ## g_camera 0x800A8A88 (angles in 4096 units)
@@ -738,10 +751,16 @@ func _preset_random(index: int) -> Vector2i:
 ## FUN_80066430: the direction between the targets in 18-bit units, turned by 180° when
 ## fighter 1 is left of fighter 0 on screen.
 func _axis_yaw(f0: FighterState, f1: FighterState) -> int:
+	return _fight_axis(f0, f1) << 6
+
+
+## The direction between the targets in 4096 units, turned by 180° when fighter 1 is left of fighter 0
+## on screen.
+func _fight_axis(f0: FighterState, f1: FighterState) -> int:
 	var axis := CameraMath.atan2_units4096(targets[1][0] - targets[0][0], targets[1][2] - targets[0][2], ct)
 	if f1.screen_x <= f0.screen_x:
 		axis = (axis + 0x800) & 0xFFF
-	return axis << 6
+	return axis
 
 
 ## CameraThrowEnds (0x80067818) for the running thrower (as the director calls it).
@@ -794,10 +813,7 @@ func _blend_out(f0: FighterState, f1: FighterState) -> int:
 	if v < 2:
 		var s := sources[SOURCE_SCRIPT]
 		if _within(s[3], 0xE37):
-			var axis := CameraMath.atan2_units4096(targets[1][0] - targets[0][0], targets[1][2] - targets[0][2], ct)
-			if f1.screen_x <= f0.screen_x:
-				axis = (axis + 0x800) & 0xFFF
-			if _within(_s18(s[4] - axis * 0x40), 0xE37):
+			if _within(_s18(s[4] - _fight_axis(f0, f1) * 0x40), 0xE37):
 				v = 5
 	return v
 
@@ -1457,9 +1473,7 @@ func track(f0: FighterState, f1: FighterState, force_root: int) -> void:
 				tg[0] = f.root_x
 				tg[2] = f.root_z
 			tg[3] = f.screen_x
-			tg[1] = Fx.w32(f.body.joints[2].t[1] - 0x122)
-			if f.cur_slot == 2 and f.bank_type == BankType.YOSHIMITSU:
-				tg[1] = -0x6B8
+			tg[1] = _target_height(f)
 	var a := targets[0]
 	var b := targets[1]
 	if a[0] == b[0] and a[2] == b[2]:
@@ -1467,6 +1481,13 @@ func track(f0: FighterState, f1: FighterState, force_root: int) -> void:
 		b[2] = a[2] + 1
 		a[0] -= 1
 		a[2] -= 1
+
+
+## A target's height: the head's less 0x122; Yoshimitsu's slot 2 has a fixed one.
+func _target_height(f: FighterState) -> int:
+	if f.cur_slot == 2 and f.bank_type == BankType.YOSHIMITSU:
+		return -0x6B8
+	return Fx.w32(f.body.joints[2].t[1] - 0x122)
 
 
 ## CameraFight (0x8006636C): source 0 from the yaw spring and the framing.
@@ -1484,9 +1505,7 @@ func _camera_fight(f0: FighterState, f1: FighterState, restart: int, distance: i
 func _yaw_spring(f0: FighterState, f1: FighterState, restart: int, src: int) -> Vector2i:
 	var st := source_state[src]
 	var cam_yaw := sources[src][4]
-	var axis := CameraMath.atan2_units4096(targets[1][0] - targets[0][0], targets[1][2] - targets[0][2], ct)
-	if f1.screen_x <= f0.screen_x:
-		axis = (axis + 0x800) & 0xFFF
+	var axis := _fight_axis(f0, f1)
 	var err := _s18(Fx.w32(axis * 0x40 - cam_yaw))
 	var sign := signi(err)
 	err = absi(err)
@@ -1560,8 +1579,8 @@ func _swing(st: SourceState, f0: FighterState, f1: FighterState, err: int, sign:
 
 
 ## The swing limit (in 1/256 of SWING_CAP) asked for by either fighter's move camera byte, or −1.
-static func _swing_limit(b0: int, b1: int) -> int:
-	for entry: Array in SWING_LIMITS:
+func _swing_limit(b0: int, b1: int) -> int:
+	for entry: Array in swing_limits:
 		if b0 == entry[0] or b1 == entry[0]:
 			return entry[1] as int
 	return -1
@@ -1726,17 +1745,17 @@ func _fit_horizontal(fr: Framing) -> void:
 		zr = fr.z[1]
 	var right_px := _div(Fx.w32(edge * h), zr)
 	var backoff := 0
-	if right_px - left_px < SPREAD_LIMIT:
+	if right_px - left_px <= shape.spread:
 		var centred := false
 		if fr.restart == 0:
-			var a7 := _div(fr.z[hi] * 0x30, h)
-			var a13 := _div(fr.z[lo] * -0x30, h)
+			var a7 := _div(fr.z[hi] * shape.band, h)
+			var a13 := _div(fr.z[lo] * -shape.band, h)
 			if a7 - (fr.u[hi] - fr.u[lo]) < a13:
 				centred = true
 			else:
 				a13 = fr.u[lo] - a13
-				if left_px > -0x31:
-					if right_px >= 0x31:
+				if left_px >= -shape.band:
+					if right_px > shape.band:
 						fr.lateral += _div8(fr.u[hi] - a7)
 				else:
 					fr.lateral += _div8(a13)
@@ -1749,7 +1768,8 @@ func _fit_horizontal(fr: Framing) -> void:
 			return
 		backoff = _settle(st.lateral)
 	else:
-		var e10b := _div(Fx.w32(h * (fr.u[hi] - fr.u[lo]) + (fr.z[hi] - fr.z[lo]) * -0x8C), 0x118)
+		var half_spread := Fx.div_trunc(shape.spread, 2)
+		var e10b := _div(Fx.w32(h * (fr.u[hi] - fr.u[lo]) + (fr.z[hi] - fr.z[lo]) * -half_spread), shape.spread)
 		backoff = fr.z[lo] - e10b
 		if fr.restart == 0:
 			var s := st.lateral
@@ -1757,7 +1777,7 @@ func _fit_horizontal(fr: Framing) -> void:
 				backoff = s + ((backoff - s) >> 5)
 			else:
 				backoff = s - _div8(s - backoff)
-		fr.lateral = _div8(fr.u[lo] - _div(Fx.w32(e10b * -0x8C), h))
+		fr.lateral = _div8(fr.u[lo] - _div(Fx.w32(e10b * -half_spread), h))
 	st.lateral = backoff
 	fr.back += backoff
 	fr.depth[2] -= backoff
@@ -1769,7 +1789,7 @@ func _fit_horizontal(fr: Framing) -> void:
 ## `depth` of the source eases it); returns the camera's vertical offset.
 func _fit_vertical(fr: Framing) -> int:
 	var st := source_state[fr.src]
-	var top := 100
+	var top := shape.top
 	var ty_world := targets[1][1]
 	var top_v := fr.v[1]
 	var top_z := fr.z[1]
@@ -1783,10 +1803,10 @@ func _fit_vertical(fr: Framing) -> int:
 		top_z = fr.ball[1]
 		height = Fx.trunc12(Fx.w32(fr.ball[3] * fr.cp))
 	if fr.src == SOURCE_SCRIPT and fr.pitch < 0:
-		top = 0x80
+		top = shape.top_script
 	_script_lift(fr, height)
 	fr.scale = Fx.trunc12(fr.cp * (top - _div(Fx.w32(h * 0x1C2), fr.distance)))
-	var want := _div(Fx.w32(Fx.w32((top_z - fr.depth[2]) * -0x70) - Fx.w32(h * (top_v - fr.e2))), fr.scale + 0x70) \
+	var want := _div(Fx.w32(Fx.w32((top_z - fr.depth[2]) * -shape.bottom) - Fx.w32(h * (top_v - fr.e2))), fr.scale + shape.bottom) \
 		- fr.depth[2]
 	if want < 0:
 		want = 0
@@ -1827,7 +1847,7 @@ func _script_lift(fr: Framing, height: int) -> void:
 	if fr.src == SOURCE_SCRIPT and fr.pitch > 0:
 		var lift := 0
 		if height > -1001:
-			lift = _div(Fx.w32((height + 1000) * 0x170), 0x280)
+			lift = _div(Fx.w32((height + 1000) * shape.lift), 0x280)
 		if fr.restart == 0:
 			if g < lift and lift - g > 0x1C:
 				lift = g + 0x1C
