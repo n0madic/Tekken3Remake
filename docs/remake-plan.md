@@ -306,7 +306,7 @@ The presets live in `presentation/render_quality.gd`; *Auto* picks the best one 
 
 Every entry of [game-bugs.md](research/code/game-bugs.md) is in one of three groups.
 
-**1. Not reproduced.** The remake implements the intended behaviour, always. These entries do not change balance or gameplay: they are cosmetic, latent (unreachable in normal play), undefined behaviour with no known effect, or dead code. Rows that say *Reproduced* (64, 65, 67) are the exceptions: kept as in the game by decision, because the intended behaviour is not recoverable or the owner chose to keep the arcade's picture.
+**1. Not reproduced.** The remake implements the intended behaviour, always. These entries do not change balance or gameplay: they are cosmetic, latent (unreachable in normal play), undefined behaviour with no known effect, or dead code. Rows that say *Reproduced* (64, 65, 67, 82) are the exceptions: kept as in the game by decision, because the intended behaviour is not recoverable or the owner chose to keep the arcade's picture or sound.
 
 | Entries | Kind | Remake behaviour |
 |---|---|---|
@@ -333,6 +333,7 @@ Every entry of [game-bugs.md](research/code/game-bugs.md) is in one of three gro
 | 69, 70, 71 | The arcade's staff roll replays to their 299th frame, a scene's events of both sides for each playing, a scene's stale event frame | 69 is reproduced, the pages' length depends on it. 70: each side's events fire once. 71: reproduced until a scene's trace says more. |
 | 76 | The arcade's two dead words when the wind starts on stage 11 | Their `rand` draws are reproduced, the sequence depends on them; the words themselves are not kept. |
 | 78, 79, 80, 81 | The arcade camera's blend out read before its table, an unset result and unset registers no list reaches, and its dead code | 78 is reproduced through the words the converter reads; the others are not implemented. |
+| 82 | The arcade's Eddy flip (rows 2324–2326) has no sound list, so its hits are silent unless one knocks out; the PlayStation added the strike | Reproduced by the owner's decision of 2026-11-08: the arcade build sounds as the cabinet does (the converter keeps the rows' lists as they are). |
 | 10–15, 22, 25, 38–40, 42, 43, 48 | Dead or unreachable code | Not implemented. Where the code hints at an unfinished feature (#10 AI strings, #22 keep-out tactic, #25 unused music), enabling it would be new behaviour, not a fix; it is out of scope. |
 
 **2. Gameplay fixes.** These change what happens in a match, in CPU behaviour or in progression. They are reproduced by default, and the **Gameplay fixes** option (off by default) switches them all to the fix suggested in the register.
