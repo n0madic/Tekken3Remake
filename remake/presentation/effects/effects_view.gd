@@ -118,6 +118,7 @@ func step(events: SimEvents) -> void:
 ## of the sphere (`pull_over_ball`), the others where they are; the effect objects likewise.
 func place(eye: Vector3, forward: Vector3, ball: Vector4) -> void:
 	objects.set_ball(ball)
+	objects.place_glow(eye, forward, ball)
 	for s in sprites:
 		var k := pull_over_ball(eye, forward, s.at, ball)
 		s.node.position = eye + (s.at - eye) * k

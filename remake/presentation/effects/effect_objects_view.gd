@@ -23,6 +23,7 @@ var clut_rows: Dictionary = {}         ## CLUT id → palette row
 var costumes: Array[EffectData.Flipbook] = []   ## the players' character flipbooks
 var ball_glow_frames := PackedInt32Array()      ## per glow step: the flipbook frame (−1 none)
 var _ball_material := StandardMaterial3D.new()
+var _glow_at := Vector3.ZERO           ## where the glow is; its node is there unless `place_glow` pulls it toward the camera
 
 
 func setup(data: EffectData) -> void:
@@ -61,6 +62,7 @@ func setup(data: EffectData) -> void:
 	_ball_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_ball_material.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 	_ball_material.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	_ball_material.billboard_keep_scale = true     # `place_glow` scales a glow it pulls toward the camera
 	_ball_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_ball_material.no_depth_test = false
 	_ball_material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
@@ -99,6 +101,20 @@ func _prepare(node: MultiMeshInstance3D, shader: Shader, page: Texture2D, palett
 func set_ball(ball: Vector4) -> void:
 	for node: MultiMeshInstance3D in [additive, half]:
 		(node.material_override as ShaderMaterial).set_shader_parameter("ball", ball)
+
+
+## Every rendered frame, with the camera's position and viewing direction and Tekken Ball's solid
+## ball as `BallView.occluder` gives it: the charged ball's glow is drawn over all of the ball. The
+## game files it in the ball's own ordering-table entry, from the effects' update that runs before
+## the ball's own and so before the ball is filed, and the entry's last primitive is drawn first
+## (`confirmed`, decompile; that both fall in one entry is `inferred`: the glow stands at the ball's
+## position, the object quads are filed by their depth, the ball by its centre's). The sphere would
+## hide the quad standing at its centre, so the glow is drawn in front of the sphere along the same
+## view ray and scaled to match, as `EffectsView.pull_over_ball` does for the sparks.
+func place_glow(eye: Vector3, forward: Vector3, ball: Vector4) -> void:
+	var k := EffectsView.pull_over_ball(eye, forward, _glow_at, ball)
+	ball_glow.position = eye + (_glow_at - eye) * k
+	ball_glow.scale = Vector3.ONE * k
 
 
 ## The players' character flipbooks (the charged ball's glow).
@@ -180,5 +196,7 @@ func _show_ball_glow(o: EffectObjects.Obj) -> void:
 	_ball_material.albedo_texture = book.texture
 	_ball_material.uv1_scale = Vector3(1.0 / book.frames, 1, 1)
 	_ball_material.uv1_offset = Vector3(float(frame) / book.frames, 0, 0)
-	ball_glow.position = WorldSpace.point(o.x, o.y, o.z)
+	_glow_at = WorldSpace.point(o.x, o.y, o.z)
+	ball_glow.position = _glow_at
+	ball_glow.scale = Vector3.ONE
 	ball_glow.visible = true

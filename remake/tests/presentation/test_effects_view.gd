@@ -197,3 +197,36 @@ func test_place_pulls_a_spark_and_lets_it_go() -> void:
 	expect_equal(sprite.node.position, sprite.at, "back where it is when the ball goes")
 	expect_equal(sprite.node.scale, Vector3.ONE, "at full size")
 	view.free()
+
+
+## Tekken Ball's charged ball: the game files the glow in the ball's own entry, ahead of the ball, so
+## it is drawn over all of it; the quad stands at the ball's centre, where the sphere would hide it
+## (issue n0madic/Tekken3Remake#18: only a ring of it showed around the ball).
+func test_the_charged_balls_glow_is_placed_clear_of_the_sphere() -> void:
+	var view := EffectsView.new()
+	view.setup(EffectData.new())
+	var book := EffectData.Flipbook.new()
+	book.frames = 30
+	var books: Array[EffectData.Flipbook] = [book, book]
+	view.objects.set_costumes(books)
+	view.objects.ball_glow_frames = PackedInt32Array([0])
+	for _i in EffectObjects.Model.BALL + 1:
+		view.objects.quad_corners.append(Color(-0.5, -0.5, 0.5, 0.5))
+	var glow := EffectObjects.Obj.new()
+	glow.flags = EffectObjects.VISIBLE
+	glow.model = EffectObjects.Model.BALL
+	glow.uv_table = EffectObjects.UvTable.BALL_CHARACTER
+	glow.uv = 0
+	glow.z = 5000                                   # 5 m ahead of the camera, at the ball's centre
+	var pool := EffectPool.new()
+	pool.objects.append(glow)
+	view.objects.show_pool(pool)
+	var node := view.objects.ball_glow
+	expect(node.visible, "the glow is shown")
+	view.place(Vector3.ZERO, Vector3(0, 0, -1), Vector4(0, 0, -5, 0.5))
+	expect(is_equal_approx(-node.position.z, 5.0 - 0.5 - EffectsView.BALL_MARGIN), "it stands just in front of the sphere")
+	expect(node.scale.x < 1.0, "scaled down to look the same")
+	view.place(Vector3.ZERO, Vector3(0, 0, -1), Vector4.ZERO)
+	expect_equal(node.position, Vector3(0, 0, -5), "back at the ball's centre when there is no sphere")
+	expect_equal(node.scale, Vector3.ONE, "at full size")
+	view.free()
