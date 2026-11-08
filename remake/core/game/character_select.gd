@@ -30,9 +30,9 @@ const SOUND_MOVE := 0x55F5
 const SOUND_CHOOSE := 0x50F4
 const SOUND_JOIN := 0x49A1
 const MUSIC_SELECT := 1
-const SPARK_COUNT := 64
-const SPARK_HEIGHT := 0xA0
+const SPARK_WIDTH := 0x7E
 const SPARK_BRIGHT := 0x60
+const SPARK_FADE_MIN := 4
 const LAYOUT_SPARK_Y := 0x124        ## context: the sparks' starting y
 const START_COSTUME_BUTTONS := PadState.START | PadState.TRIANGLE
 ## Record fields.
@@ -86,27 +86,13 @@ class Row:
 
 var ctx := ByteBlock.new(SIZE)
 var cells := ByteBlock.new(CELL_COUNT * CELL_SIZE)
-var sparks: Array[Spark] = []        ## context +0x14C: 64 rising streaks behind the portraits
-
-
-## A rising, fading streak (20 bytes in the game).
-class Spark:
-	extends RefCounted
-	var active := 0
-	var started := 0
-	var x := 0
-	var y := 0
-	var top := 0                     ## the y it rises from
-	var frame := 0                   ## the frame it started
-	var bright := 0
-	var fade := 0
+var sparks := SelectSparks.new(SPARK_WIDTH, SPARK_BRIGHT, SPARK_FADE_MIN)   ## context +0x14C: 64 rising streaks behind the portraits
+var _spark_sides := PackedInt32Array([0, 0])   ## the sides' left edges, read each frame for the sparks
 
 
 func _init(flow: GameFlow) -> void:
 	super(flow)
 	ctx.bytes = flow.data.select_context.duplicate()
-	for i in SPARK_COUNT:
-		sparks.append(Spark.new())
 
 
 func rec(player: int) -> int:
@@ -163,9 +149,7 @@ func step() -> void:
 				w32(p, R_CHOSEN_KEY, b >> 2)
 				w32(p, R_CHOSEN_COSTUME, b & 3)
 				player_step(p)
-			for spark in sparks:
-				spark.active = 0
-				spark.started = 0
+			sparks.clear()
 			g.sub = 1
 		1:
 			var t := ctx.s32(0x14)
@@ -195,43 +179,12 @@ func step() -> void:
 			ctx.put32(0xC, t - 1)
 
 
-## FUN_8010F1B4: every 4th frame a new streak rises from alternating portraits (the frame
-## generator places it and sets its fade); FUN_8010F020 moves and fades each one.
+## FUN_8010F1B4 and FUN_8010F020: every 4th frame a new streak rises from alternating portraits (the
+## frame generator places it and sets its fade), and each one moves and fades.
 func _sparks() -> void:
-	var n := ctx.u32(8)
-	if n & 3 == 0:
-		var k := (n >> 3) & 3
-		k = ((k << 1) | (k >> 1)) & 3
-		var p := (n >> 2) & 1
-		var free: Spark = null
-		for spark in sparks:
-			if spark.active == 0:
-				spark.started = 0
-				free = spark
-				break
-		if free != null:
-			var r := Opponents.frame_random(g.fight)
-			var a := (k << 10) | ((Fx.w32(r) >> 2) & 0x3FF)
-			free.active = 1
-			free.x = (ctx.u16(rec(p) + R_LAYOUT) + (a * 0x7E >> 12)) & 0xFFFF
-			var y := ctx.u16(LAYOUT_SPARK_Y)
-			free.top = y
-			free.y = y
-	var now := g.fight.vblank & 0xFFFF
-	for spark in sparks:
-		if spark.active != 1:
-			continue
-		if spark.started == 0:
-			spark.bright = SPARK_BRIGHT
-			spark.frame = now
-			spark.started = 1
-			spark.fade = (Opponents.frame_random(g.fight) & 3) + 4
-		elif spark.started != 1:
-			continue
-		spark.bright -= spark.fade
-		spark.y = Fx.s16((spark.top - ((now - spark.frame) << 4)) & 0xFFFF)
-		if spark.y + SPARK_HEIGHT < 0 or spark.bright <= 0:
-			spark.active = 0
+	_spark_sides[0] = ctx.u16(rec(0) + R_LAYOUT)
+	_spark_sides[1] = ctx.u16(rec(1) + R_LAYOUT)
+	sparks.step(ctx.u32(8), g.fight.vblank, _spark_sides, ctx.u16(LAYOUT_SPARK_Y), g.fight)
 
 
 # ---- the grid (FUN_8010DC04, FUN_8010DA30, FUN_8010D810) ----------------------------------

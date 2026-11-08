@@ -17,7 +17,7 @@ func test_a_side_with_no_choice_shows_the_silhouette() -> void:
 	var game := imported_flow()
 	if game == null:
 		return
-	var count := GameProgress.CHARACTERS
+	var count := Character.COUNT
 	var silent := SelectView.side_attribute(game.data, CharacterSelect.NO_CELL, 0, count)
 	expect_equal(silent & 0x1F, 0x15, "the empty side's picture is the 22nd")
 	expect_equal(silent, SelectView.SUBTRACTED_PORTRAIT, "drawn subtracted, as the silhouette")

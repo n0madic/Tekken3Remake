@@ -417,13 +417,13 @@ func _time_page() -> int:
 	var progress := g.progress
 	table.put16(T_GROUP_FRAMES, GROUP_FRAMES)
 	var mask := 0x3FF
-	for c in Opponents.CHARACTERS:
+	for c in Character.COUNT:
 		if progress.time_record(c) < TIME_CAP:
 			mask |= 1 << c
 	var n := ProgressRules.popcount(mask & 0x1FFFFF)
 	table.put16(T_ROWS, n)
 	var pairs: Array[Vector2i] = []
-	for c in Opponents.CHARACTERS:
+	for c in Character.COUNT:
 		if (mask >> c) & 1:
 			pairs.append(Vector2i(c, progress.time_record(c)))
 	Opponents.sort_pairs(pairs, true)
@@ -475,7 +475,7 @@ func _usage_page() -> void:
 	var progress := g.progress
 	var mask := 0x3FF
 	var total := 0
-	for c in Opponents.CHARACTERS:
+	for c in Character.COUNT:
 		var u := progress.usage(c)
 		if u != 0:
 			mask |= 1 << c
@@ -483,7 +483,7 @@ func _usage_page() -> void:
 	var n := ProgressRules.popcount(mask & 0x1FFFFF)
 	table.put16(T_ROWS, n)
 	var pairs: Array[Vector2i] = []
-	for c in Opponents.CHARACTERS:
+	for c in Character.COUNT:
 		if (mask >> c) & 1:
 			var u := progress.usage(c)
 			pairs.append(Vector2i(c, u))

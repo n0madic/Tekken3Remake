@@ -9,7 +9,6 @@ const MODEL_DRAWS := 4                   ## FUN_801E6ACC
 const SUB_LOAD := 4
 const SUB_ROUND := 6
 const SUB_FIGHT := 7
-const PLACEMENT_FACING_OTHER := 0xC000
 const START_ROUND_HOLD := 0x14
 const SAVED_DISTANCE_START := 100
 const FAR_APART := 0x1CFF               ## FUN_8018B124: above it a jump of the roots is undone
@@ -17,7 +16,6 @@ const WIDE_CHARACTERS: Array[int] = [0xB, 0x14]
 const WIDE_DISTANCE := 40
 const STANCE_PUNCHES := 0x300           ## the panel's punches at round 1: stance slot 0
 const STANCE_KICKS := 0xC0              ## kicks: slot 2, else a coin flip between 0 and 2
-const LONG_STANCE_FIRST := 0x95
 const DEMO_HEALTH := 0x7D0000
 
 
@@ -80,13 +78,7 @@ func _make_parts() -> void:
 
 ## The main loop's work before the flow runs (FUN_8018CD30 for the panels).
 func begin_panels(words: PackedInt32Array) -> void:
-	events.clear()
-	fight.effects.lights.clear()
-	fight.frame_counter += 1
-	fight.vblank = fight.frame_counter
-	fight.display_buffer = fight.frame_counter & 1
-	fight.camera_rng = ((fight.camera_rng + 1) * 0x10DCD) & 0xFFFFFFFF
-	fight.frame_rng = (fight.frame_rng * 5 + 1) & 0xFFFFFFFF
+	_tick_counters()
 	panels.read(words)
 
 
@@ -354,22 +346,7 @@ func winner_frame(player: int) -> void:
 func _place(f: FighterState, opp: FighterState) -> void:
 	_start_stance(f, opp)
 	var x := -PLACEMENT_X if f.index == 0 else PLACEMENT_X
-	f.pos_x = x
-	f.pos_y = 0
-	f.pos_z = 0
-	f.tilt_x = 0
-	f.tilt_z = 0
-	f.facing = Fx.s16(PLACEMENT_FACING if f.index == 0 else PLACEMENT_FACING_OTHER)
-	f.heading = f.facing
-	f.rel_angle = f.facing
-	f.screen_x = -START_SCREEN_X if f.index == 0 else START_SCREEN_X
-	f.body.joints[2].t = PackedInt32Array([x, START_HEAD_Y, 0])
-	f.body.joints[1].t = PackedInt32Array([x, START_CHEST_Y, 0])
-	f.root_x = x
-	f.root_z = 0
-	f.body_push_x = 0
-	f.body_push_y = 0
-	f.body_push_z = 0
+	_set_position(f, x, 0, PLACEMENT_FACING if f.index == 0 else -PLACEMENT_FACING)
 	f.health = f.health_max
 	_clear_round_state(f)
 	FighterSounds.script_stop(f)
@@ -381,8 +358,8 @@ func _place(f: FighterState, opp: FighterState) -> void:
 	f.prev_root_z = f.root_z
 
 
-## FUN_8018EEC8.
-func _start_stance(f: FighterState, opp: FighterState) -> void:
+## FUN_8018EEC8's choice of the slot: the panel's punches or kicks held at the first round.
+func _stance_slot(f: FighterState) -> int:
 	var held := panels.held[f.index]
 	var slot := 1
 	if fight.rounds_played == 1:
@@ -392,73 +369,15 @@ func _start_stance(f: FighterState, opp: FighterState) -> void:
 			slot = 2
 			if held & STANCE_KICKS == 0 and fight.rng.next() & 1:
 				slot = 0
-	f.move_slot = slot
-	var row := fight.move_for_slot(f, slot)
-	f.pose_move = row
-	f.root_move = row
-	f.move_row = row
-	var start := 1
-	if fight.rounds_played == 1 and row.length > LONG_STANCE:
-		start = row.length - LONG_STANCE_FIRST
-	f.pose_frame = 1
-	f.entry_frame = 1
-	f.transition = FightMath.transition_remap(Transition.FACE_OPPONENT, f.move_row, f.entry_frame)
-	f.trans_bit7 = 0
-	f.trans_bit6 = 0
-	moves.start_or_advance(f, opp)
-	f.root_frame = start
-	f.pose_frame = start
+	return slot
 
 
 func _clear_round_state(f: FighterState) -> void:
-	f.health_left = 0
-	f.hold_frames = -1
-	f.hit_freeze = 0
-	f.slide_state = 0
-	f.ballistic = 0
-	f.juggle_count = 0
-	f.air_vel_x = 0
-	f.air_vel_y = 0
-	f.air_vel_z = 0
-	f.crouch_move = 0
-	f.was_hit_this_move = 0
-	f.guarded_prev = 0
-	f.in_reaction = 0
-	f.attack_class = 0
-	f.cond_flag_used = 0
-	f.move_flag_ba = 0
-	f.move_flag_bb = 0
-	f.attack_pending = 0
-	f.air_phase = 0
-	f.round_won = 0
-	f.win_pose = 0
-	f.hit_cooldown = 0
-	f.push_frames = 0
-	f.push_table_frames = 0
-	f.turn_frames = 0
-	f.turn_step = 0
-	f.recover_mash = 0
-	f.recover_frames = 0
-	f.push_repeat = 0
-	f.push_repeat_timer = 0
-	f.power_timer = 0
+	_clear_shared_round_state(f)
 	f.got_hit = 0
 	f.contact = 0
 	f.whiffed = 0
-	f.counter_hit = 0
-	f.close_hit = 0
-	f.guarded = 0
-	f.hit_clean = 0
-	f.ko = 0
-	f.last_damage = 0
-	f.in_air = 0
-	f.extra_damage = 0
 	f.hit_freeze_in = 0
-	f.anchor_dirty = 0
-	f.blend_frames = 0
-	f.blend_counter = 0
-	f.blend_weight = 0
-	f.blend_root_delta = PackedInt32Array([0, 0, 0])
 
 
 ## FUN_8018CB08: both roots from the second fighter's channels, then the directions and the distance.

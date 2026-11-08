@@ -7,7 +7,6 @@ extends RefCounted
 const START_COSTUME_MASK := 0x50382
 const ALL_CHARACTERS := 0x1FFFFF
 const FIGHTS_CAP := 0xFFFF
-const NO_CHARACTER := 0x16
 const DOCTOR_B_BIT := 1 << Character.DOCTOR_B
 const UNLOCK_STEPS := 14                ## the schedule's steps
 const UNLOCK_STEP_MASK := 0x83FF        ## the bit positions FUN_800B2350 tests (bug #29)
@@ -152,7 +151,7 @@ func gon_check(character: int) -> void:
 func record_clear(character: int, costume: int) -> void:
 	if region.mode != GameMode.ARCADE:
 		return
-	progress.new_character = NO_CHARACTER
+	progress.new_character = Character.NONE
 	var first := progress.cleared
 	var second := progress.cleared2
 	match character:

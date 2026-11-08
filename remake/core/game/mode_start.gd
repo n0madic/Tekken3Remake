@@ -14,7 +14,6 @@ static var FEATURES: Array[PackedInt32Array] = [
 	PackedInt32Array([0, 0, 0, 0, 0, 0, 1, 1, 0]), PackedInt32Array([1, 1, 0, 0, 1, 0, 0, 0, 1]),
 	PackedInt32Array([1, 0, 0, 0, 0, 0, 0, 0, 0]),
 ]
-const NO_CHARACTER := 0x16
 const NO_PICK := 0x58
 const QUICK_CHALLENGE := PadState.START | PadState.L1 | PadState.R1  ## quick select
 
@@ -79,7 +78,7 @@ static func _players(g: GameFlow, players: int) -> void:
 		fight.fighters[p].carried_health = 0
 		if progress.cursor_hold == 0:
 			progress.set_last_character(p, NO_PICK)
-		globals.player_char[p] = NO_CHARACTER
+		globals.player_char[p] = Character.NONE
 		globals.player_costume[p] = 0
 		globals.player_keep[p] = 0
 		globals.player_active[p] = 0
@@ -141,7 +140,7 @@ static func _mode_rules(g: GameFlow, mode: int) -> bool:
 				region.put16(0xDA - 2 * k, 0)
 			region.put32(0x9C, 0)
 			for k in 4:
-				region.put32(0xAC - 4 * k, NO_CHARACTER)
+				region.put32(0xAC - 4 * k, Character.NONE)
 		GameMode.PRACTICE:
 			region.rounds_option = 0
 			fight.round_time_option = 5

@@ -43,6 +43,15 @@ const KIND_RESTART_AT_6 := 1
 var neutral_guard := 0                            ## 0x8021FC70: humans' neutral guard (a setting)
 
 
+func launch_air_kind() -> int:
+	return ARCADE_LAUNCH_AIR_KIND
+
+
+## The humans' guard stays only with the neutral guard setting.
+func guard_off(f: FighterState) -> bool:
+	return f.is_cpu != 0 or neutral_guard == 0
+
+
 # ---- angles ---------------------------------------------------------------------------------
 
 ## FUN_801A0A6C: both fighters' angles from the directions FUN_8018B050 stored.
@@ -189,7 +198,7 @@ func _load_move_words(f: FighterState, move: MoveRow) -> void:
 	f.state_class = (f.state >> StateBit.CLASS_SHIFT) & 0x1F
 	f.guard = f.state & StateBit.GUARDS
 	f.attack_hi = f.attack >> 8
-	if f.state & StateBit.HUMAN_GUARD and (f.is_cpu != 0 or neutral_guard == 0):
+	if f.state & StateBit.HUMAN_GUARD and guard_off(f):
 		f.state &= ~StateBit.GUARDS & 0xFFFFFFFF
 		f.guard &= ~StateBit.GUARDS & 0xFFFF
 
@@ -411,46 +420,13 @@ func _step_against(f: FighterState, opp: FighterState) -> void:
 	branch_step(f, opp)
 
 
-## FUN_80190600.
-func _hit_select_reaction(f: FighterState, attacker: FighterState) -> void:
-	var r := f.reaction
-	var crouch := 0 if f.state & StateBit.STANDING != 0 else 1
-	var code := 0
-	if f.guard & attacker.attack != 0:
-		code = Transition.HIT_GUARD
-		f.move_slot = r[Reaction.GUARD + crouch]
-	elif f.in_air != 0 or f.pose_move.state & StateBit.AIRBORNE != 0:
-		code = Transition.HIT_AIR
-		_air_reaction_kind(f, attacker)
-	elif f.state & StateBit.DOWN_REVERSED != 0:
-		code = Transition.HIT_DOWN
-		f.move_slot = r[Reaction.DOWN_OTHER]
-	elif f.state & StateBit.DOWN != 0:
-		code = Transition.HIT_DOWN
-		f.move_slot = r[Reaction.DOWN]
-	elif f.counter_hit != 0:
-		code = Transition.HIT_COUNTER
-		f.move_slot = r[Reaction.COUNTER + crouch]
-	else:
-		match f.facing_quadrant:
-			0:
-				code = Transition.HIT_FRONT
-				f.move_slot = r[Reaction.FRONT + crouch]
-			1:
-				code = Transition.HIT_SIDE_1
-				f.move_slot = r[Reaction.SIDE_1 + crouch]
-			2:
-				code = Transition.HIT_BACK
-				f.move_slot = r[Reaction.BACK + crouch]
-			3:
-				code = Transition.HIT_SIDE_3
-				f.move_slot = r[Reaction.SIDE_3 + crouch]
-	if code != 0:
-		f.transition = code
-	f.trans_bit7 = 0
-	f.trans_bit6 = 0
-	f.entry_frame = f.pose_frame
-	f.move_row = fight.move_for_slot(f, f.move_slot)
+## FUN_80190600's tests: the guard word against the attack, and no remap of the transition.
+func _hit_guarded(f: FighterState, attacker: FighterState) -> bool:
+	return f.guard & attacker.attack != 0
+
+
+func _hit_transition(_f: FighterState, code: int) -> int:
+	return code
 
 
 ## FUN_80190A7C.

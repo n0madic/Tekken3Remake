@@ -13,7 +13,6 @@ const RECORDS_SIZE := 0x1B0
 const TIME_RECORDS := RECORDS          ## 22 × (u32 frames, char name[4])
 const SURVIVORS := RECORDS + 0xB0      ## 10 × (u16 character, u16 wins, char name[4])
 const STATS := RECORDS + 0x100         ## 22 × (plays, wins, losses, draws) u16
-const CHARACTERS := 22
 ## The save block's byte ranges (offset, length) the unlock schedule writes or reads (ProgressRules):
 ## the unlocked characters and Start costumes with the arcade clears that open the Theater's movies
 ## and the schedule's steps, the last unlocked character, the play-count steps and counter, the

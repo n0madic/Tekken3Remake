@@ -40,12 +40,6 @@ const PRESET_DRAW := 0xE3                   ## FUN_801C2F6C's bound for a draw w
 const THROW_ENDING := 0x23                  ## a stream's fade when the throw is broken
 const CANCEL_FADE := 8
 const PRESET_WAIT := 0x10
-const VICTIM_HOLD := 0x400000               ## FUN_801D4698: the victim's move state
-const THROWN_TRANSITION := 0x21
-const THROWER_LAST_EVENT := 0xB00
-const VICTIM_LAST_EVENT := 0xC00
-const HIT_RATING_KO := 3
-const KO_DAMAGE := 0x1B
 const HIT_H_BASE := 0x3BB
 const ARCADE_HALF_WIDTH := 256.0            ## half the 512-pixel display
 const ARCADE_HALF_HEIGHT := 120.0 * 4096.0 / ArcadeViewMatrix.ARCADE_ASPECT
@@ -94,6 +88,7 @@ var attract_counter := 0            ## 0x8021F39C: the attract's fights so far, 
 
 func _init(fight_state: FightState) -> void:
 	super(fight_state)
+	byte_cut = BYTE_CANCEL
 	shape.spread = 0x188
 	shape.band = 0x44
 	shape.top = 0x8C
@@ -565,9 +560,9 @@ func _cinematic_start(f0: FighterState, f1: FighterState) -> void:
 ## State 3: the preset's start waits, then the fight camera fades into it.
 func _preset_in(f0: FighterState, f1: FighterState) -> void:
 	if wait >= 0:
-		if _camera_byte(f0) != BYTE_CANCEL:
+		if _camera_byte(f0) != byte_cut:
 			wait -= 1
-			if _camera_byte(f1) != BYTE_CANCEL:
+			if _camera_byte(f1) != byte_cut:
 				return
 		cam_script = -1
 		wait = -1
@@ -606,7 +601,7 @@ func _stream_frame_state(f0: FighterState, f1: FighterState) -> bool:
 	weights[SOURCE_STREAM] = Fx.ONE - r * WEIGHT_PER_STEP
 	weights[SOURCE_SCRIPT] = 0
 	weights[SOURCE_FIGHT] = r * WEIGHT_PER_STEP
-	if _camera_byte(f0) == BYTE_CANCEL or _camera_byte(f1) == BYTE_CANCEL:
+	if _camera_byte(f0) == byte_cut or _camera_byte(f1) == byte_cut:
 		count = CANCEL_FADE
 		count_total = CANCEL_FADE
 		if r == STREAM_FULL:
@@ -730,23 +725,6 @@ func _blend_out(_f0: FighterState, _f1: FighterState) -> int:
 	if script_kind > 0:
 		return ct.presets[script_kind - 1][1]
 	return ct.blend_outs[-script_kind]
-
-
-## FUN_801D4698.
-func _throw_ends(thr: FighterState, vic: FighterState) -> bool:
-	if thr.throw_state < 1 or vic.throw_state >= 0 or _camera_byte(thr) == BYTE_CANCEL:
-		return true
-	if switch_mode == 1:
-		return false
-	if vic.pose_move.state & VICTIM_HOLD:
-		return true
-	var thrower_left := _event_distance(thr, THROWER_LAST_EVENT)
-	var victim_left := _event_distance(vic, VICTIM_LAST_EVENT)
-	if thrower_left < 0 and victim_left < 0:
-		return false
-	if maxi(thrower_left, victim_left) != 0:
-		return false
-	return thr.transition != THROWN_TRANSITION
 
 
 # ==== script cameras ==============================================================================
@@ -1001,49 +979,6 @@ func _target_height(f: FighterState) -> int:
 
 
 # ==== hit cameras =================================================================================
-
-## FUN_801D4E88.
-func _hit_choose(f0: FighterState, f1: FighterState) -> int:
-	if f0.hit_clean != 0 and f1.hit_clean != 0:
-		return -1
-	for i in 2:
-		var d := f0 if i == 0 else f1
-		var a := f1 if i == 0 else f0
-		if d.hit_clean == 0:
-			continue
-		var rating := _hit_rating(d)
-		for row: PackedInt32Array in ct.hit_rows:
-			if rating != HIT_RATING_KO and (a.bank_type != row[0] or a.cur_slot != row[1]):
-				continue
-			if not _hit_pick(row[2], rating):
-				return -1
-			hit_point = d.hit_slots[0].point.duplicate()
-			return i
-	hit_script = null
-	return -1
-
-
-static func _hit_rating(d: FighterState) -> int:
-	if d.ko != 0 and d.last_damage > KO_DAMAGE:
-		return HIT_RATING_KO
-	if d.counter_hit != 0:
-		return 2
-	return 1 if d.close_hit != 0 else 0
-
-
-## FUN_801D4DA4.
-func _hit_pick(list_id: int, rating: int) -> bool:
-	var r := fight.rng.next() & 0xFFF
-	var records: Array = ct.hit_lists[list_id - HIT_LIST_BASE]
-	for record: PackedInt32Array in records:
-		if r <= record[0]:
-			var chosen: CameraTables.HitScript = ct.hit_scripts[record[1 + rating]]
-			if chosen.kind == -1:
-				return false
-			hit_script = chosen
-			return true
-	return false
-
 
 ## FUN_801D5078.
 func _hit_camera(f0: FighterState, f1: FighterState, restart: int, distance: int) -> void:

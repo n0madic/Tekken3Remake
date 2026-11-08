@@ -13,7 +13,6 @@ enum Picture { NONE = 0, MOVIE = 1, TITLE_PROMPT = 2, TITLE = 5, ENBU = 6, BLACK
 const MODE_ARCADE := 0
 const MODE_DEMO := 6
 const START := 0x8000
-const NONE := 0x16
 const FLAG_CHALLENGERS := 2             ## 0x80374F1C: a second player may join
 const FLAG_RELOAD_ON_JOIN := 4
 const ATTRACT_MOVIE := 0
@@ -67,7 +66,7 @@ var chars := PackedInt32Array([0, 0])   ## 0x8021FBF0
 var costumes := PackedInt32Array([0, 0])   ## 0x8021FC0C
 var plays := PackedInt32Array([0, 0])   ## 0x8021FC74: games paid for
 var loser_timer := PackedInt32Array([0, 0])   ## 0x8021FB4C: the HUD's CONTINUE?
-var picks_character := PackedInt32Array([NONE, NONE])   ## 0x80374F20
+var picks_character := PackedInt32Array([Character.NONE, Character.NONE])   ## 0x80374F20
 var picks_costume := PackedInt32Array([0, 0])   ## 0x80374F22
 var challenger_lock: int:               ## 0x8021FD48
 	get: return fight.challenger_lock
@@ -299,7 +298,7 @@ func start_mode(new_mode: int, players: int) -> void:
 	mode = new_mode
 	match_flow.reset_context()
 	for p in 2:
-		picks_character[p] = NONE
+		picks_character[p] = Character.NONE
 		picks_costume[p] = 0
 		chosen[p] = 0
 		active[p] = 0

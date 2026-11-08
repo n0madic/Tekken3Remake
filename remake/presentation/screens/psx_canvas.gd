@@ -37,7 +37,7 @@ func setup_psx(hud_data: HudData, game_ram: GameRam, image: VramImage) -> void:
 ## not the .png files, so the count is the roster's.
 static func character_pictures(screens_dir: String, folder: String) -> Array[Texture2D]:
 	var out: Array[Texture2D] = []
-	for i in GameProgress.CHARACTERS:
+	for i in Character.COUNT:
 		out.append(TexturePacks.texture(screens_dir.path_join("%s/%d.png" % [folder, i])))
 	return out
 

@@ -282,7 +282,7 @@ func _ball_opponent() -> int:
 	var region := g.region
 	var pairs: Array[Vector2i] = []
 	var mask := g.progress.unlocked & BALL_POOL
-	for c in Opponents.CHARACTERS:
+	for c in Character.COUNT:
 		if (mask >> c) & 1:
 			pairs.append(Vector2i(c, region.ctx16(BALL_MET + 2 * c)))
 	var fixed := g.fight.rules.fix_ball_opponent
@@ -578,7 +578,7 @@ func _survival_end() -> void:
 		var met := Opponents.SURVIVAL_MET + 2 * character
 		region.ctx_put16(met, region.ctx16(met) + 1)
 		var total := 0
-		for c in Opponents.CHARACTERS:
+		for c in Character.COUNT:
 			total += region.ctx16(Opponents.SURVIVAL_MET + 2 * c)
 		region.ctx_put32(Opponents.SURVIVAL_WINS, total)
 		g.sub = MatchFlow.Sub.NEXT_FIGHT

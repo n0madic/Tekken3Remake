@@ -62,11 +62,6 @@ func step(sim: FightSimulation) -> void:
 			_round_end()
 
 
-## FUN_8019E82C's end and the lock of FUN_801B65AC: a decided match whose loser has joined.
-func _result(f0: FighterState, f1: FighterState) -> void:
-	super(f0, f1)
-	fight.win_pose_done = PackedInt32Array([0, 0])
-
 
 ## State 2: only on time up or for a CPU the fighter leaves the stick, crouching winners keep crouching.
 func _result_step(sim: FightSimulation, f0: FighterState, f1: FighterState) -> void:

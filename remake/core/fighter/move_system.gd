@@ -885,12 +885,33 @@ func step(f: FighterState) -> void:
 		f.in_throw = 1
 
 
+## The air kind of a launch: its flight lands as a launch.
+func launch_air_kind() -> int:
+	return LAUNCH_AIR_KIND
+
+
+## Whether the fighter's guard states are dropped from its moves (the humans' guard is a setting).
+func guard_off(f: FighterState) -> bool:
+	return f.human_guard == 0
+
+
+## Whether the defender blocked the attacker's hit.
+func _hit_guarded(f: FighterState, _attacker: FighterState) -> bool:
+	return f.guarded != 0
+
+
+## The transition a hit reaction starts with (TransitionRemap works on the pending move, which is
+## still the previous one here).
+func _hit_transition(f: FighterState, code: int) -> int:
+	return FightMath.transition_remap(code, f.move_row, f.entry_frame) if f.move_row != null else code
+
+
 ## HitSelectReaction (0x8002EDF8): the defender's reaction move from its reaction record.
 func _hit_select_reaction(f: FighterState, attacker: FighterState) -> void:
 	var r := f.reaction
 	var crouch := 0 if f.state & StateBit.STANDING != 0 else 1     # the crouching slot follows the standing one
 	var code := 0
-	if f.guarded != 0:
+	if _hit_guarded(f, attacker):
 		code = Transition.HIT_GUARD
 		f.move_slot = r[Reaction.GUARD + crouch]
 	elif f.in_air != 0 or f.pose_move.state & StateBit.AIRBORNE != 0:
@@ -920,8 +941,7 @@ func _hit_select_reaction(f: FighterState, attacker: FighterState) -> void:
 				code = Transition.HIT_SIDE_3
 				f.move_slot = r[Reaction.SIDE_3 + crouch]
 	if code != 0:
-		# TransitionRemap works on the pending move, which is still the previous one here.
-		f.transition = FightMath.transition_remap(code, f.move_row, f.entry_frame) if f.move_row != null else code
+		f.transition = _hit_transition(f, code)
 	f.trans_bit7 = 0
 	f.trans_bit6 = 0
 	f.entry_frame = f.pose_frame

@@ -408,7 +408,7 @@ func _survival_setup() -> void:
 	g.sim.events.add(SimEvents.Kind.VOICES_OFF, -1, 1)
 	_seq_reset()
 	var pairs: Array[Vector2i] = []
-	for c in Opponents.CHARACTERS:
+	for c in Character.COUNT:
 		var wins := region.ctx16(Opponents.SURVIVAL_MET + 2 * c)
 		if wins != 0:
 			pairs.append(Vector2i(c, wins))

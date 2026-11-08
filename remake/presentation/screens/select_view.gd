@@ -326,9 +326,9 @@ func _new_arrows() -> void:
 
 ## FUN_8010F020: the rising streaks (added).
 func _sparks() -> void:
-	for spark in select.sparks:
+	for spark in select.sparks.sparks:
 		if spark.active != 1:
 			continue
-		var a := clampi(spark.bright, 0, 0xFF) / 255.0
+		var a := clampi(spark.brightness, 0, SelectSparks.LEVEL_MASK) / float(SelectSparks.LEVEL_MASK)
 		var top := Color(a, a, a)
-		gradient(spark.x, spark.y, 1, 0xA0, top, top, Color.BLACK, Color.BLACK)
+		gradient(spark.x, spark.y, SelectSparks.WIDTH, SelectSparks.LENGTH, top, top, Color.BLACK, Color.BLACK)

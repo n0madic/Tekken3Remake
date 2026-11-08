@@ -131,7 +131,7 @@ func test_arcade_records_with_a_damaged_row_are_ignored() -> void:
 	var back := ArcadeProgress.new()
 	var fresh := back.saved_records()
 	var times := []
-	times.resize(ArcadeProgress.CHARACTERS)
+	times.resize(Character.COUNT)
 	times.fill(0)
 	back.restore_records({"times": times})
 	expect_equal(back.saved_records(), fresh, "rows that are not objects leave a fresh cabinet's")

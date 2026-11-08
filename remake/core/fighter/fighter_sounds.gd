@@ -13,6 +13,8 @@ const KO_IMPACT_LIGHT := 0x7044
 const KO_IMPACT_HEAVY := 0x7048
 const HEAVY_JOINT := 0xB             ## first descriptor joint from which impacts are heavy
 const GUARD_JOINT := 0xC
+const STRIKE_LOW_JOINT := 0x7041        ## + tier 1 to 3: an attack from a joint below the guard joint
+const STRIKE_HIGH_JOINT := 0x7045       ## + tier 0 to 3
 const GUARD_LIGHT := 0x704D
 const GUARD_HEAVY := 0x704E
 const WOOD_GUARD_LIGHT := 0x707B
@@ -205,26 +207,23 @@ static func _gun_jack_hit(fight: FightState, f: FighterState, opp: FighterState,
 
 ## FUN_80041F4C: the strike sound by the attacker's damage and descriptor.
 static func _strike(fight: FightState, f: FighterState, events: SimEvents) -> void:
-	var code := 0
-	if AttackRecords.first_joint(f.pose_move, fight.tables) < GUARD_JOINT:
-		var r := fight.rng.next()
-		if f.damage < 0xD:
-			code = fight.tables.strike_sounds[(r >> 7) & 1]
-		elif f.damage < 0x17:
-			code = 0x7042
-		elif f.damage < 0x21:
-			code = 0x7043
-		else:
-			code = 0x7044
-	elif f.damage < 0xD:
-		code = 0x7045
-	elif f.damage < 0x17:
-		code = 0x7046
-	elif f.damage < 0x21:
-		code = 0x7047
-	else:
-		code = 0x7048
-	_sound(fight, f.player_index, code, events)
+	_sound(fight, f.player_index, strike_code(fight, f.damage, AttackRecords.first_joint(f.pose_move, fight.tables)), events)
+
+
+## The strike sound of an attacker's `damage` whose attack starts at `joint` (arcade FUN_801A2058 too):
+## three tiers of damage, below the guard joint the lightest one is one of two sounds drawn at random.
+static func strike_code(fight: FightState, damage: int, joint: int) -> int:
+	var tier := 3
+	if damage < 0xD:
+		tier = 0
+	elif damage < 0x17:
+		tier = 1
+	elif damage < 0x21:
+		tier = 2
+	if joint >= GUARD_JOINT:
+		return STRIKE_HIGH_JOINT + tier
+	var r := fight.rng.next()
+	return fight.tables.strike_sounds[(r >> 7) & 1] if tier == 0 else STRIKE_LOW_JOINT + tier
 
 
 ## FUN_80041C48: 0 holds the jump and landing sounds this frame, 1 answers the opponent's sound

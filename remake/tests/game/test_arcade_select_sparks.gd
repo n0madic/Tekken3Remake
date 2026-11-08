@@ -14,9 +14,9 @@ func _fight() -> FightState:
 	return fight
 
 
-func _active(sparks: ArcadeSelectSparks) -> Array[ArcadeSelectSparks.Spark]:
-	var out: Array[ArcadeSelectSparks.Spark] = []
-	for s: ArcadeSelectSparks.Spark in sparks.sparks:
+func _active(sparks: ArcadeSelectSparks) -> Array[SelectSparks.Spark]:
+	var out: Array[SelectSparks.Spark] = []
+	for s: SelectSparks.Spark in sparks.sparks:
 		if s.active != 0:
 			out.append(s)
 	return out
@@ -53,7 +53,7 @@ func test_a_spark_rises_by_the_clock_and_fades_out() -> void:
 	expect(fade >= ArcadeSelectSparks.FADE_MIN and fade <= ArcadeSelectSparks.FADE_MIN + 3, "fade %d" % fade)
 	expect_equal(s.brightness, ArcadeSelectSparks.START_BRIGHTNESS - fade, "fades from its first step")
 	sparks.step(5, CLOCK + 2, X, Y, fight)
-	expect_equal(s.y, Y - 2 * ArcadeSelectSparks.RISE, "two displayed frames higher")
+	expect_equal(s.y, Y - 2 * SelectSparks.RISE, "two displayed frames higher")
 	var clock := CLOCK + 2
 	var frame := 5
 	while s.active != 0 and frame < 100:
@@ -61,13 +61,13 @@ func test_a_spark_rises_by_the_clock_and_fades_out() -> void:
 		clock += 1
 		sparks.step(frame, clock, X, Y, fight)
 	expect(s.active == 0, "it ends")
-	expect(s.brightness < 1 or s.y + ArcadeSelectSparks.LENGTH < 0, "dark or above the screen")
+	expect(s.brightness < 1 or s.y + SelectSparks.LENGTH < 0, "dark or above the screen")
 
 
 func test_the_pool_is_limited_and_cleared() -> void:
 	var sparks := ArcadeSelectSparks.new()
 	var fight := _fight()
-	for s: ArcadeSelectSparks.Spark in sparks.sparks:
+	for s: SelectSparks.Spark in sparks.sparks:
 		s.active = 1
 		s.started = 1
 		s.brightness = ArcadeSelectSparks.START_BRIGHTNESS

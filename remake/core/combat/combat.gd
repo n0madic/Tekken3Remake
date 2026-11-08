@@ -22,6 +22,7 @@ const SCREEN_EDGE := 0x191
 const LOW_ATTACK := AttackWord.LOW
 const JUMP_CLASS := 12
 const PROJECTILE_JOINT := 0x18
+const NO_SEGMENT := -1               ## a joint that is no segment end
 const HURT_ZONE_Y := {8: -0x78, 11: -0x3C}
 ## Byte offset of frame t's points in a baked attack record, by layout kind: (stride, lead).
 const LAYOUT_STRIDE := {0: Vector2i(10, 0), 1: Vector2i(5, 5), 2: Vector2i(10, 10), 3: Vector2i(15, 5),
@@ -342,7 +343,7 @@ func _body_shapes(f: FighterState, joints: Array[JointFrame]) -> void:
 func _segment_joint(f: FighterState, joint: int) -> int:
 	if joint == 0x13:
 		return 6 if f.char_id == Character.OGRE else joint
-	return joint if joint < 0x18 else -1
+	return joint if joint < PROJECTILE_JOINT else NO_SEGMENT
 
 
 ## FUN_8006A6A4: the attack segments inside the active window from the baked points.

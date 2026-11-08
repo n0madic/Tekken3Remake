@@ -8,8 +8,6 @@ const FIRST_JOINT_CHANNEL := 3
 const CHANNEL_ANGLE := 0
 const CHANNEL_HEIGHT := 1
 const CHANNEL_DISTANCE := 2
-## Transitions whose forward blend goes into the pending move's entry frame (FUN_8019CD04).
-const ENTRY_TRANSITIONS: Array[int] = [2, 0x12, 0x13, 0x14, 0x15, 0x16, 0x19, 0x1A, 0x1D, 0x2C]
 const LONGEST_BLEND := 0x10
 const THROWN_BLEND := 0x10
 const SHORT_BLEND := 4
@@ -264,7 +262,7 @@ func _blend_start_arcade(f: FighterState, n: int) -> void:
 				f.blend_src_move = f.pose_move
 				f.blend_src_frame = f.entry_frame & 0xFF
 				f.blend_dst_move = fight.move_for_slot(f, f.move_slot)
-				f.blend_dst_frame = (f.entry_frame if f.transition in ENTRY_TRANSITIONS else 0) & 0xFF
+				f.blend_dst_frame = (f.entry_frame if f.transition in ENTRY_DST_CODES else 0) & 0xFF
 				f.blend_frames = maxi(f.entry_frame - f.pose_frame + 1, 1)
 			f.blend_counter = 0
 			_forward_deltas(f)

@@ -9,6 +9,18 @@ const FORCED_ESCAPES: Array[int] = [0x189, 0x18E, 0x17F, 0x181]
 
 const THROW_ROWS := 48
 const DIRECT := 0x7FFFFFFF           ## _choose: execute the marked neutral move directly
+
+## The kinds of movement the random pick chooses (arcade FUN_801CB2F0; `_do_movement` takes them).
+const MOVE_NONE := 0
+const MOVE_DASH := 1                 ## side step or walk in
+const MOVE_WALK := 2
+const MOVE_RETREAT := 3
+const MOVE_LONG_DASH := 4            ## side step with a long approach, or dash in
+const MOVE_LONG_WALK := 5
+const MOVE_BACK_DASH := 6            ## crouch dash or step back
+const MOVE_SIDE_STEP := 8
+const WAIT_LONG := 0x23              ## beyond this wait the pick follows the reach band
+const GUARD_ANGLE := 0x3000          ## least angle to the opponent at which an attack no longer comes at the CPU
 const ROW_COMMAND := CpuOpponent.ROW_COMMAND
 const ROW_CONDITION := CpuOpponent.ROW_CONDITION
 const ROW_TARGET := CpuOpponent.ROW_TARGET
@@ -315,27 +327,30 @@ func _opponent_attack() -> void:
 
 ## +0x6A: the CPU already holds the guard that stops the opponent's attack level.
 func _needs_guard() -> int:
-	var posture := rec.own_state & 0xFFFF
 	if rec.distance >= 0xB87 or rec.vs_stance != 0:
 		return 0
-	var attack := rec.opp_attack
-	if rec.opp_grabs != 0:
-		return 0 if attack == AttackWord.MID else (1 if posture == StateWord.CROUCH or posture == StateWord.GUARD_LOW else 0)
-	if rec.opp_coming == 0 or rec.angle > 0x3000:
-		return 0
-	var accepted: Array = []
+	return 1 if guard_posture_holds(rec.own_state & 0xFFFF, rec.opp_attack, rec.opp_grabs, rec.opp_coming, rec.angle) else 0
+
+
+## Whether the posture is one that stops the attack level: a grab needs a crouch or a low guard unless
+## it is a mid, an attack that comes at the CPU needs the guard of its level.
+static func guard_posture_holds(posture: int, attack: int, grabs: int, coming: int, angle: int) -> bool:
+	if grabs != 0:
+		return attack != AttackWord.MID and (posture == StateWord.CROUCH or posture == StateWord.GUARD_LOW)
+	if coming == 0 or angle > GUARD_ANGLE:
+		return false
 	match attack:
 		AttackWord.HIGH:
-			accepted = [StateWord.CROUCH, StateWord.GUARD_LOW, StateWord.GUARD_HIGH]
+			return posture == StateWord.CROUCH or posture == StateWord.GUARD_LOW or posture == StateWord.GUARD_HIGH
 		AttackWord.MID:
-			accepted = [StateWord.GUARD_HIGH]
+			return posture == StateWord.GUARD_HIGH
 		AttackWord.LOW:
-			accepted = [StateWord.GUARD_LOW]
+			return posture == StateWord.GUARD_LOW
 		AttackWord.MID_2:
-			accepted = [StateWord.GUARD_LOW, StateWord.GUARD_HIGH]
+			return posture == StateWord.GUARD_LOW or posture == StateWord.GUARD_HIGH
 		AttackWord.UNBLOCKABLE_2:
-			accepted = [StateWord.GUARD_LOW, StateWord.CROUCH]
-	return 1 if posture in accepted else 0
+			return posture == StateWord.GUARD_LOW or posture == StateWord.CROUCH
+	return false
 
 
 func _guard_state() -> void:
@@ -1498,7 +1513,7 @@ func _movement() -> int:
 				pad = PAD_BACK
 			rec.pad = pad
 			return 1
-		if rec.wait < 0x24 and rec.reach_band == 2 and ai.lcg_next() & 0xF == 0:
+		if rec.wait <= WAIT_LONG and rec.reach_band == 2 and ai.lcg_next() & 0xF == 0:
 			if ai.mark_command(rec, CpuOpponent.SIDE_STEP) > 0 and ai.execute_candidate(rec) >= 0:
 				rec.approach_kind = 0
 				rec.approach = 0
@@ -1517,103 +1532,115 @@ func _pick_movement() -> int:
 	var v := ai.random_below(0x1000)
 	var choice := 0
 	if rec.opp_breath == 0:
-		if rec.wait < 0x24:
+		if rec.wait <= WAIT_LONG:
 			choice = _by_distance(v)
 		else:
 			choice = _by_closing(v)
-			if (choice == 3 or choice == 6) and rec.word(AiRecord.Param.KEEP_RETREAT) <= ai.lcg_next() & 0xFFF:
-				choice = 0
-		if (choice == 3 or choice == 6) and (rec.opp_state & 0x80000 or rec.opp_attack != 0) \
+			if (choice == MOVE_RETREAT or choice == MOVE_BACK_DASH) \
+					and rec.word(AiRecord.Param.KEEP_RETREAT) <= ai.lcg_next() & 0xFFF:
+				choice = MOVE_NONE
+		if (choice == MOVE_RETREAT or choice == MOVE_BACK_DASH) and (rec.opp_state & 0x80000 or rec.opp_attack != 0) \
 				and ai.lcg_next() & 0xFFF < rec.word(AiRecord.Param.FOCUS):
-			choice = 0
+			choice = MOVE_NONE
 	return _do_movement(choice)
 
 
 func _by_distance(v: int) -> int:
-	match rec.band:
-		0, 1:
-			return 3 if v < 0x14 else 0
-		2:
-			if v < 0x7A:
-				return 5
-			if v < 0x1EB:
-				return 1
-			if v < 0x214:
-				return 3
-			return 8 if v < Fx.div_trunc(rec.word(AiRecord.Param.SIDE_STEP) << 12, 1000) else 0
-		3:
-			return 2 if v < 0x666 else (1 if v < 0xB33 else 0)
-		4:
-			return 2 if v < 0xCC else (4 if v < 0x599 else 1)
-		5:
-			if rec.far_count < 0x2D1 and rec.opp_down == 0 and v > 0x11D:
-				return 1
-			return 4
-	return 0
+	return movement_by_band(rec.band, rec.far_count, rec.opp_down, rec.word(AiRecord.Param.SIDE_STEP), v)
 
 
 func _by_closing(v: int) -> int:
-	match rec.reach_band:
+	return movement_by_reach(rec.reach_band, rec.far_count, rec.opp_down, rec.own_state & StateBit.STANDING != 0, v)
+
+
+## The movement for a random draw `v` (0 to 0xFFF) by the distance band; `side_step_word` is the
+## difficulty word that sets the side step's share.
+static func movement_by_band(band: int, far_count: int, opp_down: int, side_step_word: int, v: int) -> int:
+	match band:
 		0, 1:
-			return 6 if v < 0x199 else (3 if v < 0x333 else 0)
+			return MOVE_RETREAT if v < 0x14 else MOVE_NONE
+		2:
+			if v < 0x7A:
+				return MOVE_LONG_WALK
+			if v < 0x1EB:
+				return MOVE_DASH
+			if v < 0x214:
+				return MOVE_RETREAT
+			return MOVE_SIDE_STEP if v < Fx.div_trunc(side_step_word << 12, 1000) else MOVE_NONE
+		3:
+			return MOVE_WALK if v < 0x666 else (MOVE_DASH if v < 0xB33 else MOVE_NONE)
+		4:
+			return MOVE_WALK if v < 0xCC else (MOVE_LONG_DASH if v < 0x599 else MOVE_DASH)
+		5:
+			if far_count < 0x2D1 and opp_down == 0 and v > 0x11D:
+				return MOVE_DASH
+			return MOVE_LONG_DASH
+	return MOVE_NONE
+
+
+## The movement for a random draw `v` while waiting long, by the reach band.
+static func movement_by_reach(reach_band: int, far_count: int, opp_down: int, standing: bool, v: int) -> int:
+	match reach_band:
+		0, 1:
+			return MOVE_BACK_DASH if v < 0x199 else (MOVE_RETREAT if v < 0x333 else MOVE_NONE)
 		2:
 			if v <= 0x27:
-				return 2
-			return 3 if v < 0x170 else 0
+				return MOVE_WALK
+			return MOVE_RETREAT if v < 0x170 else MOVE_NONE
 		3:
 			if v < 0x1EB:
-				return 2
+				return MOVE_WALK
 			if v < 0x214:
-				return 5
+				return MOVE_LONG_WALK
 			if v < 0x218:
-				return 3
+				return MOVE_RETREAT
 			if v < 0x22D:
-				return 1
-			return 8 if v < 0x241 and rec.own_state & StateBit.STANDING else 0
+				return MOVE_DASH
+			return MOVE_SIDE_STEP if v < 0x241 and standing else MOVE_NONE
 		4:
 			if v < 0x80:
-				return 2
+				return MOVE_WALK
 			if v < 0x90:
-				return 5
+				return MOVE_LONG_WALK
 			if v < 0xC0:
-				return 8
-			return 1 if v < 0x3C0 else 0
+				return MOVE_SIDE_STEP
+			return MOVE_DASH if v < 0x3C0 else MOVE_NONE
 		5:
-			if rec.far_count < 0x2D1 and rec.opp_down == 0 and v > 0x50:
+			if far_count < 0x2D1 and opp_down == 0 and v > 0x50:
 				if v < 0xCC:
-					return 2
+					return MOVE_WALK
 				if v < 0x400:
-					return 1
-				return 5 if v < 0x5EB else 0
-			return 4
-	return 0
+					return MOVE_DASH
+				return MOVE_LONG_WALK if v < 0x5EB else MOVE_NONE
+			return MOVE_LONG_DASH
+	return MOVE_NONE
 
 
-## The movements: 1 side step or walk in, 2 walk in, 3 step back, 4 side step with a long
-## approach or dash in, 5 dash in, 6 crouch dash or step back, 8 side step then a candidate.
+## The movement of kind `choice` (MOVE_*): a dash with no command to mark falls back to the walk, the
+## back dash to the step back, and the side step goes on to a candidate.
 func _do_movement(choice: int) -> int:
-	if choice == 0:
+	if choice == MOVE_NONE:
 		return 0
-	if choice == 1:
+	if choice == MOVE_DASH:
 		if ai.mark_command(rec, CpuOpponent.SIDE_STEP) >= 1:
 			rec.approach_kind = 0
 			rec.approach = 0
 			rec.approach_hold = 0x28
 			return 1 if ai.execute_candidate(rec) >= 0 else 0
-		choice = 2
-	if choice == 4:
+		choice = MOVE_WALK
+	if choice == MOVE_LONG_DASH:
 		if ai.mark_command(rec, CpuOpponent.SIDE_STEP) >= 1:
 			rec.approach_kind = 2
 			rec.approach = 0xFA
 			rec.approach_hold = 0x136
 			return 1 if ai.execute_candidate(rec) >= 0 else 0
-		choice = 5
-	if choice == 6:
+		choice = MOVE_LONG_WALK
+	if choice == MOVE_BACK_DASH:
 		if ai.mark_command(rec, CpuOpponent.CROUCH_DASH) >= 1:
 			rec.approach_hold = 0x3C
 			return 1 if ai.execute_candidate(rec) >= 0 else 0
-		choice = 3
-	if choice == 2:
+		choice = MOVE_RETREAT
+	if choice == MOVE_WALK:
 		var q := 0
 		var short := 0
 		var long := 0
@@ -1634,21 +1661,21 @@ func _do_movement(choice: int) -> int:
 		rec.approach_hold = long
 		rec.pad = PAD_DOWN_FORWARD if rec.crouching > 0 else PAD_FORWARD
 		return 1
-	if choice == 3:
+	if choice == MOVE_RETREAT:
 		var q := ai.random_below(5)
 		rec.approach = q + 0x14
 		rec.approach_kind = 0
 		rec.approach_hold = q + 0x3C
 		rec.pad = PAD_DOWN_BACK if rec.crouching > 0 else PAD_BACK
 		return 1
-	if choice == 5:
+	if choice == MOVE_LONG_WALK:
 		var q := ai.random_below(0x14)
 		rec.approach = q + 0x28
 		rec.approach_kind = 0
 		rec.approach_hold = q + 0x50
 		rec.pad = PAD_DOWN_FORWARD if rec.crouching > 0 else PAD_FORWARD
 		return 1
-	if choice == 8 and (rec.reach_band > 2 or rec.opp_until > 10):
+	if choice == MOVE_SIDE_STEP and (rec.reach_band > 2 or rec.opp_until > 10):
 		ai.side_step(rec, -1)
 	return 1 if ai.execute_candidate(rec) >= 0 else 0
 

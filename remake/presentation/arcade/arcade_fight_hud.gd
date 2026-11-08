@@ -402,5 +402,5 @@ func _demo_texts() -> void:
 		show_text("banner_name", [name_text], Vector2i(name_right - offset * per_letter, 0))
 		show_text("banner_characters")
 		show_text("banner_selectable", [], Vector2i(selectable_right - offset * per_letter, 0))
-		show_text("banner_count", [ArcadeProgress.count_of(progress.unlocked)])
+		show_text("banner_count", [ProgressRules.popcount(progress.unlocked)])
 	show_text("demo_game_over")

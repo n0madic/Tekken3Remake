@@ -26,3 +26,6 @@ enum {
 	TRUE_OGRE = 20,
 	FORCE_ENEMY = 21,           ## Tekken Force's enemies
 }
+
+const COUNT := 22               ## the ids 0–21 (the masks' bits)
+const NONE := COUNT             ## no character: 0x16, the id past the last one

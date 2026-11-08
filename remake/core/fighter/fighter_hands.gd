@@ -63,7 +63,7 @@ func command(hands: int, shape: int, speed: int, char_id: int = 0) -> void:
 		return
 	if shape >= 8:
 		return
-	if char_id == Character.TRUE_OGRE:
+	if _is_ogre(char_id):
 		if speed == 0:
 			speed = 1
 		var ogre := Fx.div_trunc(OGRE_LEVEL, 1 - speed) if speed < 0 else Fx.div_trunc(OGRE_LEVEL, speed + 1)
@@ -94,7 +94,7 @@ func command(hands: int, shape: int, speed: int, char_id: int = 0) -> void:
 
 ## FighterHandPoses for an animated frame (`air_free`: the fighter's +0x128A).
 func update(char_id: int = 0, air_free: int = 0, tables: FighterTables = null) -> void:
-	if char_id == Character.TRUE_OGRE:
+	if _is_ogre(char_id):
 		_update_wings(air_free, tables)
 		_approach(0)
 		var level := ogre_level
@@ -114,6 +114,11 @@ func update(char_id: int = 0, air_free: int = 0, tables: FighterTables = null) -
 	for c in CHANNELS:
 		_approach(c)
 		variant[c] = variant_of(current[c])
+
+
+## True Ogre animates a level and his wings instead of two hands.
+func _is_ogre(char_id: int) -> bool:
+	return char_id == Character.TRUE_OGRE
 
 
 func _approach(c: int) -> void:

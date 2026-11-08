@@ -7,8 +7,6 @@ extends RefCounted
 const ROSTER_FIRST := 0x3FF             ## FUN_801B54BC: the ten originals
 const UNLOCKABLE := 0x11FFFF            ## FUN_801B5424
 const EXTRA_COSTUMES := 0x3A2           ## FUN_801B5468
-const NONE := 0x16
-const CHARACTERS := 22
 const TIME_MASK := 0xFFFFFFF
 const TIME_NONE := 359999               ## FUN_801C1634: a record at least this long is no record
 const TIME_FIRST := 180000              ## FUN_801C2CDC: a fresh cabinet's records: fifty minutes…
@@ -35,19 +33,19 @@ class Row:
 var day := 0                            ## 0x802F4B8C
 var unlocked := ROSTER_FIRST            ## 0x8021FD60
 var costumes := 0                       ## 0x8021FD6C
-var who_is_it := NONE                   ## 0x80273258: the demo's VS screen
-var coming_soon := NONE                 ## 0x80273254
-var intruder := NONE                    ## 0x80374F2D: FUN_801B5C28
+var who_is_it := Character.NONE                   ## 0x80273258: the demo's VS screen
+var coming_soon := Character.NONE                 ## 0x80273254
+var intruder := Character.NONE                    ## 0x80374F2D: FUN_801B5C28
 var intruder_done := 0                  ## 0x80374F2C
-var new_fighter := NONE                 ## 0x80374F2F: FUN_801B7594
+var new_fighter := Character.NONE                 ## 0x80374F2F: FUN_801B7594
 var plays := PackedInt32Array()         ## 0x8036EE40: per character (u16 × 4: picks, wins, losses, draws)
 var times: Array[Row] = []              ## 0x80375034: per character
 var wins: Array[Row] = []               ## 0x803750E4
 
 
 func _init() -> void:
-	plays.resize(CHARACTERS * 4)
-	for i in CHARACTERS:
+	plays.resize(Character.COUNT * 4)
+	for i in Character.COUNT:
 		times.append(Row.new())
 	for i in WINS_ROWS:
 		wins.append(Row.new())
@@ -57,7 +55,7 @@ func _init() -> void:
 ## the first letters of its character.
 func reset_records(data: ArcadeFlowData) -> void:
 	var time := TIME_FIRST
-	for i in CHARACTERS:
+	for i in Character.COUNT:
 		var row: Row = times[i]
 		if ROSTER_FIRST >> i & 1 != 0:
 			row.value = time | TIME_ROUNDS
@@ -131,12 +129,12 @@ func apply_schedule(data: ArcadeFlowData) -> void:
 				_vs_candidate(KIND_COMING_SOON, u.argument)
 				_set_intruder(u.argument)
 			KIND_UNLOCK:
-				_set_intruder(NONE)
-				new_fighter = mini(u.argument, NONE)
-				if u.argument < NONE and (1 << u.argument) & UNLOCKABLE != 0:
+				_set_intruder(Character.NONE)
+				new_fighter = mini(u.argument, Character.NONE)
+				if u.argument < Character.NONE and (1 << u.argument) & UNLOCKABLE != 0:
 					unlocked |= 1 << u.argument
 			KIND_COSTUME:
-				if u.argument < NONE and (1 << u.argument) & EXTRA_COSTUMES & unlocked != 0:
+				if u.argument < Character.NONE and (1 << u.argument) & EXTRA_COSTUMES & unlocked != 0:
 					costumes |= 1 << u.argument
 			KIND_CLEAR:
 				_clear_candidates()
@@ -144,28 +142,19 @@ func apply_schedule(data: ArcadeFlowData) -> void:
 
 ## FUN_801BADF4's candidates.
 func _clear_candidates() -> void:
-	who_is_it = NONE
-	coming_soon = NONE
-	_set_intruder(NONE)
-	new_fighter = NONE
+	who_is_it = Character.NONE
+	coming_soon = Character.NONE
+	_set_intruder(Character.NONE)
+	new_fighter = Character.NONE
 
 
 func _set_intruder(character: int) -> void:
-	intruder = mini(character, NONE)
+	intruder = mini(character, Character.NONE)
 	intruder_done = 0
 
 
 ## FUN_801B89C4.
 func _vs_candidate(kind: int, character: int) -> void:
-	var c := mini(character, NONE)
-	coming_soon = c if kind == KIND_COMING_SOON else NONE
-	who_is_it = c if kind == KIND_WHO_IS_IT else NONE
-
-
-## FUN_801B22E4: how many bits a mask has.
-static func count_of(mask: int) -> int:
-	var n := 0
-	while mask != 0:
-		n += mask & 1
-		mask >>= 1
-	return n
+	var c := mini(character, Character.NONE)
+	coming_soon = c if kind == KIND_COMING_SOON else Character.NONE
+	who_is_it = c if kind == KIND_WHO_IS_IT else Character.NONE

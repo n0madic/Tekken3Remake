@@ -4,7 +4,6 @@ extends ArcadeFlowPart
 ## panels; the unlocked characters fill one row or two (the second centred).
 
 const SIZE_ONE_ROW := 10
-const NONE := 0x16
 const ROW_CELLS := 10
 const CELLS := 20
 const TIME_BASE := 0x3C                 ## FUN_801BE670: the time per step
@@ -105,7 +104,7 @@ func _set_up() -> void:
 ## FUN_801BE554: the roster's unlocked characters, ten in the first row, the rest centred below.
 func _fill_grid() -> void:
 	grid.resize(CELLS)
-	grid.fill(NONE)
+	grid.fill(Character.NONE)
 	mask = 0
 	count = 0
 	var roster := flow.data.roster
@@ -167,7 +166,7 @@ func _side_step(p: int) -> bool:
 				var costume := 0
 				if pressed & accept != 0 and pressed & PUNCHES == 0:
 					costume = 1 if pressed & KICKS != 0 else 2
-				if _pick(s, costume) < NONE:
+				if _pick(s, costume) < Character.NONE:
 					_chosen_marks(s)
 					s.state = PlayerState.CHOSEN
 		PlayerState.WAITING:
@@ -182,7 +181,7 @@ func _side_step(p: int) -> bool:
 				var costume := 0
 				if pressed & 0x200 == 0 and pressed & 0x40 == 0 and pressed & 0x100 == 0:
 					costume = 1
-				if _pick(s, costume) < NONE:
+				if _pick(s, costume) < Character.NONE:
 					_chosen_marks(s)
 					s.state = PlayerState.CHOSEN_BY_OTHER
 		PlayerState.CPU:
@@ -235,7 +234,7 @@ func _chosen_marks(s: ArcadeSelectSide) -> void:
 func _show_start(s: ArcadeSelectSide, p: int) -> void:
 	match flow.side_kind(p):
 		0:
-			s.character = NONE
+			s.character = Character.NONE
 			s.costume = 0
 		1:
 			s.character = flow.chars[p]
@@ -247,13 +246,11 @@ func _show_start(s: ArcadeSelectSide, p: int) -> void:
 			s.character = _at_cursor_of(s, flow.chars[p])
 			s.costume = flow.costumes[p]
 	s.rest = CURSOR_REST
-	s.shown_key = NONE
-	s.shown_costume = 1
 
 
 ## FUN_801BE6DC: the cursor goes to the character; without one to the side's own first cell.
 func _at_cursor_of(s: ArcadeSelectSide, character: int) -> int:
-	if character < NONE:
+	if character < Character.NONE:
 		var at := grid.find(character)
 		if at >= 0:
 			s.row = at / ROW_CELLS
@@ -278,7 +275,7 @@ func _move_cursor(s: ArcadeSelectSide, word: int) -> void:
 		if moved < 0 or moved > LAST_CELL:
 			moved = LAST_CELL - cell
 		cell = moved
-		if grid[row * ROW_CELLS + cell] > NONE - 1:
+		if grid[row * ROW_CELLS + cell] > Character.NONE - 1:
 			row = 1 if row == 0 else 0
 			if count & 1 != 0 and cell < MIDDLE_CELL:
 				cell += 1
@@ -290,12 +287,12 @@ func _move_cursor(s: ArcadeSelectSide, word: int) -> void:
 				row = next_row
 			if row != s.row and count & 1 != 0 and cell > 4:
 				cell += 1 if row == 0 else -1
-			if grid[row * ROW_CELLS + cell] > NONE - 1:
+			if grid[row * ROW_CELLS + cell] > Character.NONE - 1:
 				var dir := 1 if cell < MIDDLE_CELL else -1
 				var at := cell + dir
 				var found := false
 				while at >= 0 and at <= LAST_CELL:
-					if grid[row * ROW_CELLS + at] != NONE:
+					if grid[row * ROW_CELLS + at] != Character.NONE:
 						found = true
 						break
 					at += dir
@@ -317,8 +314,8 @@ func _move_cursor(s: ArcadeSelectSide, word: int) -> void:
 func _pick(s: ArcadeSelectSide, costume: int) -> int:
 	var character := s.character
 	if costume >= 3:
-		return NONE
-	if character <= NONE:
+		return Character.NONE
+	if character <= Character.NONE:
 		s.costume = costume
 		_resolve_costume(s)
 		character = s.character

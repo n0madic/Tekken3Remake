@@ -34,16 +34,9 @@ const CHALLENGER_SOUND := 0x110
 const CHALLENGER_CHANNEL := 0x1E
 const DEMO_ENDS_AT := 3                 ## the round state that ends the demonstration's fight
 const ROUND_LEAVES_THE_MODE := 9
-const LADDER_FIGHTS := 10
+const LADDER_FIGHTS := Opponents.LADDER_STAGES
 const LAST_FIGHT := 9
-const OGRE := 14
-const HEIHACHI := 13
-const JIN := 9
-const TRUE_OGRE_ID := 20
-const FIRST_RANDOM := 3
-const LAST_RANDOM := 8
-const ORIGINALS := 0x3FF
-const NOT_IN_LADDER := 0xFFEF9FFF       ## no Heihachi, Ogre, True Ogre
+const ORIGINALS_FIRST := 3              ## the ladder's first fights are drawn from the original ten
 const DEMO_LEVELS := 0x200              ## FUN_801BE014: this bit of all the plays picks the costumes
 const INTRUDER_WINDOW_LAST := 7
 const JULIA := 10
@@ -53,9 +46,6 @@ const MOKUJIN := 15
 const GUN_JACK := 16
 const GUN_JACK_TIME := 0x5DC
 const RESULT_PERFECT := 8               ## FUN_8019E7A4: the last round's result
-const NAME_ENTRY_WAIT := 0x708
-const NAME_ENTRY_BUTTONS := 300
-const NAME_DONE_WAIT := 0x3B
 
 var rounds := 0                         ## 0x80374F36
 var humans: int:                        ## 0x80374F32
@@ -254,45 +244,11 @@ func _ladder() -> void:
 
 ## FUN_801B557C.
 func _build_ladder(key: int) -> void:
-	var g := flow
-	var character := key >> 2
-	var boss := JIN if character == HEIHACHI else HEIHACHI
-	var pool: int = g.progress.unlocked & NOT_IN_LADDER & ~(1 << character) & ~(1 << boss)
-	var bag := _bag(pool & ORIGINALS)
-	var at := 0
-	while at < FIRST_RANDOM:
-		var pick := _draw(bag)
-		ladder[at * 4] = pick
-		pool &= ~(1 << pick)
-		at += 1
-	bag = _bag(pool)
-	while at < LAST_RANDOM:
-		ladder[at * 4] = _draw(bag)
-		at += 1
-	ladder[at * 4] = boss
-	ladder[(at + 1) * 4] = OGRE
+	var picks := Opponents.ladder_characters(flow.fight, flow.progress.unlocked, key, ORIGINALS_FIRST)
 	for i in LADDER_FIGHTS:
-		var who := ladder[i * 4]
+		ladder[i * 4] = picks[i]
 		ladder[i * 4 + 2] = i
-		ladder[i * 4 + 1] = 0 if who == TRUE_OGRE_ID or who == OGRE else (1 if key & 3 != 0 else 0)
-
-
-## FUN_801B54D8.
-func _bag(mask: int) -> Array[int]:
-	var out: Array[int] = []
-	for i in ArcadeProgress.CHARACTERS:
-		if mask >> i & 1:
-			out.append(i)
-	return out
-
-
-## FUN_801B551C.
-func _draw(bag: Array[int]) -> int:
-	var at := Opponents.frame_random(flow.fight) % bag.size()
-	var pick := bag[at]
-	bag[at] = bag[bag.size() - 1]
-	bag.pop_back()
-	return pick
+		ladder[i * 4 + 1] = Opponents.ladder_costume(picks[i], key)
 
 
 ## FUN_801B5C50: after a win the next fight may be the COMING SOON! fighter's.
@@ -454,11 +410,11 @@ func _vs_set_up() -> void:
 	if g.mode != ArcadeGameFlow.MODE_DEMO:
 		vs_stage_number = fight_number + 1
 		return
-	if p.who_is_it < ArcadeProgress.NONE:
+	if p.who_is_it < Character.NONE:
 		vs_kind = 3
 		vs_shown_character[0] = p.who_is_it
 		vs_shown_key[0] = p.who_is_it << 2
-	if p.coming_soon < ArcadeProgress.NONE:
+	if p.coming_soon < Character.NONE:
 		vs_kind = 2
 		vs_shown_character[0] = p.coming_soon
 		vs_shown_key[0] = p.coming_soon << 2
@@ -706,7 +662,7 @@ func _challenger() -> void:
 ## Sub-state 16: Ogre becomes True Ogre, the rounds won stay.
 func _true_ogre() -> void:
 	var g := flow
-	ladder[LAST_FIGHT * 4] = TRUE_OGRE_ID
+	ladder[LAST_FIGHT * 4] = Character.TRUE_OGRE
 	g.fight.match_result = 0
 	g.fight.match_winner = 0
 	g.fight.match_loser = 0
@@ -733,7 +689,7 @@ func _true_ogre() -> void:
 func demo_fighters() -> void:
 	var g := flow
 	var plays_total := 0
-	for i in ArcadeProgress.CHARACTERS:
+	for i in Character.COUNT:
 		plays_total += g.ranking.usage_of(i)
 	var list: Array[int] = []
 	for character in g.data.demo_characters:
@@ -758,5 +714,5 @@ func demo_banner() -> void:
 	var p := flow.progress
 	banner_shown = 1 if banner_every_other == 0 else 0
 	banner_every_other = (banner_every_other + 1) & 1
-	if p.new_fighter >= ArcadeProgress.NONE:
+	if p.new_fighter >= Character.NONE:
 		banner_shown = 0

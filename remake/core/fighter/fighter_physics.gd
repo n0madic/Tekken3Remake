@@ -138,22 +138,27 @@ func _step_displacement(f: FighterState) -> void:
 	fight.step_accum_z[i] = Fx.w32(fight.step_accum_z[i] + Fx.w32(Fx.w32(f.pos_z - old_z) * 0x100))
 
 
+## The flight's horizontal velocity for the next frame: the air speed against the target direction.
+func _air_velocity(f: FighterState) -> void:
+	var v := polar(f.air_speed, f.target_dir + FightMath.HALF_TURN)
+	f.air_vel_x = Fx.s16(v.x)
+	f.air_vel_z = Fx.s16(v.y)
+
+
 ## Ballistic flight (combat.md#launches-and-juggles) until the body lands.
 func _flight(f: FighterState, events: SimEvents) -> void:
 	f.air_vel_y = Fx.s16(f.air_vel_y + 6)
 	f.pos_y = Fx.w32(f.pos_y + f.air_vel_y)
 	f.pos_x = Fx.w32(f.pos_x + f.air_vel_x)
 	f.pos_z = Fx.w32(f.pos_z + f.air_vel_z)
-	var v := polar(f.air_speed, f.target_dir + FightMath.HALF_TURN)
-	f.air_vel_x = Fx.s16(v.x)
-	f.air_vel_z = Fx.s16(v.y)
+	_air_velocity(f)
 	if f.air_vel_y > 0 and -f.ground_offset <= f.pos_y:
 		if f.air_kind == LANDING_SHAKE:
 			CameraShake.start(fight, 1, events)
 		f.pos_z = f.root_z
 		f.pos_y = 0
 		f.pos_x = f.root_x
-		if f.air_kind == MoveSystem.LAUNCH_AIR_KIND:
+		if f.air_kind == moves.launch_air_kind():
 			f.landed_a = 1
 		else:
 			f.landed_b = 1
@@ -196,36 +201,65 @@ func _push(f: FighterState) -> void:
 
 ## The per-frame bookkeeping after tracking (moves.md#per-frame-bookkeeping-in-fightermovephysics).
 func _bookkeeping(f: FighterState, opp: FighterState, events: SimEvents) -> void:
+	_tick_cooldowns(f)
+	_count_active_segments(f)
+	f.forced_hit = 0
+	if fight.mode == GameMode.FORCE:
+		_forced_hit(f)
+	_air_flags(f)
+	_recovery(f)
+	_about_to_hit(f, opp)
+	_guard_state(f)
+	_airborne_state(f)
+	_face_shape(f)
+	_settle_flags(f, opp)
+	if fight.mode == GameMode.FORCE:
+		f.no_look_at = 0 if f.is_cpu == 0 and f.fixed_facing == 0 else 1
+	if f.active != 0 and f.landed_b != 0:
+		events.add_at(SimEvents.Kind.LANDING_DUST, f.index, PackedInt32Array([f.root_x, f.root_y, f.root_z]))
+		CameraShake.start(fight, 0, events)
+
+
+func _tick_cooldowns(f: FighterState) -> void:
 	if f.attack_alert > 0:
 		f.attack_alert -= 1
 	if f.hit_cooldown > 0:
 		f.hit_cooldown -= 1
+
+
+## The attack segments in their active window: one, or two with a second descriptor.
+func _count_active_segments(f: FighterState) -> void:
 	var pose := f.pose_move
 	if f.pose_frame < pose.active_first or pose.active_last < f.pose_frame:
 		f.active_segs = 0
 	else:
 		f.active_segs = 2 if AttackRecords.header(pose, t)[2] != 0 else 1
-	f.forced_hit = 0
-	if fight.mode == GameMode.FORCE:
-		_forced_hit(f)
+
+
+## In the air by the move's window or a juggle, and the landing flags at its end.
+func _air_flags(f: FighterState) -> void:
+	var pose := f.pose_move
 	if f.juggle_count != 0 or (pose.air_first <= f.pose_frame and f.pose_frame <= pose.air_last):
 		f.in_air = 1
 	else:
 		f.in_air = 0
 	if f.pose_frame == pose.air_last and f.hold_frames == -1 and f.pose_frame != 1 and f.air_phase != 2:
-		if f.was_hit_this_move == 0 or f.air_kind == MoveSystem.LAUNCH_AIR_KIND \
+		if f.was_hit_this_move == 0 or f.air_kind == moves.launch_air_kind() \
 				or (f.state_class != 9 and f.state & StateBit.DOWN == 0):
 			f.landed_a = 1
 		else:
 			f.landed_b = 1
-	_recovery(f)
-	_about_to_hit(f, opp)
-	_guard_state(f)
+
+
+func _airborne_state(f: FighterState) -> void:
 	if f.state_class == 9:                       # FUN_80040C04
 		var first := f.pose_move.air_first
 		if first != 0 and first <= f.pose_frame:
 			f.state |= 4
-	_face_shape(f)
+
+
+## The flags the frame ends with: the Ogre's freeze, free air, the power timer, the push repeat.
+func _settle_flags(f: FighterState, opp: FighterState) -> void:
 	f.ogre_freeze = 1 if f.hit_freeze != 0 and opp.bank_type == BankType.OGRE else 0
 	f.air_free = 1 if f.in_reaction == 0 and f.in_air != 0 else 0
 	if f.hit_clean == 0 and opp.hit_clean == 0:
@@ -244,11 +278,6 @@ func _bookkeeping(f: FighterState, opp: FighterState, events: SimEvents) -> void
 		f.push_repeat_timer -= 1
 	if f.push_repeat_timer == 0:
 		f.push_repeat = 0
-	if fight.mode == GameMode.FORCE:
-		f.no_look_at = 0 if f.is_cpu == 0 and f.fixed_facing == 0 else 1
-	if f.active != 0 and f.landed_b != 0:
-		events.add_at(SimEvents.Kind.LANDING_DUST, f.index, PackedInt32Array([f.root_x, f.root_y, f.root_z]))
-		CameraShake.start(fight, 0, events)
 
 
 ## Knock-down recovery (combat.md#knock-down-recovery): the counters run down, faster with
@@ -289,8 +318,13 @@ func _face_shape(f: FighterState) -> void:
 	elif f.skip_step_physics == 0:
 		if f.move_changed != 0 and f.damage == 0 and f.in_reaction == 0 and (fight.round_state == RoundState.FIGHT or fight.round_state == RoundState.RESULT):
 			f.hands.command(3, t.face_shape(t.face_attack, f.costume_slot), 10, f.char_id)
-		if f.damage != 0 and f.pose_move.active_first - f.pose_frame < 8:
+		if f.damage != 0 and f.pose_move.active_first - f.pose_frame < 8 and _shows_attack_face(f):
 			f.hands.command(3, t.face_shape(t.face_attack, f.costume_slot), 10, f.char_id)
+
+
+## Whether the move's attack shows the attack face before its window.
+func _shows_attack_face(_f: FighterState) -> bool:
+	return true
 
 
 ## Tekken Force: a CPU body thrown fast enough, or the player's power move (which costs health),
@@ -331,9 +365,9 @@ func _guard_state(f: FighterState) -> void:
 				_set_guard_state(f, StateWord.GUARD_LOW)
 			else:
 				_set_guard_state(f, Fx.s16(pose.state))
-				if f.state & StateBit.HUMAN_GUARD and f.human_guard == 0:
+				if f.state & StateBit.HUMAN_GUARD and moves.guard_off(f):
 					f.state &= 0xFFFFFFE7
-	elif f.human_guard == 0:
+	elif moves.guard_off(f):
 		if direction == 4:
 			_set_guard_state(f, StateWord.GUARD_HIGH)
 		elif direction == 1:

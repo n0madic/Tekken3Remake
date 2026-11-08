@@ -6,10 +6,6 @@ extends Combat
 ## hit record is its first HitSlot: point, direction, zone.
 
 const SEGMENTS_PER_ROW := 2
-const NO_SEGMENT := -1
-const OGRE_HEAD_JOINT := 0x13       ## joint 0x13 of character 0xE reads joint 6
-const OGRE_HEAD_CHARACTER := 0xE
-const OGRE_HEAD_INSTEAD := 6
 const CLASS_JUMP := 12
 const ANGLE_BEHIND := 0x3FFF
 const CHIP_PER_DAMAGE := 0xA0000    ## 16.16 per 100 of damage
@@ -25,12 +21,6 @@ const ARCADE_WEAPON_POINTS := [
 ]
 
 var effect_objects: ArcadeEffectObjects
-
-
-func _segment_joint(f: FighterState, joint: int) -> int:
-	if joint == OGRE_HEAD_JOINT and f.char_id == OGRE_HEAD_CHARACTER:
-		return OGRE_HEAD_INSTEAD
-	return joint if joint < PROJECTILE_JOINT else NO_SEGMENT
 
 
 func _set_point(seg: PackedInt32Array, at: int, f: FighterState, joint: int) -> void:

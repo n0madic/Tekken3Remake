@@ -9,7 +9,6 @@ const FACE_SHAPES := 6
 const FACE_ROW := 8                 ## bytes per costume in the table of face pictures
 const FACE_ROW_FIRST := 2           ## the row's first shape
 const NO_PICTURE := -1
-const NOT_A_SHAPE := 8              ## shapes 8 and 9 do nothing
 
 var tables: FighterTables
 var slot := 0
@@ -28,6 +27,10 @@ func is_ogre() -> bool:
 	return slot in OGRE_SLOTS
 
 
+func _is_ogre(_char_id: int) -> bool:
+	return is_ogre()
+
+
 ## FUN_8018C5A4: the speed is unsigned, event 20 takes the costume's own open shape (FUN_8019CC3C).
 func event_command(command: int, value: int, table: FighterTables, costume: int) -> Vector2i:
 	match command + EVENT_FIRST:
@@ -38,28 +41,13 @@ func event_command(command: int, value: int, table: FighterTables, costume: int)
 	return Vector2i(command & 7, value)
 
 
-## FUN_80194080. The costume is the record's own, so the last argument is not used.
-func command(hands: int, shape: int, speed: int, _char_id: int = 0) -> void:
+## FUN_80194080. The costume is the record's own, so the character is not used: a face is one of its own
+## shapes, the rest is the PlayStation's command.
+func command(hands: int, shape: int, speed: int, char_id: int = 0) -> void:
 	if shape >= FACE_OPEN:
 		face_command(shape - FACE_OPEN, speed)
 		return
-	if shape >= NOT_A_SHAPE:
-		return
-	if not is_ogre():
-		super(hands, shape, speed)
-		return
-	ogre_rate = 0
-	var step := Fx.div_trunc(OGRE_LEVEL, absi(1 if speed == 0 else speed) + 1)
-	if shape == 2 or shape == 3:
-		ogre_target = OGRE_LEVEL
-		if ogre_level < OGRE_LEVEL:
-			ogre_rate = step
-	else:
-		ogre_target = 0
-		if ogre_level > 0:
-			ogre_rate = step
-	target[0] = OGRE_LEVEL if shape == 2 else 0
-	rate[0] = step
+	super(hands, shape, speed, char_id)
 
 
 ## FUN_80193EA4: a costume without the shape's picture keeps its face.
@@ -71,30 +59,8 @@ func face_command(shape: int, speed: int) -> void:
 		face = shape
 
 
-## FUN_80194458; `air_free` is the record's +0x1158.
-func update(_char_id: int = 0, air_free: int = 0, _tables: FighterTables = null) -> void:
-	if not is_ogre():
-		for c in CHANNELS:
-			_approach(c)
-			variant[c] = variant_of(current[c])
-		return
-	_step_wings(air_free)
-	_approach(0)
-	if ogre_level < ogre_target:
-		ogre_level = Fx.s16(ogre_level + ogre_rate)
-		if not ogre_level < ogre_target:
-			ogre_rate = 0
-			ogre_level = ogre_target
-	elif ogre_target < ogre_level:
-		ogre_level = Fx.s16(ogre_level - ogre_rate)
-		if not ogre_target < ogre_level:
-			ogre_rate = 0
-			ogre_level = ogre_target
-	var v := Fx.s16(current[0]) >> 7
-	variant[0] = v - 1 if v != 0 else 0
-
-
-func _step_wings(air_free: int) -> void:
+## FUN_80194458's wings: a wing's step is always one.
+func _update_wings(air_free: int, _tables: FighterTables) -> void:
 	if wing_phase == 0:
 		if air_free == 0:
 			if wing_frame != 0:

@@ -151,17 +151,6 @@ const YOSHIMITSU_BANK := 4
 const YOSHIMITSU_REACH := 300
 const LOW_PUNISH_SLOT := 6
 
-# FUN_801CB2F0's kinds of movement.
-const MOVE_NONE := 0
-const MOVE_DASH := 1
-const MOVE_WALK := 2
-const MOVE_RETREAT := 3
-const MOVE_LONG_DASH := 4
-const MOVE_LONG_WALK := 5
-const MOVE_BACK_DASH := 6
-const MOVE_SIDE_STEP := 8
-const WAIT_LONG := 0x23
-
 var cpu: ArcadeCpu
 var r: ArcadeAiRecord
 
@@ -458,23 +447,7 @@ func _guard_and_crouch() -> void:
 func _holds_guard() -> bool:
 	if fight.fighter_distance > NEAR or r.vs_stance != 0:
 		return false
-	var s := r.own_state & 0xFFFF
-	if r.opp_grabs != 0:
-		return r.opp_attack != AttackWord.MID and (s == StateWord.CROUCH or s == StateWord.GUARD_LOW)
-	if r.opp_coming == 0 or _rel() > 0x3000:
-		return false
-	match r.opp_attack:
-		AttackWord.HIGH:
-			return s == StateWord.CROUCH or s == StateWord.GUARD_LOW or s == StateWord.GUARD_HIGH
-		AttackWord.UNBLOCKABLE_2:
-			return s == StateWord.GUARD_LOW or s == StateWord.CROUCH
-		AttackWord.MID:
-			return s == StateWord.GUARD_HIGH
-		AttackWord.LOW:
-			return s == StateWord.GUARD_LOW
-		AttackWord.MID_2:
-			return s == StateWord.GUARD_LOW or s == StateWord.GUARD_HIGH
-	return false
+	return guard_posture_holds(r.own_state & 0xFFFF, r.opp_attack, r.opp_grabs, r.opp_coming, _rel())
 
 
 # ---- FUN_801C473C: throws ---------------------------------------------------------------------
@@ -1535,79 +1508,15 @@ func _movement_kind() -> int:
 		return MOVE_NONE
 	var kind := MOVE_NONE
 	if r.wait > WAIT_LONG:
-		kind = _kind_by_reach(u)
+		kind = movement_by_reach(r.reach_band, r.far_count, r.opp_down, r.own_state & STANDING != 0, u)
 		if (kind == MOVE_RETREAT or kind == MOVE_BACK_DASH) and cpu.draw() >= r.word(WORD_KEEP_RETREAT):
 			kind = MOVE_NONE
 	else:
-		kind = _kind_by_band(u)
+		kind = movement_by_band(r.band, r.far_count, r.opp_down, r.word(WORD_SIDE_STEP), u)
 	if (kind == MOVE_RETREAT or kind == MOVE_BACK_DASH) \
 			and (r.opp_state & STATE_CHARGING != 0 or r.opp_attack != 0) and _below(WORD_FOCUS):
 		return MOVE_NONE
 	return kind
-
-
-func _kind_by_reach(u: int) -> int:
-	match r.reach_band:
-		0, 1:
-			if u < 0x199:
-				return MOVE_BACK_DASH
-			return MOVE_RETREAT if u < 0x333 else MOVE_NONE
-		2:
-			if u <= 0x27:
-				return MOVE_WALK
-			return MOVE_RETREAT if u < 0x170 else MOVE_NONE
-		3:
-			if u < 0x1EB:
-				return MOVE_WALK
-			if u < 0x214:
-				return MOVE_LONG_WALK
-			if u < 0x218:
-				return MOVE_RETREAT
-			if u < 0x22D:
-				return MOVE_DASH
-			return MOVE_SIDE_STEP if u < 0x241 and r.own_state & STANDING != 0 else MOVE_NONE
-		4:
-			if u < 0x80:
-				return MOVE_WALK
-			if u < 0x90:
-				return MOVE_LONG_WALK
-			if u < 0xC0:
-				return MOVE_SIDE_STEP
-			return MOVE_DASH if u < 0x3C0 else MOVE_NONE
-		5:
-			if r.far_count >= 0x2D1 or r.opp_down != 0 or u <= 0x50:
-				return MOVE_LONG_DASH
-			if u < 0xCC:
-				return MOVE_WALK
-			if u < 0x400:
-				return MOVE_DASH
-			return MOVE_LONG_WALK if u < 0x5EB else MOVE_NONE
-	return MOVE_NONE
-
-
-func _kind_by_band(u: int) -> int:
-	match r.band:
-		0, 1:
-			return MOVE_RETREAT if u <= 0x13 else MOVE_NONE
-		2:
-			if u < 0x7A:
-				return MOVE_LONG_WALK
-			if u < 0x1EB:
-				return MOVE_DASH
-			if u > 0x213:
-				return MOVE_SIDE_STEP if u < (r.word(WORD_SIDE_STEP) << 12) / 1000 else MOVE_NONE
-			return MOVE_RETREAT
-		3:
-			if u <= 0x665:
-				return MOVE_WALK
-			return MOVE_DASH if u < 0xB33 else MOVE_NONE
-		4:
-			if u <= 0xCB:
-				return MOVE_WALK
-			return MOVE_LONG_DASH if u < 0x599 else MOVE_DASH
-		5:
-			return MOVE_LONG_DASH if r.far_count > 0x2D0 or r.opp_down != 0 or u < 0x11E else MOVE_DASH
-	return MOVE_NONE
 
 
 # ---- FUN_801C3730: the frame's end --------------------------------------------------------------
@@ -1618,15 +1527,15 @@ func _finish_frame() -> void:
 		r.direction_hold = r.pressed_move.air_first
 	if r.direction_hold >= 0:
 		r.direction_hold -= 1
-	r.approach = _count_down(r.approach)
-	r.approach_hold = _count_down(r.approach_hold)
-	r.whiff_timer = _count_down(r.whiff_timer)
-	r.air_cooldown = _count_down(r.air_cooldown)
-	r.neutral_cooldown = _count_down(r.neutral_cooldown)
-	r.setup_cooldown = _count_down(r.setup_cooldown)
-	r.move_block = _count_down(r.move_block)
-	r.guard_suspend = _count_down(r.guard_suspend)
-	r.neutral_block = _count_down(r.neutral_block)
+	r.approach = _dec(r.approach)
+	r.approach_hold = _dec(r.approach_hold)
+	r.whiff_timer = _dec(r.whiff_timer)
+	r.air_cooldown = _dec(r.air_cooldown)
+	r.neutral_cooldown = _dec(r.neutral_cooldown)
+	r.setup_cooldown = _dec(r.setup_cooldown)
+	r.move_block = _dec(r.move_block)
+	r.guard_suspend = _dec(r.guard_suspend)
+	r.neutral_block = _dec(r.neutral_block)
 	r.coming_seen = r.opp_coming
 	r.opp_breath = 1 if o.bank_type == ArcadeCpu.BANK_OGRE \
 		and (o.cur_slot == OGRE_BREATH_SLOT or o.cur_slot == OGRE_SWEEP_SLOT) else 0
@@ -1658,10 +1567,6 @@ func _finish_frame() -> void:
 		if r.opp_string > 0:
 			r.raise_word(WORD_DUCK, HIT_LEARN_DUCK, WORD_DUCK_CAP)
 			r.raise_word(WORD_COUNTER, HIT_LEARN_COUNTER, WORD_COUNTER_CAP)
-
-
-static func _count_down(value: int) -> int:
-	return value - 1 if value >= 0 else value
 
 
 func _track_guard() -> void:

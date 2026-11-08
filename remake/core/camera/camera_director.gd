@@ -87,6 +87,7 @@ class SourceState:
 	var depth := 0                 ## +0x28 vertical back-off
 	var lateral := 0               ## +0x2C horizontal back-off
 
+var byte_cut := CAMERA_BYTE_CUT   ## the move camera byte that cancels a cinematic camera
 var fight: FightState
 var t: FightTables
 var ct: CameraTables
@@ -492,11 +493,11 @@ func _fight_frame(f0: FighterState, f1: FighterState) -> void:
 					count = Fx.s16(count - 1)
 					if count < 0:
 						state = Cinematic.PRESET
-			elif _camera_byte(f0) == CAMERA_BYTE_CUT:
+			elif _camera_byte(f0) == byte_cut:
 				_cancel()
 			else:
 				wait = Fx.s16(wait - 1)
-				if _camera_byte(f1) == CAMERA_BYTE_CUT:
+				if _camera_byte(f1) == byte_cut:
 					_cancel()
 		Cinematic.PRESET_OUT:
 			var c := count
@@ -604,7 +605,7 @@ func _stream_frame_state(f0: FighterState, f1: FighterState) -> bool:
 	weights[1] = 0
 	weights[0] = Fx.s16(Fx.div_trunc(r << 12, STREAM_WEIGHT_FULL))
 	weights[2] = Fx.s16(Fx.ONE - weights[0])
-	if _camera_byte(f0) == CAMERA_BYTE_CUT or _camera_byte(f1) == CAMERA_BYTE_CUT:
+	if _camera_byte(f0) == byte_cut or _camera_byte(f1) == byte_cut:
 		_blend_out(f0, f1)
 		count_total = 8
 		count = 8
@@ -775,7 +776,7 @@ func _thrower_done(f0: FighterState, f1: FighterState) -> bool:
 func _throw_ends(thr: FighterState, vic: FighterState) -> bool:
 	if thr.throw_state < 1 or vic.throw_state >= 0:
 		return true
-	if _camera_byte(thr) == CAMERA_BYTE_CUT:
+	if _camera_byte(thr) == byte_cut:
 		return true
 	if switch_mode == 1:
 		return false

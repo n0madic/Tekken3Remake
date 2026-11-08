@@ -5,13 +5,13 @@ extends RefCounted
 ## picks (FUN_800B2B98, screens_sim.survival_pick). The picks draw from the frame generator
 ## (FUN_8004D13C, `x·5 + 1` at 0x8009F650).
 
-const CHARACTERS := 22
 const ORIGINAL_TEN := 0x3FF
 const LADDER_EXCLUDED := 0xFFEF9FFF  ## stages 5–8: no Heihachi, Ogre or True Ogre
 const TIME_ATTACK_MASK := 0x157FFF
 const ARCADE_MASK := 0x1FFFFF
 const GON_BIT := 0x20000
 const LADDER_STAGES := 10
+const LADDER_RANDOM_END := 8          ## stages 0–7 are drawn, 8 is the boss and 9 Ogre
 const TEAM_POOL := 0x1F7FFF
 const TEAM_MET := 0x74               ## mode context: u16 per character, the team battle met counts
 const SURVIVAL_POOLS := [0x3FF, 0xFBFFF, 0x1FFFFF]
@@ -45,7 +45,7 @@ static func sort_pairs(pairs: Array[Vector2i], ascending: bool) -> void:
 
 static func _bits(mask: int) -> PackedInt32Array:
 	var out := PackedInt32Array()
-	for c in CHARACTERS:
+	for c in Character.COUNT:
 		if (mask >> c) & 1:
 			out.append(c)
 	return out
@@ -60,11 +60,40 @@ static func _draw(fight: FightState, pool: PackedInt32Array, count: PackedInt32A
 	return c
 
 
+## The ladder's ten opponents (FUN_800B2494, the arcade's FUN_801B557C) for the player's costume key
+## `key`, out of the characters in `pool_mask` (the ladder's own exclusions apply): the first `originals`
+## are drawn from the original ten, the rest up to the eighth from what is left, then the boss (Jin
+## against Heihachi, else Heihachi) and Ogre.
+static func ladder_characters(fight: FightState, pool_mask: int, key: int, originals: int) -> PackedInt32Array:
+	var boss := Character.JIN if key >> 2 == Character.HEIHACHI else Character.HEIHACHI
+	var left := pool_mask & LADDER_EXCLUDED & ~(1 << ((key >> 2) & 31)) & ~(1 << boss)
+	var out := PackedInt32Array()
+	var pool := _bits(left & ORIGINAL_TEN)
+	var count := PackedInt32Array([pool.size()])
+	while out.size() < originals:
+		var c := _draw(fight, pool, count)
+		left &= ~(1 << c)
+		out.append(c)
+	pool = _bits(left)
+	count[0] = pool.size()
+	while out.size() < LADDER_RANDOM_END:
+		out.append(_draw(fight, pool, count))
+	out.append(boss)
+	out.append(Character.OGRE)
+	return out
+
+
+## A ladder stage's costume: 1 when the player's is not costume 0; Ogre and True Ogre always 0.
+static func ladder_costume(character: int, key: int) -> int:
+	if character == Character.TRUE_OGRE or character == Character.OGRE:
+		return 0
+	return 1 if key & 3 != 0 else 0
+
+
 ## FUN_800B2494: the ten stages (character, costume, stage index) at the mode context's +0x90,
 ## for the player's costume key `key`.
 static func build_ladder(g: GameFlow, key: int) -> void:
 	var region := g.region
-	var boss := Character.JIN if key >> 2 == Character.HEIHACHI else Character.HEIHACHI
 	var pool_mask := 0
 	if region.mode == GameMode.TIME_ATTACK:
 		pool_mask = g.progress.unlocked & TIME_ATTACK_MASK
@@ -72,28 +101,12 @@ static func build_ladder(g: GameFlow, key: int) -> void:
 		pool_mask = g.progress.unlocked & ARCADE_MASK
 		if g.progress.ball_played != 0:
 			pool_mask |= GON_BIT
-	var left := pool_mask & LADDER_EXCLUDED & ~(1 << ((key >> 2) & 31)) & ~(1 << boss)
 	var at := ModeRegion.CONTEXT + 0x90
-	var pool := _bits(left & ORIGINAL_TEN)
-	var count := PackedInt32Array([pool.size()])
-	var stage := 0
-	while stage < 4:
-		var c := _draw(g.fight, pool, count)
-		left &= ~(1 << c)
-		region.put8(at + 4 * stage, c)
-		stage += 1
-	pool = _bits(left)
-	count[0] = pool.size()
-	while stage < 8:
-		region.put8(at + 4 * stage, _draw(g.fight, pool, count))
-		stage += 1
-	region.put8(at + 4 * 8, boss)
-	region.put8(at + 4 * 9, Character.OGRE)
+	var picks := ladder_characters(g.fight, pool_mask, key, 4)
 	for i in LADDER_STAGES:
-		# The costume: 1 when the player's is not costume 0; Ogre and True Ogre always 0.
-		var c := region.u8(at + 4 * i)
+		region.put8(at + 4 * i, picks[i])
 		region.put8(at + 4 * i + 2, i)
-		region.put8(at + 4 * i + 1, 0 if c == Character.TRUE_OGRE or c == Character.OGRE else (1 if key & 3 != 0 else 0))
+		region.put8(at + 4 * i + 1, ladder_costume(picks[i], key))
 
 
 ## FUN_800B2724: completes a team (13 bytes at `team`: members as costume keys, +10 count chosen,
@@ -172,7 +185,7 @@ static func survival_pick(g: GameFlow) -> void:
 	mask &= TIME_ATTACK_MASK
 	for i in 4:
 		var v := region.ctx32(SURVIVAL_RING + 4 * i)
-		if v != CHARACTERS:
+		if v != Character.COUNT:
 			mask &= ~(1 << (v & 31))
 	var pairs: Array[Vector2i] = []
 	for c in _bits(mask):

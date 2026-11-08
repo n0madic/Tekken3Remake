@@ -228,7 +228,7 @@ func records_init() -> void:
 	var progress := g.progress
 	var mask := progress.unlocked & 0xFFDFFFFF
 	record_total = 0
-	for c in Opponents.CHARACTERS:
+	for c in Character.COUNT:
 		record_total += progress.usage(c)
 	for i in 4:
 		record_tops[i] = 0
@@ -237,11 +237,11 @@ func records_init() -> void:
 		match i:
 			0:
 				var m := 0x3FF
-				for c in Opponents.CHARACTERS:
+				for c in Character.COUNT:
 					if progress.time_record(c) <= TIME_LIMIT:
 						m |= 1 << c
 				m &= 0xFFDFFFFF
-				for c in Opponents.CHARACTERS:
+				for c in Character.COUNT:
 					if (m >> c) & 1:
 						pairs.append(Vector2i(c, progress.time_record(c)))
 				ascending = true
@@ -249,11 +249,11 @@ func records_init() -> void:
 				record_lists[i] = PackedInt32Array(range(10))
 				continue
 			2:
-				for c in Opponents.CHARACTERS:
+				for c in Character.COUNT:
 					if (mask >> c) & 1:
 						pairs.append(Vector2i(c, progress.usage(c)))
 			3:
-				for c in Opponents.CHARACTERS:
+				for c in Character.COUNT:
 					if (mask >> c) & 1:
 						var w := progress.stat(c, 1)
 						var l := progress.stat(c, 2)

@@ -552,6 +552,21 @@ func _set_position(f: FighterState, x: int, z: int, facing: int) -> void:
 
 ## The per-round state cleared: movement, reactions, hits, timers and blending.
 func _clear_round_state(f: FighterState) -> void:
+	_clear_shared_round_state(f)
+	f.step_cooldown = 0
+	f.last_extra_damage = 0
+	f.slide_to_point = 0
+	f.reset_flag_c0 = 0
+	f.apply_end_turn = 0
+	f.invulnerable = 0
+	f.active = 1
+	f.in_throw = 0
+	f.no_look_at = 0
+	f.fixed_facing = 0
+
+
+## What both games clear at a round's start (the arcade's record has the same fields).
+func _clear_shared_round_state(f: FighterState) -> void:
 	f.hold_frames = -1
 	f.health_left = 0
 	f.hit_freeze = 0
@@ -583,8 +598,6 @@ func _clear_round_state(f: FighterState) -> void:
 	f.push_repeat = 0
 	f.push_repeat_timer = 0
 	f.power_timer = 0
-	f.step_cooldown = 0
-	f.last_extra_damage = 0
 	f.counter_hit = 0
 	f.close_hit = 0
 	f.guarded = 0
@@ -594,14 +607,6 @@ func _clear_round_state(f: FighterState) -> void:
 	f.in_air = 0
 	f.extra_damage = 0
 	f.anchor_dirty = 0
-	f.slide_to_point = 0
-	f.reset_flag_c0 = 0
-	f.apply_end_turn = 0
-	f.invulnerable = 0
-	f.active = 1
-	f.in_throw = 0
-	f.no_look_at = 0
-	f.fixed_facing = 0
 	f.blend_frames = 0
 	f.blend_counter = 0
 	f.blend_weight = 0
@@ -656,9 +661,9 @@ func force_boss() -> void:
 	TekkenForce.place(p, x, z)
 
 
-## FighterStartStance (0x8002D570): the stance move of the round start. In the first round the
-## physical buttons held choose it (or a coin flip).
-func _start_stance(f: FighterState, opp: FighterState) -> void:
+## The stance move's slot of a round's start: in the first round the physical buttons held choose it
+## (or a coin flip).
+func _stance_slot(f: FighterState) -> int:
 	var held := pads.physical[0 if f.index == 0 else 1]
 	var slot := 1
 	if fight.rounds_played == 1 and fight.mode != GameMode.BALL:
@@ -668,8 +673,13 @@ func _start_stance(f: FighterState, opp: FighterState) -> void:
 			slot = 2
 			if held & STANCE_CHOICE == 0 and fight.rng.next() & 1:
 				slot = 0
-	f.move_slot = slot
-	var row := fight.move_for_slot(f, slot)
+	return slot
+
+
+## FighterStartStance (0x8002D570): the stance move of the round start.
+func _start_stance(f: FighterState, opp: FighterState) -> void:
+	f.move_slot = _stance_slot(f)
+	var row := fight.move_for_slot(f, f.move_slot)
 	f.pose_move = row
 	f.root_move = row
 	f.move_row = row
@@ -699,6 +709,12 @@ func set_input_mode(mode: int) -> void:
 ## random generators its vertical-blank wait steps (once per frame at 60 fps), the display
 ## buffer and the pads (FUN_8002A014 with the key configuration `tables`).
 func begin_frame(buttons: PackedInt32Array, tables: Array[PackedInt32Array]) -> void:
+	_tick_counters()
+	pads.read(buttons, tables)
+
+
+## The counters, generators and buffer a frame starts with (the events of the last one are gone).
+func _tick_counters() -> void:
 	events.clear()
 	fight.effects.lights.clear()
 	fight.frame_counter += 1
@@ -706,7 +722,6 @@ func begin_frame(buttons: PackedInt32Array, tables: Array[PackedInt32Array]) -> 
 	fight.display_buffer = fight.frame_counter & 1
 	fight.camera_rng = ((fight.camera_rng + 1) * 0x10DCD) & 0xFFFFFFFF
 	fight.frame_rng = (fight.frame_rng * 5 + 1) & 0xFFFFFFFF
-	pads.read(buttons, tables)
 
 
 ## One frame of the main loop in the fight: `buttons` are the pads' physical words.

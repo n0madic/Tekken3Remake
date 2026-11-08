@@ -191,15 +191,5 @@ func _gun_jack(f: FighterState, opp: FighterState, events: SimEvents) -> void:
 
 ## FUN_801A2058.
 func _strike(f: FighterState, events: SimEvents) -> void:
-	var tier := 3
-	if f.damage < 0xD:
-		tier = 0
-	elif f.damage < 0x17:
-		tier = 1
-	elif f.damage < 0x21:
-		tier = 2
-	var code := 0x7045 + tier
-	if f.pose_move.attack_joints & 0xFF < FighterSounds.GUARD_JOINT:
-		var r := fight.rng.next()
-		code = t.strike_sounds[(r >> 7) & 1] if tier == 0 else 0x7041 + tier
+	var code := FighterSounds.strike_code(fight, f.damage, f.pose_move.attack_joints & 0xFF)
 	FighterSounds.replay_sound(fight, f.player_index, code, events)

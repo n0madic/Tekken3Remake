@@ -304,7 +304,7 @@ func _joint(trace: ArcadeFlowTrace, frame: int, joint: JointFrame, at: int) -> S
 
 
 func _records(out: PackedStringArray, trace: ArcadeFlowTrace, frame: int, progress: ArcadeProgress) -> void:
-	for i in ArcadeProgress.CHARACTERS:
+	for i in Character.COUNT:
 		var row: ArcadeProgress.Row = progress.times[i]
 		var at := TIME_RECORDS + i * RECORD_BYTES
 		var value := trace.ram(frame, at, 4)
@@ -336,8 +336,8 @@ func _select(out: PackedStringArray, trace: ArcadeFlowTrace, frame: int, select:
 	_offset_fields(out, trace, frame, select, SELECT_FIELDS, SELECT, "select ")
 	for p in 2:
 		_side(out, trace, frame, select.sides[p], p)
-	for i in ArcadeSelectSparks.COUNT:
-		var spark: ArcadeSelectSparks.Spark = select.sparks.sparks[i]
+	for i in SelectSparks.COUNT:
+		var spark: SelectSparks.Spark = select.sparks.sparks[i]
 		var at := SPARKS + i * SPARK_BYTES
 		if spark.active != 0 or trace.ram(frame, at, 2) != 0:
 			_offset_fields(out, trace, frame, spark, SPARK_FIELDS, at, "spark %d " % i)

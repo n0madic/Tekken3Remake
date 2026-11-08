@@ -63,7 +63,7 @@ var backdrop_yaw := 0                   ## 0x802C4024
 
 func _init(game: ArcadeGameFlow) -> void:
 	super(game)
-	usage_share.resize(ArcadeProgress.CHARACTERS)
+	usage_share.resize(Character.COUNT)
 
 
 func step() -> void:
@@ -289,15 +289,15 @@ func _time_rows() -> int:
 	hold = HOLD_TIME
 	var mask := ArcadeProgress.ROSTER_FIRST
 	var p := flow.progress
-	for i in ArcadeProgress.CHARACTERS:
+	for i in Character.COUNT:
 		if p.times[i].value & ArcadeProgress.TIME_MASK < ArcadeProgress.TIME_NONE:
 			mask |= 1 << i
 	mask &= p.unlocked
 	var list: Array[Vector2i] = []
-	for i in ArcadeProgress.CHARACTERS:
+	for i in Character.COUNT:
 		if mask >> i & 1:
 			list.append(Vector2i(i, p.times[i].value & ArcadeProgress.TIME_MASK))
-	_insertion_sort(list, true)
+	Opponents.sort_pairs(list, true)
 	_take_rows(list)
 	for at in row_count:
 		if rows[at] == time_row:
@@ -311,7 +311,7 @@ func _wins_rows() -> int:
 	var list: Array[Vector2i] = []
 	for i in WINS_ROWS:
 		list.append(Vector2i(i, p.wins[i].count))
-	_insertion_sort(list, false)
+	Opponents.sort_pairs(list, false)
 	var sorted: Array[ArcadeProgress.Row] = []
 	var moved_to := NO_ROW
 	for at in WINS_ROWS:
@@ -334,19 +334,19 @@ func _wins_rows() -> int:
 func _usage_rows() -> void:
 	var mask := ArcadeProgress.ROSTER_FIRST
 	var total := 0
-	for i in ArcadeProgress.CHARACTERS:
+	for i in Character.COUNT:
 		var used := usage_of(i)
 		if used != 0:
 			mask |= 1 << i
 			total += used
 	mask &= flow.progress.unlocked
 	var list: Array[Vector2i] = []
-	for i in ArcadeProgress.CHARACTERS:
+	for i in Character.COUNT:
 		if mask >> i & 1:
 			var used := usage_of(i)
 			list.append(Vector2i(i, used))
-			usage_share[i] = _share(used, total)
-	_insertion_sort(list, false)
+			usage_share[i] = RankingScreen.permille(used, total)
+	Opponents.sort_pairs(list, false)
 	_take_rows(list)
 	hold = HOLD_TIME
 
@@ -358,33 +358,9 @@ func _take_rows(list: Array[Vector2i]) -> void:
 		rows[at] = list[at].x
 
 
-## FUN_801B2394: an insertion sort of (id, value) pairs, stable.
-func _insertion_sort(list: Array[Vector2i], ascending: bool) -> void:
-	for i in range(1, list.size()):
-		var at := i
-		while at > 0:
-			var before := list[at - 1].y > list[at].y if ascending else list[at - 1].y < list[at].y
-			if not before:
-				break
-			var swap := list[at - 1]
-			list[at - 1] = list[at]
-			list[at] = swap
-			at -= 1
-
-
-## FUN_801B2328: per mille.
-func _share(part: int, whole: int) -> int:
-	if part > whole:
-		return 1000
-	while whole > 0x3FFFFF:
-		whole >>= 1
-		part >>= 1
-	return 0 if whole == 0 else part * 1000 / whole
-
-
 ## FUN_801B9864.
 func usage_of(character: int) -> int:
-	var at := (character % ArcadeProgress.CHARACTERS) * 4
+	var at := (character % Character.COUNT) * 4
 	var plays := flow.progress.plays
 	return plays[at] + plays[at + 2] + plays[at + 3]
 

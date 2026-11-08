@@ -15,7 +15,7 @@ const BAND_LINES := 2
 const FULL_BAND := 0x20
 const TILE_ROWS := 8
 const TILES_END := 0x155
-const NO_CHARACTER := ArcadeSelect.NONE
+const NO_CHARACTER := Character.NONE
 
 var flow: ArcadeGameFlow
 var _bands: Array = []
@@ -168,16 +168,16 @@ func _sparks() -> void:
 	if not _shown():
 		return
 	var limit: int = _layout()["panel_top"]
-	for spark: ArcadeSelectSparks.Spark in flow.select.sparks.sparks:
+	for spark: SelectSparks.Spark in flow.select.sparks.sparks:
 		if spark.active == 0:
 			continue
-		var height := mini(ArcadeSelectSparks.LENGTH, limit - spark.y)
+		var height := mini(SelectSparks.LENGTH, limit - spark.y)
 		if height <= 0:
 			continue
-		var level := float(spark.brightness & ArcadeSelectSparks.LEVEL_MASK) / ArcadeSelectSparks.LEVEL_MASK
+		var level := float(spark.brightness & SelectSparks.LEVEL_MASK) / SelectSparks.LEVEL_MASK
 		var top := Color(level, level, level)
-		var end := top.lerp(Color(0, 0, level), float(height) / ArcadeSelectSparks.LENGTH)
-		gradient(spark.x, spark.y, ArcadeSelectSparks.WIDTH, height, top, top, end, end)
+		var end := top.lerp(Color(0, 0, level), float(height) / SelectSparks.LENGTH)
+		gradient(spark.x, spark.y, SelectSparks.WIDTH, height, top, top, end, end)
 
 
 func _front() -> void:
