@@ -5,11 +5,12 @@ extends SceneTree
 ##         [--times-out=<file>] <name filter>...]
 ##
 ## Finds every `test_*.gd` below res://tests, runs each `test_*` method of its TestSuite
-## and exits with 0 when nothing failed, 1 otherwise. A test fails on a failed expectation
-## or on any engine or script error logged while it runs. `--quick` leaves out the suites that
-## declare `const SLOW := true` (the comparisons with the game's traces). On a conversion from the
-## arcade's set alone, the tests a suite's `const DISC_DATA` names (or all, if `true`) are skipped:
-## they read what only a disc's conversion has. With `--claim=<dir>`
+## and exits with 0 when nothing failed, 1 otherwise. A test fails on a failed expectation,
+## on any engine or script error logged while it runs, or on a node it leaves in no tree and
+## never frees (the engine reports those at exit as leaked instances). `--quick` leaves out the
+## suites that declare `const SLOW := true` (the comparisons with the game's traces). On a
+## conversion from the arcade's set alone, the tests a suite's `const DISC_DATA` names (or all, if
+## `true`) are skipped: they read what only a disc's conversion has. With `--claim=<dir>`
 ## several runners share one run (tools/remake/run_tests.sh): each runs the tests it claims first
 ## in that directory, the longest first by the times of earlier runs (`--times=<file>`, lines
 ## `<path> <test>\t<ms>`), so the runners end close together; `--times-out=<file>` writes this
@@ -32,6 +33,8 @@ var started := false
 var _exit_code := -1
 var _quit_at := 0
 var _claims := ""                    ## `--claim`: the directory the runners of a run claim tests in
+var _orphan_count := -1.0            ## the engine's count of nodes in no tree at the last scan
+var _orphan_ids: Dictionary = {}     ## instance id → true: the nodes in no tree at the last scan
 
 
 func _initialize() -> void:
@@ -146,12 +149,16 @@ func _run() -> int:
 			print("SKIP   %s::%s — needs a conversion from a disc" % [path.get_file(), name])
 			continue
 		suite.reset()
+		_new_orphans()
 		var t := Time.get_ticks_msec()
 		suite.call(name)
 		var elapsed := Time.get_ticks_msec() - t
 		times.append("%s %s\t%d" % [path, name, elapsed])
 		for message in errors.take():
 			suite.failures.append("runtime error: " + message)
+		var left := _new_orphans()
+		if not left.is_empty():
+			suite.failures.append("leaves nodes in no tree, never freed (leaked at exit): " + ", ".join(left))
 		if not suite.failures.is_empty():
 			failed += 1
 			print("FAIL   %s::%s (%d ms)" % [path.get_file(), name, elapsed])
@@ -169,6 +176,29 @@ func _run() -> int:
 			f.store_string("\n".join(times) + "\n")
 	print("\n%d passed, %d failed, %d skipped in %.1f s" % [passed, failed, skipped, (Time.get_ticks_msec() - start) / 1000.0])
 	return 1 if failed > 0 else 0
+
+
+## The nodes left in no tree since the last call and not on their way out: the class names (the
+## script's, if it has one) of those without a parent and not queued for deletion. Their children go
+## with them, and so do a queued node's (all tests run in one frame: queue_free acts after them).
+## The scan of the engine's objects runs only when its count of nodes in no tree has changed.
+func _new_orphans() -> PackedStringArray:
+	var left := PackedStringArray()
+	var count := Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT)
+	if count == _orphan_count:
+		return left
+	_orphan_count = count
+	var known := _orphan_ids
+	_orphan_ids = {}
+	for id: int in Node.get_orphan_node_ids():
+		_orphan_ids[id] = true
+		var node := instance_from_id(id) as Node
+		if known.has(id) or node == null or node.get_parent() != null or node.is_queued_for_deletion():
+			continue
+		var script := node.get_script() as Script
+		var named := script != null and not script.get_global_name().is_empty()
+		left.append(String(script.get_global_name()) if named else node.get_class())
+	return left
 
 
 ## The tests in the order runners sharing a run should take them: the longest of the last runs

@@ -29,11 +29,8 @@ var _still_frame := -1
 var _clip := Control.new()
 
 
-func _ready() -> void:
-	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-	visible = false
+## The parts are the view's from the start: a view freed without entering a tree frees them too.
+func _init() -> void:
 	_clip.clip_contents = true
 	_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_clip)
@@ -45,6 +42,13 @@ func _ready() -> void:
 	still.stretch_mode = TextureRect.STRETCH_SCALE
 	still.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_clip.add_child(still)
+
+
+func _ready() -> void:
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	visible = false
 
 
 ## The movie's entry in the converted files; without it, nothing shows.
