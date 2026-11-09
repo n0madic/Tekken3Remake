@@ -12,8 +12,9 @@ import hashlib
 
 import arcade
 import arcade_ai_tables
-import arcade_effect_tables
 import arcade_character
+import arcade_effect_objects
+import arcade_effect_tables
 import arcade_effects
 import arcade_flow
 import arcade_motion_bake
@@ -80,8 +81,8 @@ def convert_characters(arc: arcade.ArcadeSet, out: Output) -> list[str]:
 
 
 def convert_effects(arc: arcade.ArcadeSet, out: Output) -> None:
-    """`effects/effects.json` from the set: the system flipbooks, a character's per costume slot and
-    the landing dust's ring. The effect objects' page is not converted (FUN_801AD114's pool)."""
+    """`effects/effects.json` from the set: the system flipbooks, a character's per costume slot, the
+    landing dust's ring and the effect objects' drawing (arcade_effect_objects)."""
     table: dict = {"system": [], "enbu": [], "costumes": {}}
     for index, name in enumerate(effects.SYSTEM_NAMES):
         strip, frames = arcade_effects.flipbook(arc, arcade_effects.SYSTEM_RECORDS[index])
@@ -97,6 +98,7 @@ def convert_effects(arc: arcade.ArcadeSet, out: Output) -> None:
                                         "light": arcade_effects.light_of(arc, char_id)}
     out.write_json("effects/effects.json", {
         **table,
+        "objects": arcade_effect_objects.drawing(arc, out),
         "dust_ring": {"offsets": [list(arc.prog_values("<3h", DUST_OFFSETS + 8 * i)) for i in range(effects.DUST_PUFFS)],
                       "y": effects.DUST_HEIGHT, "interval": effects.DUST_INTERVAL, "flipbook": "dust"},
     })

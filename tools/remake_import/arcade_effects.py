@@ -53,7 +53,7 @@ def tint(palette: np.ndarray, factors: tuple[int, int, int]) -> np.ndarray:
     return out.astype(np.uint16)
 
 
-def _blocks(tim: bytes) -> tuple[np.ndarray, np.ndarray]:
+def frame_blocks(tim: bytes) -> tuple[np.ndarray, np.ndarray]:
     """A frame TIM's CLUT colours and pixel words (the rectangles are the uploader's to place)."""
     clut_bytes = struct.unpack_from("<I", tim, TIM_HEADER)[0]
     clut = np.frombuffer(tim, dtype="<u2", count=CLUT_COLOURS, offset=TIM_HEADER + BLOCK_HEADER)
@@ -74,10 +74,10 @@ def flipbook(arc: arcade.ArcadeSet, record: int) -> tuple[np.ndarray, int]:
     tims, _ = tim_sequence(arcade.decompress(sets[number])[0])
     if len(tims) < frames:
         raise arcade.ArcadeError(f"flipbook set {number}: {len(tims)} frames of {frames}")
-    palette = tint(_blocks(tims[0])[0], tuple(factors))
+    palette = tint(frame_blocks(tims[0])[0], tuple(factors))
     strip = np.zeros((FRAME, FRAME * frames, 4), dtype=np.uint8)
     for n, tim in enumerate(tims[:frames]):
-        strip[:, FRAME * n:FRAME * (n + 1)] = rgba(palette[unpack_indices(_blocks(tim)[1], 4)])
+        strip[:, FRAME * n:FRAME * (n + 1)] = rgba(palette[unpack_indices(frame_blocks(tim)[1], 4)])
     return strip, frames
 
 

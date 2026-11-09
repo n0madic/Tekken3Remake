@@ -265,6 +265,10 @@ Type routines: 0 `801dd17c`; 1 `801dd21c`; 2 `801dd67c`; 3 `801dda9c`; 4 `801dde
 
 The cloud has no page of its own. Its tpages `0x8036EA64`, `0x8036EA68` are (0x380, 0x300) and (0x3C0, 0x300), where the system dust flipbook sits (`0x801757F0` row 3, set 38, category 22). So cloud frames are dust frames 1, 3, 5, 7, 9–13, 15, 17–27 through member 6's CLUT (`effect_cloud.py`, `effects/cloud_strip.png`, purple as expected). Dust upload walk: 4 × 4 frames per 64-word column, then x + 0x40 (`FUN_801af068`).
 
+**Pages, CLUTs and blending per phase** (`confirmed` by reading `FUN_801dbc9c` and the type routines' set-up). `LoadTPage(…, tp 0, abr 1, …)` makes the objects' two pages additive (`0x8036EA5C` at (0x3C0, 0), holding members 0–3 and 5; `0x8036EA60` at (0x380, 0), member 4); `GetTPage(0, 0, …)` makes the cloud's two abr 0, 50 %. The CLUT words `0x8036B9A4 + 4n` are member n's. Each type routine sets its primitives' page and CLUT once, with semi-transparency on and colour 0x80, so they follow the UV table a phase shows: spark member 0; power spark, glow, rise, ember member 1; the fireball's grow and loop (also smoke's and burn's first phase) the fireball page with member 4; the burst (also smoke's and burn's last) member 5; floor fire 2 and its fade 3; the cloud member 6, its page per frame (`0x8017C8A8`, an index into the tpage words from `0x8036EA5C`: 2 or 3). Frame cells are square: the routines add `0xF`, `0x1F` or `0x3F` to u and v (16 for the first five tables, 64 for grow, loop and cloud, 32 for burst and floor fire).
+
+**In the remake** (`arcade_effect_objects.py`): the four pages side by side in one atlas of indices (`effects/arcade_object_page.png`, the dust frames where the upload walk puts them), the seven CLUTs (`arcade_object_palettes.png`), the models and the UV tables in `ArcadeEffectObjects.Book` order, each with its palette and blending, in the `objects` block of `effects/effects.json`. `EffectObjectsView` takes a table's own palette and blending when it names one (the arcade's objects have no `clut` or `tpage`). Checked by eye in the arcade build (True Ogre's fire breath, the big hit's sparks, the floor fire), not against MAME's frames.
+
 **What `effects.py` takes from the PS1 disc, and its arcade source:**
 
 | Today | Arcade source |
@@ -303,9 +307,8 @@ The cloud has no page of its own. Its tpages `0x8036EA64`, `0x8036EA68` are (0x3
 ## 5. Gaps, ranked
 
 1. **Effect object variant** (pool, masks, counts, ease, segments): see [the plan](../../remake-plan.md#m6-arcade-only-build) for its state. Needs golden traces.
-2. **Effect drawing from category 42** with frame tables: small to medium.
-3. **Move script index and other data links** into the arcade's move records (script index beyond 354): small, depends on the move-system report.
-4. **Identify waves 0x44C–0x49B and sequence 0x14D**: small. The scenarios `sfx_high` and `sfx_fixed` run them; what they are is not known.
+2. **Move script index and other data links** into the arcade's move records (script index beyond 354): small, depends on the move-system report.
+3. **Identify waves 0x44C–0x49B and sequence 0x14D**: small. The scenarios `sfx_high` and `sfx_fixed` run them; what they are is not known.
 
 ## Open
 
@@ -313,7 +316,6 @@ The cloud has no page of its own. Its tpages `0x8036EA64`, `0x8036EA68` are (0x3
 - Noise voices: `arcade_c352` shares one generator as MAME does, but is not in step with it to the sample, so the noise bands do not correlate.
 - Rear C352 outputs: MAME does not route them; real cabinet wiring is unknown. The driver does write rear volumes (6522 of 31,564 writes non-zero).
 - Effect objects were read, not run: no harness comparison. `FUN_801db4d4` (sprite draw), flag 0x20 and `FUN_80199f60` (light) are not compared with the PS1.
-- UV cell size of table `0x8017C6C4` (rise) and of the sprites' `+0xF` / `+0x3F` / `+0x1F` per phase: summarised, not checked per phase against the page images.
 - Sound scripts from index 355 on: alignment with moves unverified. No RESULT music found on the arcade; absence is from the calls I read, not proof.
 - Slots 2–5 of the H8 directory: record formats not documented.
 - MAME's C352 semantics in `arcade_c352.py` come from a recollection of `c352.cpp`, checked only by the matches above.

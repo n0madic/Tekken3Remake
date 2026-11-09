@@ -42,6 +42,35 @@ func test_setup_reads_the_converted_objects() -> void:
 	view.free()
 
 
+## The arcade's objects carry no CLUT or page: a UV table that names its palette row and blending
+## (arcade_effect_objects.py) decides both (issue n0madic/Tekken3Remake#33: none was drawn).
+func test_a_table_palette_draws_an_object_without_a_clut() -> void:
+	var data := EffectData.new()
+	var quad := [[-55, -55], [55, -55], [-55, 55], [55, 55]]
+	data.objects = {"quads": [[], quad], "uv_tables": [
+		{"size": 16, "frames": [[16, 0]], "palette": 1, "half": false},
+		{"size": 64, "frames": [[64, 256]], "palette": 6, "half": true},
+		{"size": 32, "frames": [[0, 64]]}]}
+	var view := EffectObjectsView.new()
+	view.setup(data)
+	var pool := EffectPool.new()
+	var looks: Array = []
+	for table: int in [1, 2, 3]:
+		var o := EffectObjects.Obj.new()
+		o.flags |= EffectObjects.VISIBLE
+		o.model = 1
+		o.uv_table = table
+		o.uv = 0
+		pool.objects.append(o)
+		looks.append(view.look_of(o))
+	expect_equal(looks, [PackedInt32Array([1, 0]), PackedInt32Array([6, 1]), PackedInt32Array()],
+			"each table's palette and blending; a table without one and an unknown CLUT: none")
+	view.show_pool(pool)
+	expect_equal(view.additive.multimesh.visible_instance_count, 1, "the additive table's object")
+	expect_equal(view.half.multimesh.visible_instance_count, 1, "the 50 % table's object")
+	view.free()
+
+
 ## The texel of a frame at `uv` as effect_object.gdshaderinc's texel_colour() takes it (one axis).
 static func _texel(origin: int, size: int, uv: float) -> int:
 	return floori(origin + clampf(uv * size, 0.0, size - 0.001))

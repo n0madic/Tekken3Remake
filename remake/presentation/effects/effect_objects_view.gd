@@ -7,7 +7,8 @@ extends Node3D
 ## MultiMesh draws the additive page, one the 50 % page. Tekken Ball's charged ball (UV table
 ## BALL_CHARACTER) shows the hitter's character flipbook instead: the game points its quad at the
 ## flipbook's VRAM upload; the remake draws the converted flipbook's frames in turn on the ball's
-## model, additively.
+## model, additively. The arcade's objects (ArcadeEffectObjects) carry no CLUT or page: each of their
+## UV tables names its palette row and blending (`arcade_effect_objects.py`).
 
 const MAX_OBJECTS := EffectObjects.CAPACITY
 const ADD_SHADER := preload("res://presentation/effects/effect_object.gdshader")
@@ -19,6 +20,8 @@ var ball_glow := MeshInstance3D.new()
 var quad_corners: Array[Color] = []    ## by EffectObjects.Model: corners 0 and 3 (corners)
 var sprites: Dictionary = {}           ## model → (u, v, size)
 var uv_frames: Array = []              ## by EffectObjects.UvTable − 1: Array[PackedInt32Array] of (u, v, size)
+var table_rows := PackedInt32Array()   ## by UV table − 1: the table's own palette row, −1 for the object's CLUT
+var table_half := PackedByteArray()    ## by UV table − 1: 50 % blending, with a palette row of its own
 var clut_rows: Dictionary = {}         ## CLUT id → palette row
 var costumes: Array[EffectData.Flipbook] = []   ## the players' character flipbooks
 var ball_glow_frames := PackedInt32Array()      ## per glow step: the flipbook frame (−1 none)
@@ -46,6 +49,8 @@ func setup(data: EffectData) -> void:
 			var uv := JsonFile.ints(f)
 			frames.append(PackedInt32Array([uv[0], uv[1], size]))
 		uv_frames.append(frames)
+		table_rows.append(JsonFile.number(t.get("palette", -1)))
+		table_half.append(1 if t.get("half", false) else 0)
 	ball_glow_frames = JsonFile.ints(d.get("ball_glow_frames", []))
 	var rows: Array = d.get("clut_rows", [])
 	for i in rows.size():
@@ -157,9 +162,13 @@ func show_pool(pool: EffectPool) -> void:
 			_show_ball_glow(o)
 			continue
 		var s := sprite_of(o)
-		if s.is_empty() or not clut_rows.has(o.clut):
+		if s.is_empty():
 			continue
-		var target := half if o.tpage == EffectObjects.TPAGE_HALF else additive
+		var look := look_of(o)
+		if look.is_empty():
+			continue
+		var row := look[0]
+		var target := half if look[1] != 0 else additive
 		var k := 1 if target == half else 0
 		var i: int = counts[k]
 		if i >= MAX_OBJECTS:
@@ -167,11 +176,21 @@ func show_pool(pool: EffectPool) -> void:
 		counts[k] = i + 1
 		var mm := target.multimesh
 		mm.set_instance_transform(i, Transform3D(Basis.IDENTITY, WorldSpace.point(o.x, o.y, o.z)))
-		var row: int = clut_rows[o.clut]
 		mm.set_instance_color(i, Color(s[0], s[1], s[2], row))
 		mm.set_instance_custom_data(i, corners(o.model))
 	additive.multimesh.visible_instance_count = counts[0]
 	half.multimesh.visible_instance_count = counts[1]
+
+
+## An object's palette row and 50 % blending (0 or 1): its UV table's own when the table names a
+## palette (the arcade's), else its CLUT's row and page; empty for a CLUT without a row.
+func look_of(o: EffectObjects.Obj) -> PackedInt32Array:
+	var table := o.uv_table - 1
+	if table >= 0 and table < table_rows.size() and table_rows[table] >= 0:
+		return PackedInt32Array([table_rows[table], table_half[table]])
+	if not clut_rows.has(o.clut):
+		return PackedInt32Array()
+	return PackedInt32Array([clut_rows[o.clut], 1 if o.tpage == EffectObjects.TPAGE_HALF else 0])
 
 
 ## A model's corners 0 and 3 as (x0, y0, x1, y1) in metres.
