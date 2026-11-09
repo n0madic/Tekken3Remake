@@ -37,6 +37,7 @@ import common  # noqa: F401  (puts tools/research on the import path first)
 import ai
 import arcade
 import arcade_character
+import arcade_effect_objects
 import arcade_game
 import character
 import effects
@@ -83,9 +84,11 @@ MUSIC_TRACKS = list(range(29))   # every track the game plays (the Theater's sou
 
 
 # The pictures a texture pack may replace (remake/content/texture_packs.gd); the effect objects'
-# page and palettes are data (indices and colour rows), not pictures.
+# pages and palettes (both builds) are data (indices and colour rows), not pictures.
 REPLACEABLE = ("characters/", "stages/", "hud/", "effects/", "screens/", "usa/")
-NOT_REPLACEABLE = {"effects/object_page.png", "effects/object_palettes.png"}
+NOT_REPLACEABLE = {f"effects/{name}" for name in (
+    effects.OBJECT_PAGE_FILE, effects.OBJECT_PALETTES_FILE,
+    arcade_effect_objects.PAGE_FILE, arcade_effect_objects.PALETTES_FILE)}
 TEXTURE_KEY_DIGITS = 16
 
 

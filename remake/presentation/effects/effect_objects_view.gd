@@ -10,7 +10,7 @@ extends Node3D
 ## model, additively. The arcade's objects (ArcadeEffectObjects) carry no CLUT or page: each of their
 ## UV tables names its palette row and blending (`arcade_effect_objects.py`).
 
-const MAX_OBJECTS := EffectObjects.CAPACITY
+const START_INSTANCES := EffectObjects.CAPACITY   ## per MultiMesh; `show_pool` grows them to the pool's size
 const ADD_SHADER := preload("res://presentation/effects/effect_object.gdshader")
 const HALF_SHADER := preload("res://presentation/effects/effect_object_half.gdshader")
 
@@ -19,7 +19,7 @@ var half := MultiMeshInstance3D.new()
 var ball_glow := MeshInstance3D.new()
 var quad_corners: Array[Color] = []    ## by EffectObjects.Model: corners 0 and 3 (corners)
 var sprites: Dictionary = {}           ## model → (u, v, size)
-var uv_frames: Array = []              ## by EffectObjects.UvTable − 1: Array[PackedInt32Array] of (u, v, size)
+var uv_frames: Array = []              ## by UV table − 1 (EffectObjects.UvTable, ArcadeEffectObjects.Book): (u, v, size) per frame
 var table_rows := PackedInt32Array()   ## by UV table − 1: the table's own palette row, −1 for the object's CLUT
 var table_half := PackedByteArray()    ## by UV table − 1: 50 % blending, with a palette row of its own
 var clut_rows: Dictionary = {}         ## CLUT id → palette row
@@ -83,7 +83,7 @@ func _prepare(node: MultiMeshInstance3D, shader: Shader, page: Texture2D, palett
 	mm.use_colors = true
 	mm.use_custom_data = true
 	mm.mesh = QuadMesh.new()
-	mm.instance_count = MAX_OBJECTS
+	mm.instance_count = START_INSTANCES
 	mm.visible_instance_count = 0
 	node.multimesh = mm
 	var material := ShaderMaterial.new()
@@ -153,6 +153,7 @@ func _table_frame(table: int, frame: int) -> PackedInt32Array:
 
 ## The pool after a simulation step.
 func show_pool(pool: EffectPool) -> void:
+	_fit(pool.objects.size())
 	var counts := [0, 0]
 	ball_glow.visible = false
 	for o in pool.objects:
@@ -165,32 +166,35 @@ func show_pool(pool: EffectPool) -> void:
 		if s.is_empty():
 			continue
 		var look := look_of(o)
-		if look.is_empty():
+		if look.x < 0:
 			continue
-		var row := look[0]
-		var target := half if look[1] != 0 else additive
-		var k := 1 if target == half else 0
-		var i: int = counts[k]
-		if i >= MAX_OBJECTS:
-			continue
-		counts[k] = i + 1
-		var mm := target.multimesh
+		var i: int = counts[look.y]
+		counts[look.y] = i + 1
+		var mm := (half if look.y != 0 else additive).multimesh
 		mm.set_instance_transform(i, Transform3D(Basis.IDENTITY, WorldSpace.point(o.x, o.y, o.z)))
-		mm.set_instance_color(i, Color(s[0], s[1], s[2], row))
+		mm.set_instance_color(i, Color(s[0], s[1], s[2], look.x))
 		mm.set_instance_custom_data(i, corners(o.model))
 	additive.multimesh.visible_instance_count = counts[0]
 	half.multimesh.visible_instance_count = counts[1]
 
 
-## An object's palette row and 50 % blending (0 or 1): its UV table's own when the table names a
-## palette (the arcade's), else its CLUT's row and page; empty for a CLUT without a row.
-func look_of(o: EffectObjects.Obj) -> PackedInt32Array:
+## An object's (palette row, 50 % blending 0 or 1): its UV table's own when the table names a
+## palette (the arcade's), else its CLUT's row and page; (−1, 0) for a CLUT without a row.
+func look_of(o: EffectObjects.Obj) -> Vector2i:
 	var table := o.uv_table - 1
 	if table >= 0 and table < table_rows.size() and table_rows[table] >= 0:
-		return PackedInt32Array([table_rows[table], table_half[table]])
+		return Vector2i(table_rows[table], table_half[table])
 	if not clut_rows.has(o.clut):
-		return PackedInt32Array()
-	return PackedInt32Array([clut_rows[o.clut], 1 if o.tpage == EffectObjects.TPAGE_HALF else 0])
+		return Vector2i(-1, 0)
+	return Vector2i(clut_rows[o.clut] as int, 1 if o.tpage == EffectObjects.TPAGE_HALF else 0)
+
+
+## Each MultiMesh holds an instance per pool object at least (the arcade's pool holds more than the
+## PlayStation's); growing one clears its instances, which `show_pool` rewrites.
+func _fit(count: int) -> void:
+	for node: MultiMeshInstance3D in [additive, half]:
+		if node.multimesh.instance_count < count:
+			node.multimesh.instance_count = count
 
 
 ## A model's corners 0 and 3 as (x0, y0, x1, y1) in metres.

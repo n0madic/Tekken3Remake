@@ -19,6 +19,7 @@ import struct
 import numpy as np
 
 import arcade
+import system_textures
 from common import log
 from vram import rgba, tim_sequence, unpack_indices
 
@@ -37,8 +38,6 @@ FACTOR_SHIFT = 7
 CHARACTER_RECORD_OF = {19: 9}
 FRAME = 64
 FRAME_WORDS = FRAME // 4
-TIM_HEADER = 8
-BLOCK_HEADER = 12
 CLUT_COLOURS = 16
 
 
@@ -53,15 +52,25 @@ def tint(palette: np.ndarray, factors: tuple[int, int, int]) -> np.ndarray:
     return out.astype(np.uint16)
 
 
+def clut_and_words(tim: bytes) -> tuple[np.ndarray, np.ndarray | None]:
+    """A 4-bit TIM's 16 CLUT colours and pixel words, None without pixels (the rectangles are
+    the uploader's to place)."""
+    blocks = {kind: (w, h, data) for kind, _, _, w, h, data in system_textures.tim_blocks(tim)}
+    if "clut" not in blocks:
+        raise arcade.ArcadeError("an effect TIM without a CLUT")
+    clut = np.frombuffer(blocks["clut"][2], dtype="<u2", count=CLUT_COLOURS)
+    w, h, data = blocks.get("image", (0, 0, b""))
+    if w * h == 0:
+        return clut, None
+    return clut, np.frombuffer(data, dtype="<u2", count=w * h).reshape(h, w)
+
+
 def frame_blocks(tim: bytes) -> tuple[np.ndarray, np.ndarray]:
-    """A frame TIM's CLUT colours and pixel words (the rectangles are the uploader's to place)."""
-    clut_bytes = struct.unpack_from("<I", tim, TIM_HEADER)[0]
-    clut = np.frombuffer(tim, dtype="<u2", count=CLUT_COLOURS, offset=TIM_HEADER + BLOCK_HEADER)
-    image = TIM_HEADER + clut_bytes
-    w, h = struct.unpack_from("<2H", tim, image + 8)
-    if (w, h) != (FRAME_WORDS, FRAME):
-        raise arcade.ArcadeError(f"a flipbook frame of {w} × {h} words")
-    words = np.frombuffer(tim, dtype="<u2", count=w * h, offset=image + BLOCK_HEADER).reshape(h, w)
+    """A flipbook frame TIM's CLUT colours and its 16 × 64 pixel words."""
+    clut, words = clut_and_words(tim)
+    if words is None or words.shape != (FRAME, FRAME_WORDS):
+        size = "no" if words is None else f"{words.shape[1]} × {words.shape[0]}"
+        raise arcade.ArcadeError(f"a flipbook frame of {size} words")
     return clut, words
 
 

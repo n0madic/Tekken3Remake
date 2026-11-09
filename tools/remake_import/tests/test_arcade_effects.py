@@ -11,30 +11,11 @@ import numpy as np
 import common  # noqa: F401  (puts tools/research on the import path)
 import arcade
 import arcade_effects
-from vram import TIM_ID
+from tests.arcade_fixtures import filled_tim, literal
 
 RECORD = 0x80175510
 WHITE = 0x7FFF
 RED = 0x001F
-
-
-def _literal(data: bytes) -> bytes:
-    """Data as the BIOS's LZ: only literals, seven per flag byte, then the end flag."""
-    out = bytearray()
-    for k in range(0, len(data), 7):
-        chunk = data[k:k + 7]
-        out.append(((1 << len(chunk)) - 1) | 1 << len(chunk))
-        out += chunk
-    return bytes(out) + b"\0"
-
-
-def _tim(index: int, palette: list[int], size: tuple[int, int] = (16, 64)) -> bytes:
-    """A 4-bit frame all of texel `index`, with its CLUT."""
-    w, h = size
-    clut = struct.pack("<IHHHH16H", 44, 0, 0, 16, 1, *palette)
-    word = index * 0x1111
-    image = struct.pack("<IHHHH", 12 + 2 * w * h, 0, 0, w, h) + struct.pack(f"<{w * h}H", *[word] * (w * h))
-    return struct.pack("<II", TIM_ID, 8) + clut + image
 
 
 def _set(tims: list[bytes], factors=(128, 128, 128), frames: int = 2, number: int = 0) -> SimpleNamespace:
@@ -45,7 +26,7 @@ def _set(tims: list[bytes], factors=(128, 128, 128), frames: int = 2, number: in
         assert addr == RECORD
         return struct.unpack(fmt, record)
 
-    return SimpleNamespace(prog_values=prog_values, category=lambda _: [_literal(b"".join(tims))])
+    return SimpleNamespace(prog_values=prog_values, category=lambda _: [literal(b"".join(tims))])
 
 
 class TintTest(unittest.TestCase):
@@ -68,7 +49,8 @@ class FlipbookTest(unittest.TestCase):
     def test_frames_run_left_to_right_through_the_first_clut(self) -> None:
         first = [0, WHITE, RED] + [0] * 13
         other = [0, RED, WHITE] + [0] * 13     # later CLUTs are not uploaded (FUN_801af068)
-        strip, frames = arcade_effects.flipbook(_set([_tim(1, first), _tim(2, other), _tim(1, other)]), RECORD)
+        tims = [filled_tim(1, first), filled_tim(2, other), filled_tim(1, other)]
+        strip, frames = arcade_effects.flipbook(_set(tims), RECORD)
         self.assertEqual(frames, 2)            # the record's count, not the set's
         self.assertEqual(strip.shape, (64, 128, 4))
         self.assertEqual(strip[0, 0].tolist(), [255, 255, 255, 255])
@@ -76,27 +58,41 @@ class FlipbookTest(unittest.TestCase):
 
     def test_factors_apply_and_colour_zero_is_transparent(self) -> None:
         palette = [0, WHITE] + [0] * 14
-        strip, _ = arcade_effects.flipbook(_set([_tim(1, palette), _tim(0, palette)], factors=(128, 0, 0)), RECORD)
+        tims = [filled_tim(1, palette), filled_tim(0, palette)]
+        strip, _ = arcade_effects.flipbook(_set(tims, factors=(128, 0, 0)), RECORD)
         self.assertEqual(strip[0, 0, :3].tolist(), [255, 0, 0])
         self.assertEqual(strip[0, 64, 3], 0)
 
     def test_too_few_frames_or_a_missing_set_are_errors(self) -> None:
         palette = [0, WHITE] + [0] * 14
         with self.assertRaises(arcade.ArcadeError):
-            arcade_effects.flipbook(_set([_tim(1, palette)]), RECORD)
+            arcade_effects.flipbook(_set([filled_tim(1, palette)]), RECORD)
         with self.assertRaises(arcade.ArcadeError):
-            arcade_effects.flipbook(_set([_tim(1, palette)], number=1), RECORD)
+            arcade_effects.flipbook(_set([filled_tim(1, palette)], number=1), RECORD)
 
     def test_a_frame_of_another_size_is_an_error(self) -> None:
         palette = [0, WHITE] + [0] * 14
         with self.assertRaises(arcade.ArcadeError):
-            arcade_effects.flipbook(_set([_tim(1, palette, (8, 32))] * 2), RECORD)
+            arcade_effects.flipbook(_set([filled_tim(1, palette, (8, 32))] * 2), RECORD)
 
     def test_or_none_keeps_the_playstation_on_failure_or_without_a_set(self) -> None:
         palette = [0, WHITE] + [0] * 14
         self.assertIsNone(arcade_effects.flipbook_or_none(None, RECORD, "hit"))
         with self.assertLogs(common.log, "ERROR"):
-            self.assertIsNone(arcade_effects.flipbook_or_none(_set([_tim(1, palette)]), RECORD, "hit"))
+            self.assertIsNone(arcade_effects.flipbook_or_none(_set([filled_tim(1, palette)]), RECORD, "hit"))
+
+
+class ClutAndWordsTest(unittest.TestCase):
+    def test_a_tim_without_a_clut_is_an_error(self) -> None:
+        tim = bytearray(filled_tim(1, [0] * 16))
+        tim[4] = 0                              # flags: 4-bit, no CLUT
+        with self.assertRaises(arcade.ArcadeError):
+            arcade_effects.clut_and_words(bytes(tim))
+
+    def test_an_empty_pixel_block_has_no_words(self) -> None:
+        clut, words = arcade_effects.clut_and_words(filled_tim(1, [WHITE] * 16, (0, 0)))
+        self.assertEqual(clut.tolist(), [WHITE] * 16)
+        self.assertIsNone(words)
 
 
 class RecordTest(unittest.TestCase):

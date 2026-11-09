@@ -3,10 +3,6 @@ extends TestSuite
 ## every model's corners (model 0 has none), the models' own sprites and the UV tables' frames,
 ## as the pool is drawn from them each step.
 
-const DISC_DATA := [
-	"test_setup_reads_the_converted_objects",
-]
-
 
 func test_setup_reads_the_converted_objects() -> void:
 	var dir := AssetCatalog.ROOT.path_join("effects")
@@ -21,6 +17,9 @@ func test_setup_reads_the_converted_objects() -> void:
 	var m := 1.0 / WorldSpace.UNITS_PER_METRE
 	for model in range(1, quads.size()):
 		var q: Array = quads[model]
+		if q.is_empty():
+			expect_equal(view.corners(model), Color(), "model %d has no quad" % model)
+			continue
 		var a := JsonFile.ints(q[0])
 		var b := JsonFile.ints(q[3])
 		expect_equal(view.corners(model), Color(a[0] * m, a[1] * m, b[0] * m, b[1] * m), "model %d corners" % model)
@@ -38,6 +37,16 @@ func test_setup_reads_the_converted_objects() -> void:
 				"table %d: a frame past the end draws the last" % (t + 1))
 		o.uv = 0
 		expect_equal(view.sprite_of(o)[0], first[0], "table %d: frame 0" % (t + 1))
+		expect_equal(view.table_rows[t], JsonFile.number(table.get("palette", -1)), "table %d: its palette" % (t + 1))
+	if Assets.arcade_only():
+		expect_equal(tables.size(), ArcadeEffectObjects.Book.size() - 1, "a table per Book after MODEL")
+		expect(not view.table_rows.has(-1), "every arcade table names its palette (the objects have no CLUT)")
+		var used: Array[int] = [EffectObjects.Model.SPARK, EffectObjects.Model.GLOW, EffectObjects.Model.GLOW_RISE,
+				EffectObjects.Model.EMBER, EffectObjects.Model.FIREBALL_A, EffectObjects.Model.FIREBALL_B,
+				EffectObjects.Model.SMOKE, EffectObjects.Model.FLOOR_FIRE, EffectObjects.Model.CLOUD,
+				EffectObjects.Model.BURN, EffectObjects.Model.POWER_SPARK]
+		for model: int in used:
+			expect((quads[model] as Array).size() == 4, "model %d: the quad ArcadeEffectObjects draws it with" % model)
 	view.show_pool(EffectPool.new())
 	view.free()
 
@@ -63,11 +72,33 @@ func test_a_table_palette_draws_an_object_without_a_clut() -> void:
 		o.uv = 0
 		pool.objects.append(o)
 		looks.append(view.look_of(o))
-	expect_equal(looks, [PackedInt32Array([1, 0]), PackedInt32Array([6, 1]), PackedInt32Array()],
+	expect_equal(looks, [Vector2i(1, 0), Vector2i(6, 1), Vector2i(-1, 0)],
 			"each table's palette and blending; a table without one and an unknown CLUT: none")
 	view.show_pool(pool)
 	expect_equal(view.additive.multimesh.visible_instance_count, 1, "the additive table's object")
 	expect_equal(view.half.multimesh.visible_instance_count, 1, "the 50 % table's object")
+	view.free()
+
+
+## The arcade's pool holds more objects than the PlayStation's (ArcadeEffectObjects.CAPACITY): the
+## view draws every one.
+func test_a_pool_larger_than_the_playstation_one_is_drawn_whole() -> void:
+	var data := EffectData.new()
+	var quad := [[-55, -55], [55, -55], [-55, 55], [55, 55]]
+	data.objects = {"quads": [[], quad], "uv_tables": [{"size": 16, "frames": [[16, 0]], "palette": 1, "half": false}]}
+	var view := EffectObjectsView.new()
+	view.setup(data)
+	var pool := EffectPool.new()
+	for k in ArcadeEffectObjects.CAPACITY:
+		var o := EffectObjects.Obj.new()
+		o.flags |= EffectObjects.VISIBLE
+		o.model = 1
+		o.uv_table = 1
+		o.uv = 0
+		pool.objects.append(o)
+	view.show_pool(pool)
+	expect(ArcadeEffectObjects.CAPACITY > EffectObjects.CAPACITY, "the arcade's pool is the larger")
+	expect_equal(view.additive.multimesh.visible_instance_count, ArcadeEffectObjects.CAPACITY, "every object")
 	view.free()
 
 

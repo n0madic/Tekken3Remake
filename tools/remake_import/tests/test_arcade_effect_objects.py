@@ -13,7 +13,7 @@ from PIL import Image
 import common  # noqa: F401  (puts tools/research on the import path)
 import arcade_effect_objects as objects
 import arcade_effects
-from tests.test_arcade_effects import _literal, _tim
+from tests.arcade_fixtures import filled_tim, literal
 
 BASE = 0x80175000
 MEMORY = 0xC000
@@ -22,13 +22,9 @@ CLOUD_PAGE_OF_FRAME = 3                 # the cloud's second frame comes from th
 SPARK_UV = (0x10, 0x20)
 
 
-def _member(index: int, size: tuple[int, int] | None) -> bytes:
-    """Category 42 member `index`: all texels index + 1 (none: a CLUT alone), colour k = k."""
-    palette = list(range(16))
-    if size is None:
-        clut = struct.pack("<IHHHH16H", 44, 0, 0, 16, 1, *palette)
-        return struct.pack("<II", 0x10, 8) + clut
-    return _tim(index + 1, palette, size)
+def _member(index: int, size: tuple[int, int]) -> bytes:
+    """Category 42 member `index`: all texels index + 1, colour k = k."""
+    return filled_tim(index + 1, list(range(16)), size)
 
 
 class FakeSet:
@@ -36,10 +32,10 @@ class FakeSet:
 
     def __init__(self) -> None:
         self.memory = bytearray(MEMORY)
-        sizes = [(32, 64), (32, 64), (64, 64), (64, 64), (64, 256), (32, 64), None]
-        self.members = [_literal(_member(i, size)) for i, size in enumerate(sizes)]
-        dust = [_tim(9, [0] * 16) for _ in range(20)]
-        self.dust = _literal(b"".join(dust))
+        sizes = [(32, 64), (32, 64), (64, 64), (64, 64), (64, 256), (32, 64), (4, 1)]
+        self.members = [literal(_member(i, size)) for i, size in enumerate(sizes)]
+        dust = [filled_tim(9, [0] * 16) for _ in range(20)]
+        self.dust = literal(b"".join(dust))
         self._put(arcade_effects.SYSTEM_RECORDS[-1], struct.pack(arcade_effects.RECORD, DUST_SET, 20, 64, 64, 0, 128, 128, 128))
         self._put(objects.UV_TABLES[0][0], bytes(SPARK_UV))
         self._put(objects.UV_TABLES[-1][0], bytes([0x40, 0, 0x40, 0x40]))

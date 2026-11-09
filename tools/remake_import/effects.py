@@ -62,6 +62,8 @@ OBJECT_CLUTS = [*range(0x7DC6, 0x7DCB), *[0x7F40 | (0x10 + i) for i in range(16)
 # and the UV tables of the animated phases by EffectObjects.UvTable order (after MODEL):
 # (table, frames, frame size). BALL_CHARACTER reads the charged ball's character flipbook.
 OBJECT_PAGE = (960, 256)            # tpage 0x3F / 0x1F: the page of every object sprite
+OBJECT_PAGE_FILE = "object_page.png"            # in effects/: data (indices, colour rows), not pictures
+OBJECT_PALETTES_FILE = "object_palettes.png"
 OBJECT_MODELS = [None, 0x8002554C, 0x8002556C, 0x800256E0, 0x80025700, 0x80025740, 0x80025720, 0x800257C0,
                  0x800257E0, 0x80025800, 0x80025878, 0x80025898, 0x800258FC, 0x8002591C, 0x8002593C,
                  0x800259EC, 0x800259CC, 0x8002595C]
@@ -83,16 +85,16 @@ def _object_drawing(disc: Disc, system: Vram, out: Output) -> dict:
     page = np.zeros((256, 256, 4), dtype=np.uint8)
     page[..., 0] = indices
     page[..., 3] = 255
-    out.write("effects/object_page.png", png_bytes(page))
+    out.write(f"effects/{OBJECT_PAGE_FILE}", png_bytes(page))
     rows = np.zeros((len(OBJECT_CLUTS), 16, 4), dtype=np.uint8)
     for i, clut in enumerate(OBJECT_CLUTS):
         x, y = clut_xy(clut)
         rows[i] = rgba(system.words[y, x:x + 16])
-    out.write("effects/object_palettes.png", png_bytes(rows))
+    out.write(f"effects/{OBJECT_PALETTES_FILE}", png_bytes(rows))
     quads = [[disc.exe_s16(a + 8 * k, 2) for k in range(4)] if a else [] for a in OBJECT_MODELS]
     sprites = {str(model): [u, v, SPRITE_SIZE] for model, (u, v) in SPRITE_UV.items()}
     tables = [{"size": size, "frames": [disc.exe_u8(a + 2 * k, 2) for k in range(n)]} for a, n, size in OBJECT_UV_TABLES]
-    return {"page": "object_page.png", "palettes": "object_palettes.png", "clut_rows": OBJECT_CLUTS,
+    return {"page": OBJECT_PAGE_FILE, "palettes": OBJECT_PALETTES_FILE, "clut_rows": OBJECT_CLUTS,
             "quads": quads, "sprites": sprites, "uv_tables": tables, "ball_glow_frames": _ball_glow_frames(disc)}
 
 

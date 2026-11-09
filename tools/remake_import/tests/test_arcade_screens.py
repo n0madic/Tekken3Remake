@@ -16,6 +16,7 @@ import arcade
 import arcade_game
 import arcade_screens as screens
 from common import Output
+from tests.arcade_fixtures import literal
 from vram import TIM_ID, Vram
 
 WHITE = 0x7FFF
@@ -30,16 +31,6 @@ GLYPHS = 0x80130000
 FONTS = [screens.Font(GLYPHS, 12, 18, 12, 16, 0x2C, 0),
          screens.Font(GLYPHS, 18, 26, 18, 24, 0x2C, 0x10),
          screens.Font(GLYPHS, 30, 42, 32, 40, 0x2D, 0x20)]
-
-
-def _literal(data: bytes) -> bytes:
-    """Data as the BIOS's LZ: only literals, seven per flag byte, then the end flag."""
-    out = bytearray()
-    for k in range(0, len(data), 7):
-        chunk = data[k:k + 7]
-        out.append(((1 << len(chunk)) - 1) | 1 << len(chunk))
-        out += chunk
-    return bytes(out) + b"\0"
 
 
 def _block(x: int, y: int, w: int, h: int, words: list[int]) -> bytes:
@@ -138,11 +129,11 @@ def _fake_set() -> arcade.ArcadeSet:
     font_clut = _clut_only(screens.TEXT_CLUT_X + 16 * 2, screens.TEXT_CLUT_Y, [0] + [WHITE] * 15)
     face = [0x0101] * 16
     categories = {
-        1: [_literal(font_clut)],
+        1: [literal(font_clut)],
         2: [_tim((786, 78, 4, 24, [0x1111] * 96), (screens.TEXT_CLUT_X, 484, 16, 1, [0, RED] + [0] * 14))],
         3: [_tim((768, 0, 64, 48, [0x1111] * (64 * 48)))],
         5: [_tim((1, 1, 2, 2, [0x2222] * 4))],
-        6: [_literal(_tim((0, 512, 2, 2, [0x0101] * 4), (256, 488, 256, 1, [0, BLUE] + [0] * 254), depth=8))],
+        6: [literal(_tim((0, 512, 2, 2, [0x0101] * 4), (256, 488, 256, 1, [0, BLUE] + [0] * 254), depth=8))],
         7: [_picture_tim(1) for _ in range(12)],
         8: [_clut_only(256, 489, [RED] * 16), _clut_only(256, 489, [BLUE] * 16), _clut_only(256, 489, [WHITE] * 16)],
         9: [_tim((768, 464, 2, 2, [0x0101] * 4), (256, 485, 256, 1, [0, RED] + [0] * 254), depth=8) for _ in range(3)],
@@ -210,7 +201,7 @@ class UploadTest(unittest.TestCase):
 
     def test_a_stored_file_and_a_compressed_one(self) -> None:
         tim = _tim((1, 1, 1, 1, [9]))
-        arc = arcade.ArcadeSet(b"", b"", b"", _categories={1: [tim, _literal(tim)]})
+        arc = arcade.ArcadeSet(b"", b"", b"", _categories={1: [tim, literal(tim)]})
         self.assertEqual(screens.tim_file(arc, 1, 0), tim)
         self.assertEqual(screens.tim_file(arc, 1, 1), tim)
 

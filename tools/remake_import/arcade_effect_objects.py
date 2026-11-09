@@ -15,8 +15,6 @@ object page), so the UV tables' frames are atlas positions.
 
 from __future__ import annotations
 
-import struct
-
 import numpy as np
 
 import arcade
@@ -25,9 +23,8 @@ from common import Output
 from vram import png_bytes, rgba, tim_sequence, unpack_indices
 
 CATEGORY = 42
-TIM_HEADER = 8
-BLOCK_HEADER = 12
-CLUT_COLOURS = 16
+PAGE_FILE = "arcade_object_page.png"    # in effects/: data (indices, colour rows), not pictures
+PALETTES_FILE = "arcade_object_palettes.png"
 PAGE = 256                              # texels per side of a 4-bit texture page
 # Pages by their index in the tpage words from 0x8036EA5C (the cloud's per-frame table counts from
 # there): the objects' two, then the dust upload's two. Atlas origin of each, in texels.
@@ -67,17 +64,8 @@ CLOUD_PAGES = 0x8017C8A8                # u32 page index per cloud frame
 
 def _member(arc: arcade.ArcadeSet, index: int) -> tuple[np.ndarray, np.ndarray | None]:
     """A member's 16 CLUT colours and, unless it has none, its texel indices."""
-    data, _ = arcade.decompress(arc.category(CATEGORY)[index])
-    clut_bytes = struct.unpack_from("<I", data, TIM_HEADER)[0]
-    clut = np.frombuffer(data, dtype="<u2", count=CLUT_COLOURS, offset=TIM_HEADER + BLOCK_HEADER).copy()
-    image = TIM_HEADER + clut_bytes
-    if image + BLOCK_HEADER > len(data):
-        return clut, None
-    w, h = struct.unpack_from("<2H", data, image + 8)
-    if w * h == 0:
-        return clut, None
-    words = np.frombuffer(data, dtype="<u2", count=w * h, offset=image + BLOCK_HEADER).reshape(h, w)
-    return clut, unpack_indices(words, 4).astype(np.uint8)
+    clut, words = arcade_effects.clut_and_words(arcade.decompress(arc.category(CATEGORY)[index])[0])
+    return clut, None if words is None else unpack_indices(words, 4).astype(np.uint8)
 
 
 def _place(atlas: np.ndarray, page: int, x: int, y: int, indices: np.ndarray) -> None:
@@ -101,7 +89,7 @@ def _dust(arc: arcade.ArcadeSet, atlas: np.ndarray) -> None:
 def drawing(arc: arcade.ArcadeSet, out: Output) -> dict:
     """Writes the atlas and palettes; returns the `objects` block for `effects/effects.json`."""
     atlas = np.zeros((ATLAS, ATLAS), dtype=np.uint8)
-    palettes = np.zeros((PALETTES, CLUT_COLOURS, 4), dtype=np.uint8)
+    palettes = np.zeros((PALETTES, arcade_effects.CLUT_COLOURS, 4), dtype=np.uint8)
     for index in range(PALETTES):
         clut, indices = _member(arc, index)
         palettes[index] = rgba(clut)
@@ -113,8 +101,8 @@ def drawing(arc: arcade.ArcadeSet, out: Output) -> dict:
     page = np.zeros((ATLAS, ATLAS, 4), dtype=np.uint8)
     page[..., 0] = atlas
     page[..., 3] = 255
-    out.write("effects/arcade_object_page.png", png_bytes(page))
-    out.write("effects/arcade_object_palettes.png", png_bytes(palettes))
+    out.write(f"effects/{PAGE_FILE}", png_bytes(page))
+    out.write(f"effects/{PALETTES_FILE}", png_bytes(palettes))
     quads: list[list] = [[] for _ in range(MODEL_COUNT)]
     for model, address in MODELS.items():
         quads[model] = [list(arc.prog_values("<2h", address + SVECTOR_BYTES * k)) for k in range(CORNERS)]
@@ -127,5 +115,5 @@ def drawing(arc: arcade.ArcadeSet, out: Output) -> dict:
             ox, oy = PAGE_ORIGINS[cloud_pages[k] if page_index is None else page_index]
             frames.append([ox + u, oy + v])
         tables.append({"size": size, "frames": frames, "palette": palette, "half": half})
-    return {"page": "arcade_object_page.png", "palettes": "arcade_object_palettes.png",
+    return {"page": PAGE_FILE, "palettes": PALETTES_FILE,
             "quads": quads, "uv_tables": tables}
