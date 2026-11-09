@@ -95,7 +95,8 @@ class FFmpeg:
         return self.can_encode(THEORA, VORBIS)
 
     def run(self, args: list[str]) -> None:
-        result = subprocess.run([self.path, "-hide_banner", "-loglevel", "error", "-y", *args], capture_output=True)
+        result = subprocess.run([self.path, "-hide_banner", "-loglevel", "error", "-y", *args],
+                                stdin=subprocess.DEVNULL, capture_output=True)
         if result.returncode:
             raise MediaError(result.stderr.decode(errors="replace"))
 
@@ -103,7 +104,8 @@ class FFmpeg:
 def _encoders(path: str) -> frozenset[str]:
     """The encoder names an FFmpeg lists; none when it cannot be run."""
     try:
-        result = subprocess.run([path, "-hide_banner", "-encoders"], capture_output=True, text=True)
+        result = subprocess.run([path, "-hide_banner", "-encoders"], stdin=subprocess.DEVNULL,
+                                capture_output=True, text=True)
     except OSError as e:
         log.warning("FFmpeg %s cannot be run: %s", path, e)
         return frozenset()

@@ -101,7 +101,7 @@ class DiscImageTest(unittest.TestCase):
 
     def _fake_chdman(self, track: bytes) -> None:
         """chdman writing a one-track sheet with the given data track, for the rest of the test."""
-        def run(args: list[str], capture_output: bool):
+        def run(args: list[str], **kwargs: object):
             sheet = Path(args[args.index("-o") + 1])
             (sheet.parent / "disc.bin").write_bytes(track)
             sheet.write_text('FILE "disc.bin" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n')

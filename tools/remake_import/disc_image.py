@@ -115,7 +115,8 @@ class DiscImage:
             if ffmpeg is None:
                 raise ImageError(f"audio track {number} ({track.path.name}) needs FFmpeg to decode")
             result = subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-i", str(track.path),
-                                     "-f", "s16le", "-ac", "2", "-ar", "44100", "-"], capture_output=True)
+                                     "-f", "s16le", "-ac", "2", "-ar", "44100", "-"],
+                                    stdin=subprocess.DEVNULL, capture_output=True)
             if result.returncode:
                 raise ImageError(f"FFmpeg cannot decode {track.path.name}: {result.stderr.decode(errors='replace')}")
             data = result.stdout[track.start:track.end]
@@ -197,7 +198,7 @@ def _chd(path: Path) -> tempfile.TemporaryDirectory:
     temp = tempfile.TemporaryDirectory(prefix="t3chd")
     log.info("extracting %s with chdman", path.name)
     result = subprocess.run([chdman, "extractcd", "-i", str(path), "-o", str(Path(temp.name) / CHD_SHEET)],
-                            capture_output=True)
+                            stdin=subprocess.DEVNULL, capture_output=True)
     if result.returncode:
         temp.cleanup()
         raise ImageError(f"chdman cannot extract {path.name}: {result.stderr.decode(errors='replace')}")
