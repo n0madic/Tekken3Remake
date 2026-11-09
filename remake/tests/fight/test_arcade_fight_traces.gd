@@ -51,6 +51,7 @@ const COMPARED_REPLAY := {
 	"recorded": [0x8021F668, -4],
 }
 const INPUT_MODES := 0x8021FAE4
+const HUD_WINS_SEEN := 0x8021F13C        ## u8 per player (FUN_801B3B24): the newest round mark blinks until then
 ## 0x802C6BD4: the camera's view, read after FUN_801AE9DC added the shake.
 const VIEW := {"pitch": [0x802C6BD4, -4], "yaw": [0x802C6BD8, -4], "roll": [0x802C6BDC, -4], "x": [0x802C6BE8, -4],
 	"y": [0x802C6BEC, -4], "z": [0x802C6BF0, -4], "h": [0x8021FAF4, -4]}
@@ -376,6 +377,9 @@ func _globals(sim: ArcadeSimulation, trace: ArcadeTrace, frame: int) -> PackedSt
 		var expected := trace.ram(frame, INPUT_MODES + 4 * i, -4)
 		if sim.fight.input_mode[i] != expected:
 			out.append("input mode %d: %d ≠ %d" % [i, sim.fight.input_mode[i], expected])
+		var wins_seen := trace.ram(frame, HUD_WINS_SEEN + i, 1)
+		if sim.fight.hud_wins_seen[i] != wins_seen:
+			out.append("HUD wins seen %d: %d ≠ %d" % [i, sim.fight.hud_wins_seen[i], wins_seen])
 	return out
 
 

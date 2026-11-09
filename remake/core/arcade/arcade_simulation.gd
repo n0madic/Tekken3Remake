@@ -237,6 +237,7 @@ func round_start() -> void:
 	effect_objects.round_start()
 	round_sounds.round_start(events)
 	ai.init_round()
+	fight.hud_wins_seen = PackedInt32Array([f0.round_wins, f1.round_wins])  # FUN_801B3B24
 	_reset_look_at()                    # FUN_801992B0
 	wind.round_start()
 
