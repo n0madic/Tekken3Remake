@@ -56,8 +56,17 @@ class CostumeCharactersTest(unittest.TestCase):
 
     def test_a_shared_slot_takes_the_arcade_set_of_its_owner(self) -> None:
         # Slot 36 is Nina's third costume (key 22) and Anna's first (key 72): the PlayStation's charId
-        # record is the first user's, the arcade's set the last named key's.
+        # record is the first user's, the arcade's set Anna's, whose first costume it is.
         self.assertEqual(effects.costume_characters(self._keys(key22=36, key72=36))[36], (5, 18))
+
+    def test_an_alias_does_not_take_a_character_slots(self) -> None:
+        # The arcade's charIds 17, 19 and 21 (Mishima lightning) reuse the first costumes of Nina
+        # (keys 20, 21), Yoshimitsu (32, 33) and King (16, 17): those keep their own sets (issue #29).
+        found = effects.costume_characters(self._keys(key20=10, key21=11, key68=10, key69=11,
+                                                      key32=16, key33=17, key76=16, key77=17,
+                                                      key16=8, key17=9, key84=8, key85=9))
+        self.assertEqual({slot: found[slot] for slot in (10, 11, 16, 17, 8, 9)},
+                         {10: (5, 5), 11: (5, 5), 16: (8, 8), 17: (8, 8), 8: (4, 4), 9: (4, 4)})
 
     def test_a_missing_costume_has_none(self) -> None:
         found = effects.costume_characters(self._keys(key4=2, key5=-1))

@@ -180,9 +180,15 @@ def costume_characters(slots: list[int]) -> dict[int, tuple[int, int]]:
     are among them: `FighterLoadCharacter` uploads their ARCs' member 1 like any other (the Mishima
     lightning, issue n0madic/Tekken3Remake#25).
 
-    The ARC's own character is the arcade's: slot 36's is Anna's (key 72), though Nina's third costume
-    (key 22) shares it."""
-    owners = {slot: key >> 2 for key, slot in enumerate(slots[:NAMED_KEYS])}
+    The slot's owner, whose arcade set it takes, is the first character with the slot as an earlier
+    costume: slot 36 is Anna's first (key 72) and Nina's third (key 22), so Anna's. The arcade's
+    table gives charIds 17, 19 and 21 (whose records are the Mishima lightning) the first two slots
+    of Nina, Yoshimitsu and King; those stay theirs (issue n0madic/Tekken3Remake#29)."""
+    owner_keys: dict[int, int] = {}
+    for key, slot in enumerate(slots[:NAMED_KEYS]):
+        if slot >= 0 and (slot not in owner_keys or (key & 3) < (owner_keys[slot] & 3)):
+            owner_keys[slot] = key
+    owners = {slot: key >> 2 for slot, key in owner_keys.items()}
     found: dict[int, tuple[int, int]] = {}
     for key, slot in enumerate(slots):
         if slot >= 0 and slot not in found:
