@@ -63,8 +63,9 @@ Additions of the remake:
   ver. E1).
   - With a disc and `--arcade`, the converter adds the arcade version's stage scenes, skies and
     floors (stages 0–12), which the remake draws instead of the PlayStation's backdrops (the *Stage
-    backdrops* setting switches back), the arcade's character models for costume slots 0–40 and its
-    effect flipbooks. The game itself is still the console's, from the disc.
+    backdrops* setting switches back), the arcade's character models for costume slots 0–40, its
+    effect flipbooks and its fight music, which the ARCADE soundtrack plays in the arcade's sections
+    by round. The game itself is still the console's, from the disc.
   - Without a disc, `make convert-arcade` converts the set alone into the arcade-only build.
 - **Python 3** with NumPy and Pillow, for the converter (and xxhash to convert DuckStation
   texture packs, `tools/remake/texture_pack.py import-duckstation`):

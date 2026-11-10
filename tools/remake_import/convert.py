@@ -19,7 +19,8 @@ must never be published.
 `--arcade` adds the arcade version's polygonal stage scenes, skies and floors from MAME's
 `tekken3` ROM set (arcade.py), which the remake draws instead of the PlayStation's backdrops,
 replaces the character models of costume slots 0–40 with the arcade's (arcade_character.py), and
-the effect flipbooks with the arcade's 64 × 64 frames (arcade_effects.py). Without any `--image`,
+the effect flipbooks with the arcade's 64 × 64 frames (arcade_effects.py), and renders the arcade's
+BGMs for the ARCADE soundtrack's fights, in sections by round (arcade_sounds.py). Without any `--image`,
 the game is converted from that set alone: the arcade version, with its modes and fighters only
 (arcade_game.py).
 """
@@ -39,6 +40,7 @@ import arcade
 import arcade_character
 import arcade_effect_objects
 import arcade_game
+import arcade_sounds
 import character
 import effects
 import enbu
@@ -100,6 +102,18 @@ def texture_index(out: Output) -> dict[str, str]:
         if rel.endswith(".png") and rel.startswith(REPLACEABLE) and rel not in NOT_REPLACEABLE:
             index[rel] = hashlib.sha256((out.root / rel).read_bytes()).hexdigest()[:TEXTURE_KEY_DIGITS]
     return index
+
+
+def convert_arcade_music(path: Path, out: Output, tool: media.FFmpeg) -> None:
+    """The arcade's BGMs for the ARCADE soundtrack's fights (arcade_sounds.PS_TRACKS); without the set's sound
+    chips the soundtrack stays the disc's."""
+    try:
+        program, wave_rom = arcade.sound_chips(path)
+    except arcade.ArcadeError as e:
+        log.warning("arcade music: %s; the ARCADE soundtrack stays the disc's", e)
+        return
+    arcade_sounds.convert_music(program, wave_rom, out, tool, arcade_sounds.BGM_SEQUENCES,
+                                ps_tracks=arcade_sounds.PS_TRACKS)
 
 
 def convert_arcade_only(args: argparse.Namespace) -> int:
@@ -233,6 +247,8 @@ def main() -> int:
             tool = media.find_ffmpeg(args.ffmpeg)
             if not args.no_music:
                 media.convert_music(disc, out, tool, MUSIC_TRACKS)
+                if arcade_set is not None:
+                    convert_arcade_music(args.arcade, out, tool)
             if not args.no_movies:
                 media.convert_title_movies(disc, out, tool)
                 media.convert_ending_movies(disc, out, tool)

@@ -1,10 +1,10 @@
 extends TestSuite
-## ArcadeAudio's decisions that need no files: the music's cues, and its section poller on made-up sections.
+## SectionMusic's decisions that need no files: the music's cues, and its sections on made-up ones.
 
 
-func _audio() -> ArcadeAudio:
-	var audio := ArcadeAudio.new()
-	audio._current = ArcadeAudio.Section.new()
+func _audio() -> SectionMusic:
+	var audio := SectionMusic.new()
+	audio._current = SectionMusic.Section.new()
 	audio._current.cues = PackedFloat32Array([2.0, 4.0, 6.0])
 	return audio
 
@@ -26,9 +26,18 @@ func test_a_loops_return_passes_the_cues_on_both_sides() -> void:
 	audio.free()
 
 
+func test_the_written_sections_go_1_2_3_then_2_and_3() -> void:
+	var order: Array[int] = []
+	var section := 0
+	for i in 6:
+		section = SectionMusic.next_section(section)
+		order.append(section)
+	expect_equal(order, [1, 2, 3, 2, 3, 2] as Array[int])
+
+
 func test_sections_are_found_by_number() -> void:
 	var audio := _audio()
-	var first := ArcadeAudio.Section.new()
+	var first := SectionMusic.Section.new()
 	first.number = 1
 	audio._track = [first]
 	expect_equal(audio._section_numbered(1), first)
@@ -41,7 +50,7 @@ func test_sections_are_found_by_number() -> void:
 ## n0madic/Tekken3Remake#31 (Jin's BGM, whose channels test the section variable itself, stayed in
 ## its intro).
 func test_every_bgm_reaches_its_sections_at_cues() -> void:
-	var path := AssetCatalog.ROOT.path_join(ArcadeAudio.MUSIC_TABLE)
+	var path := AssetCatalog.ROOT.path_join(SectionMusic.TABLE)
 	if not require(path) or not Assets.arcade_only():
 		return
 	var tracks: Dictionary = (JsonFile.read(path) as Dictionary)["tracks"]
@@ -53,3 +62,19 @@ func test_every_bgm_reaches_its_sections_at_cues() -> void:
 			expect(not (row["cues"] as Array).is_empty(), "%x section %d: cues" % [sequence, row["section"] as int])
 			expect(row["loop"] != null, "%x section %d: loops" % [sequence, row["section"] as int])
 		expect_equal(numbers, [0, 1, 2, 3] as Array[int], "%x: its sections" % sequence)
+
+
+## On a conversion next to a disc (`--arcade`), every fight track (7–28) stands for a converted BGM
+## with its sections, for the ARCADE soundtrack (issue n0madic/Tekken3Remake#31).
+func test_every_fight_track_has_an_arcade_bgm_next_to_a_disc() -> void:
+	var path := AssetCatalog.ROOT.path_join(SectionMusic.TABLE)
+	if not require(path) or Assets.arcade_only():
+		return
+	var data: Dictionary = JsonFile.read(path)
+	var tracks: Dictionary = data["tracks"]
+	var ps_tracks: Dictionary = data.get("ps_tracks", {})
+	for track in range(7, 29):
+		expect(ps_tracks.has(str(track)), "track %d" % track)
+		if ps_tracks.has(str(track)):
+			var sequence := (ps_tracks[str(track)] as Dictionary)["sequence"] as int
+			expect(tracks.has(str(sequence)), "track %d: sequence %x converted" % [track, sequence])

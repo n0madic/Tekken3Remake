@@ -604,6 +604,7 @@ func _step(pads: PackedInt32Array) -> void:
 			movie.stop()
 		return
 	audio.soundtrack = flow.progress.bgm
+	audio.fight_round = flow.fight.rounds_played if flow.fight != null else 0
 	audio.set_mono(flow.progress.speaker == GameProgress.SPEAKER_MONO)
 	audio.handle(flow.sim.events, handled)
 	for i in range(handled, flow.sim.events.items.size()):

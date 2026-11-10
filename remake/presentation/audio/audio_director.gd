@@ -4,6 +4,9 @@ extends Node
 ## music tracks (from `imported/music/music.json`, ARRANGE or ARCADE, with the track's volume;
 ## silent in a build without music) and the game's 16-bit sound codes (sound.md#sound-code) on
 ## emulated SPU voices, so that a sound replaces the one playing on its voice as in the game.
+## With the arcade's music converted (`--arcade`), the ARCADE soundtrack plays a fight's track as
+## the arcade's BGM in sections (SectionMusic): each later round of the fight moves it on to the
+## next section as the arcade's FUN_8019EED4 does (audio-and-effects.md#merged-music).
 ## SPEAKER OUT's MONO (the options) folds the whole mix down to mono on the master bus.
 
 const BUSES: Array[StringName] = [&"Music", &"SFX", &"Voices", &"System"]
@@ -22,8 +25,14 @@ const VOICES_KEPT := [2, 3]
 const VOICES_KEPT_MUSIC := [1, 6, 7]
 const WINNER_VOICE := 1              ## SpuGetKeyStatus(2): the winner's name, and what follows it
 const NOTHING_DUE := -1
+const ARCADE := 1                    ## the BGM option's ARCADE soundtrack
+const BOARD_TICKS_PER_STEP := 2      ## the arcade sound board's 120 Hz clock per simulation step
+## The arcade BGMs' level against the ARCADE streams': the streams are this much louder (the median of
+## the fight tracks' RMS over all sections; 1.2–2.7 by track), as far as a BGM's peak lets it be raised.
+const ARCADE_MUSIC_GAIN := 1.9
 
 var music := AudioStreamPlayer.new()
+var sections := SectionMusic.new()   ## the arcade's BGMs (a merged conversion)
 var voices: Array[AudioStreamPlayer] = []
 var tracks: Dictionary = {}
 var banks: Dictionary = {}           ## bank name → tones ("<program>_<tone>" → file, gain)
@@ -34,12 +43,15 @@ var mokujin_sounds: Array[PackedInt32Array] = []
 var fighter_banks := PackedStringArray(["", ""])
 var fighter_chars := PackedInt32Array([-1, -1])
 var soundtrack := 0                  ## 0 ARRANGE, 1 ARCADE (the BGM option)
+var fight_round := 0                 ## the fight's round (rounds_played) when a request comes; 0 outside one
 var music_available := false
 var _music_volume := 1.0             ## the track's own volume
 var _music_level := 1.0              ## the fade level (MusicSetVolume)
 var _prepared := -1                  ## the track MusicPlay(track, 1) loaded, silent until the volume call
 var _track := -1                     ## the track MusicPlay started (0x800A09C8); −1 once a stop forgot it
 var _version := -1                   ## and its version (the BGM option)
+var _section := 0                    ## the section variable last written for an arcade BGM
+var _arcade_gain := 1.0              ## the arcade BGM's own raise (ARCADE_MUSIC_GAIN, within its headroom)
 var _fade: Tween
 var _streams: Dictionary = {}       ## tone file → stream
 var _requested: Dictionary = {}     ## tone file → true: a background load is under way (_preload_bank)
@@ -63,6 +75,7 @@ func _ready() -> void:
 	AudioServer.set_bus_effect_enabled(0, AudioServer.get_bus_effect_count(0) - 1, false)
 	music.bus = &"Music"
 	add_child(music)
+	add_child(sections)
 	for i in SPU_VOICES:
 		var p := AudioStreamPlayer.new()
 		p.bus = &"SFX"
@@ -123,16 +136,29 @@ func set_fighters(costume_slots: PackedInt32Array, char_ids: PackedInt32Array) -
 ## MusicPlay(track): starts a track, −1 stops the music. The track that is already the current one
 ## (every round start asks for the stage's) is not started again: only the volume goes back to full
 ## at once, FUN_8006BF80(0x7F, −1); a stop (a disc read, GameFlow.disc_read) forgets the track.
+## An arcade BGM moves on to its next section instead, and starts again with a match's first round,
+## as the arcade's does (its fighters' load forgets the track, FUN_8019EE54).
 func play_music(track: int) -> void:
-	if track >= 0 and track == _track and soundtrack == _version:
+	var same := track >= 0 and track == _track and soundtrack == _version
+	if same and sections.playing() and fight_round <= 1:
+		same = false
+	if same:
 		_prepared = -1
+		if sections.playing():
+			_next_section(track)
 		fade_music(int(VOLUME_MAX), 0)
 		return
-	play_track(track, soundtrack)
+	_start(track, soundtrack, true)
 
 
-## A track in a given version (0 ARRANGE, 1 ARCADE): the Theater's sound player picks it.
+## A track in a given version (0 ARRANGE, 1 ARCADE): the Theater's sound player picks it, from the
+## disc's streams.
 func play_track(track: int, version: int) -> void:
+	_start(track, version, false)
+
+
+## `arcade`: an arcade BGM stands in for the ARCADE version of a fight's track when there is one.
+func _start(track: int, version: int, arcade: bool) -> void:
 	_prepared = -1
 	_track = track
 	_version = version
@@ -140,6 +166,7 @@ func play_track(track: int, version: int) -> void:
 		_fade.kill()
 		_fade = null
 	music.stop()
+	sections.stop()
 	_music_level = 1.0
 	if track < 0 or not music_available:
 		return
@@ -147,16 +174,41 @@ func play_track(track: int, version: int) -> void:
 	if variants.is_empty():
 		return
 	var v: Dictionary = variants[clampi(version, 0, variants.size() - 1)]
+	var volume: float = v["volume"]
+	_music_volume = volume / VOLUME_MAX
+	if arcade and version == ARCADE and _start_sections(track):
+		_apply_music_volume()
+		return
 	var stream := load(Assets.path("music/" + str(v["file"]))) as AudioStream
 	var ogg := stream as AudioStreamOggVorbis
 	if ogg != null:
 		var loop: bool = v["loop"]
 		ogg.loop = loop                    # the whole stream; a WAV carries its loop itself
 	music.stream = stream
-	var volume: float = v["volume"]
-	_music_volume = volume / VOLUME_MAX
 	_apply_music_volume()
 	music.play()
+
+
+## The arcade BGM of a PlayStation track (`music/arcade.json` "ps_tracks"), in its first section.
+func _start_sections(track: int) -> bool:
+	var entry: Dictionary = sections.ps_tracks.get(str(track), {})
+	if entry.is_empty():
+		return false
+	var sequence := entry["sequence"] as int
+	_section = entry["first_section"] as int
+	_arcade_gain = minf(ARCADE_MUSIC_GAIN, sections.headroom(sequence))
+	sections.play(sequence, _section)
+	return sections.playing()
+
+
+## FUN_8019EED4 at a later round: the next section (1, 2, 3, 2, 3…), unless the BGM stays where it
+## is (the arcade's Ogre fight).
+func _next_section(track: int) -> void:
+	var entry: Dictionary = sections.ps_tracks.get(str(track), {})
+	if not (entry.get("advance", false) as bool):
+		return
+	_section = SectionMusic.next_section(_section)
+	sections.write(_section)
 
 
 ## MusicSetVolume(volume 0–127, frames): fades the music to `volume` over `frames`.
@@ -179,6 +231,7 @@ func _set_music_level(level: float) -> void:
 
 func _apply_music_volume() -> void:
 	music.volume_db = linear_to_db(maxf(_music_volume * _music_level, 0.0001))
+	sections.set_gain(_music_volume * _music_level * _arcade_gain)
 
 
 ## Stops the music and every sound (before quitting: the audio server releases a playback on
@@ -186,6 +239,7 @@ func _apply_music_volume() -> void:
 func stop_all() -> void:
 	_due_code = NOTHING_DUE
 	music.stop()
+	sections.stop()
 	for p in voices:
 		p.stop()
 
@@ -253,6 +307,7 @@ func voices_off(keep_music: bool) -> void:
 func handle(events: SimEvents, from := 0) -> void:
 	_collect_dropped()
 	_step_due_sound()
+	sections.advance(BOARD_TICKS_PER_STEP)
 	for i in range(from, events.items.size()):
 		var e := events.items[i]
 		match e.kind:

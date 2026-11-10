@@ -372,10 +372,40 @@ class MusicFilesTest(unittest.TestCase):
                 self.assertTrue((Path(folder) / "music" / row["file"]).exists())
                 self.assertTrue(row["loop"] is not None and row["loop"] < row["length"])
             self.assertGreater(sections[1]["delay"], 0)
+            self.assertGreater(table[str(SECTIONS_SEQUENCE)]["peak"], 0, "the loudest sample of its sections")
             self.assertEqual(sections[0]["delay"], 0)
             direct = table[str(DIRECT_SEQUENCE)]["sections"]
             self.assertEqual([(row["section"], row["delay"]) for row in direct], [(0, 0), (1, 0)])
             self.assertTrue(direct[0]["cues"], "the intro's bars that test the section variable")
+            self.assertNotIn("ps_tracks", json.loads((Path(folder) / "music" / "arcade.json").read_text()))
+
+    def test_next_to_a_disc_the_table_names_the_tracks_of_converted_sequences(self) -> None:
+        b = board()
+        add_direct(b)
+        tracks = {7: sounds.PsTrack(DIRECT_SEQUENCE), 21: sounds.PsTrack(DIRECT_SEQUENCE, advance=False),
+                  27: sounds.PsTrack(DIRECT_SEQUENCE, first_section=1), 8: sounds.PsTrack(SECTIONS_SEQUENCE)}
+        with tempfile.TemporaryDirectory() as folder:
+            out = Output(Path(folder))
+            sounds.convert_music(b.program(), b.wave_rom.tobytes(), out, None, (DIRECT_SEQUENCE,), workers=1,
+                                 ps_tracks=tracks)
+            table = json.loads((Path(folder) / "music" / "arcade.json").read_text())["ps_tracks"]
+        self.assertEqual(table, {
+            "7": {"sequence": DIRECT_SEQUENCE, "first_section": 0, "advance": True},
+            "21": {"sequence": DIRECT_SEQUENCE, "first_section": 0, "advance": False},
+            "27": {"sequence": DIRECT_SEQUENCE, "first_section": 1, "advance": True},
+        }, "track 8's sequence was not converted")
+
+
+class PsTracksTest(unittest.TestCase):
+    def test_every_fight_track_has_a_bgm(self) -> None:
+        self.assertEqual(sorted(sounds.PS_TRACKS), list(range(7, 29)))
+        for track, entry in sounds.PS_TRACKS.items():
+            self.assertIn(entry.sequence, sounds.BGM_SEQUENCES, track)
+
+    def test_the_ogre_tracks_are_the_two_parts_of_his_bgm(self) -> None:
+        ogre, true_ogre = sounds.PS_TRACKS[21], sounds.PS_TRACKS[27]
+        self.assertEqual((ogre.sequence, ogre.first_section, ogre.advance), (sounds.OGRE_BGM, 0, False))
+        self.assertEqual((true_ogre.sequence, true_ogre.first_section, true_ogre.advance), (sounds.OGRE_BGM, 1, True))
 
 
 class PlayerTest(unittest.TestCase):

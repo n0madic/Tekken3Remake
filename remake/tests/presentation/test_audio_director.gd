@@ -274,3 +274,95 @@ func test_dropped_loads_do_not_block() -> void:
 		director._collect_dropped()
 	expect(director._dropped.is_empty(), "the finished loads are taken")
 	director.free()
+
+
+## SectionMusic without files: every section is a second of silence.
+class SilentSections extends SectionMusic:
+	func _request(_section: Section) -> void:
+		pass
+
+	func _music_stream(_section: Section) -> AudioStream:
+		var stream := AudioStreamWAV.new()
+		stream.mix_rate = 8000
+		stream.data = PackedByteArray()
+		stream.data.resize(16000)
+		return stream
+
+
+const JIN_TRACK := 16
+const OGRE_TRACK := 21
+const TRUE_OGRE_TRACK := 27
+
+
+func _sections_director() -> AudioDirector:
+	var director := AudioDirector.new()
+	director.sections.free()
+	director.sections = SilentSections.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(director)
+	var rows: Array = []
+	for k in 4:
+		rows.append({"section": k, "file": "s_%d" % k, "loop": 0.0, "delay": 0.0, "cues": [0.5]})
+	director.sections.load_table({
+		"tracks": {"29": {"sections": rows, "peak": 16384}, "30": {"sections": rows, "peak": 30000}},
+		"ps_tracks": {
+			str(JIN_TRACK): {"sequence": 29, "first_section": 0, "advance": true},
+			str(OGRE_TRACK): {"sequence": 30, "first_section": 0, "advance": false},
+			str(TRUE_OGRE_TRACK): {"sequence": 30, "first_section": 1, "advance": true},
+		},
+	})
+	director.sections.available = true
+	director.music_available = true
+	var variants := [{"file": "arrange", "loop": true, "volume": 127}, {"file": "arcade", "loop": true, "volume": 100}]
+	director.tracks = {str(JIN_TRACK): variants, str(OGRE_TRACK): variants, str(TRUE_OGRE_TRACK): variants}
+	director.soundtrack = AudioDirector.ARCADE
+	return director
+
+
+func _round(director: AudioDirector, track: int, round_number: int) -> int:
+	director.fight_round = round_number
+	director.play_music(track)
+	return director.sections._variable
+
+
+## Issue n0madic/Tekken3Remake#31: with the arcade's music converted, the ARCADE soundtrack plays a
+## fight's track as the arcade BGM, and each later round writes its next section as the arcade does.
+func test_each_later_round_moves_an_arcade_bgm_on() -> void:
+	var director := _sections_director()
+	expect_equal(_round(director, JIN_TRACK, 1), 0, "the first round: the intro")
+	expect(director.sections.playing() and not director.music.playing, "the arcade BGM, not the stream")
+	expect_equal(director.sections._current.number, 0)
+	var written: Array[int] = []
+	for r in range(2, 7):
+		written.append(_round(director, JIN_TRACK, r))
+	expect_equal(written, [1, 2, 3, 2, 3] as Array[int], "rounds 2–6")
+	expect_equal(_round(director, JIN_TRACK, 1), 0, "a new match (or a continue) starts the BGM again")
+	expect_equal(director.sections._current.number, 0)
+	director.stop_all()
+	director.free()
+
+
+func test_the_ogre_fight_stays_in_its_intro_and_true_ogre_goes_on_from_section_1() -> void:
+	var director := _sections_director()
+	_round(director, OGRE_TRACK, 1)
+	expect_equal(_round(director, OGRE_TRACK, 2), 0, "no section in the Ogre fight")
+	expect_equal(_round(director, TRUE_OGRE_TRACK, 1), 1, "True Ogre starts in section 1")
+	expect_equal(director.sections._current.number, 1)
+	expect_equal(_round(director, TRUE_OGRE_TRACK, 2), 2)
+	director.stop_all()
+	director.free()
+
+
+func test_the_bgm_takes_the_tracks_volume_and_its_fades() -> void:
+	var director := _sections_director()
+	_round(director, JIN_TRACK, 1)
+	expect_equal(director.sections._gain, 100.0 / AudioDirector.VOLUME_MAX * AudioDirector.ARCADE_MUSIC_GAIN,
+		"raised: its peak leaves room")
+	_round(director, OGRE_TRACK, 1)
+	expect(is_equal_approx(director.sections._gain, 100.0 / AudioDirector.VOLUME_MAX * SectionMusic.FULL_SCALE / 30000.0),
+		"raised no further than its peak allows")
+	director.fade_music(0, 0)
+	expect_equal(director.sections._gain, 0.0, "faded out")
+	director.play_music(-1)
+	expect(not director.sections.playing(), "a stop stops it")
+	director.stop_all()
+	director.free()

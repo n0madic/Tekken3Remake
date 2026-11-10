@@ -8,17 +8,11 @@ extends Node
 ## A plan runs on a channel: a new request on a channel ends the old one, a note takes the voice
 ## from whatever holds it, a channel's end takes its voices along, as on the board.
 ##
-## Music: a BGM is a file per section. The flow writes the section variable; the sequence's poller
-## answers after its delay, and the music jumps at the next of the file's cues (the bars that test
-## it), so a section changes at the bar the cabinet would change it. What the sound channels'
-## voices take from the music on the board (the voices are shared by priority) is not reproduced:
-## the music was rendered alone.
-##
-## TODO: on the board the channels that test the variable itself change section a bar before the
-## others; a file per section has them change together (docs/research/arcade/audio-and-effects.md).
+## Music: a BGM is a file per section, played by SectionMusic. What the sound channels' voices take
+## from the music on the board (the voices are shared by priority) is not reproduced: the music was
+## rendered alone.
 
 const SOUND_TABLE := "sounds/arcade.json"
-const MUSIC_TABLE := "music/arcade.json"
 const VOICES := 32
 const CHANNELS := 32
 const BOARD_RATE := 120              ## ticks per second
@@ -31,11 +25,6 @@ const NIBBLE_VOICE_LAST := 5
 const NIBBLE_THROW_VOICE := 4        ## FUN_801A0CD4 echoes it like a replay's
 const NIBBLE_HIT := 7
 const OWN_WAVE := -1
-const SECTION_NONE := -1
-const SECTION_FIRST := 1             ## the poller waits for 1, then 2, then 3, then for 2 and 3 in turn
-const SECTION_LAST := 3
-const SECTION_AGAIN := 2
-const SECTION_CROSSFADE := 0.03      ## seconds: the two renderings of the same bar overlap this long
 const SILENT_DB := -80.0
 
 
@@ -60,16 +49,8 @@ class Running:
 	var next_note := 0
 
 
-class Section:
-	var number := 0
-	var file := ""
-	var loop := -1.0
-	var cues := PackedFloat32Array()
-	var delay := 0.0
-
-
 var available := false
-var music_available := false
+var music := SectionMusic.new()
 var _plans: Array[Plan] = []
 var _waves: Dictionary = {}          ## wave number → file name
 var _table := PackedInt32Array()     ## sound id → wave (the system route's)
@@ -78,7 +59,6 @@ var _sound: Array[PackedInt32Array] = []    ## per player, sound id → plan
 var _hit: Array[PackedInt32Array] = []
 var _voice: Array[PackedInt32Array] = []    ## per player: the plan without and with the replay's echoes
 var _sequences: Dictionary = {}      ## sequence → plan
-var _tracks: Dictionary = {}         ## sequence → Array[Section]
 var _streams: Dictionary = {}        ## file → AudioStream
 
 var _clock := 0                      ## board ticks
@@ -88,16 +68,6 @@ var _note_channel := PackedInt32Array()
 var _note_started := PackedInt32Array()
 var _note_gain: Array[PackedFloat32Array] = []
 
-var _music: Array[AudioStreamPlayer] = []
-var _music_at := 0                   ## the player that sounds
-var _track: Array[Section] = []
-var _current: Section
-var _variable := 0                   ## var[0xE0]
-var _expected := SECTION_FIRST
-var _pending := SECTION_NONE
-var _pending_ticks := 0
-var _last_position := 0.0
-var _fade: Tween
 
 
 func _ready() -> void:
@@ -114,14 +84,9 @@ func _ready() -> void:
 		var p := AudioStreamPlayer.new()
 		add_child(p)
 		_players.append(p)
-	for i in 2:
-		var p := AudioStreamPlayer.new()
-		p.bus = &"Music"
-		add_child(p)
-		_music.append(p)
+	add_child(music)
 	_load_sounds()
-	_load_music()
-	Log.debug("arcade audio: %d plans, %d samples, %d music sequences" % [_plans.size(), _waves.size(), _tracks.size()])
+	Log.debug("arcade audio: %d plans, %d samples, %d music sequences" % [_plans.size(), _waves.size(), music.sequence_count()])
 
 
 func _load_sounds() -> void:
@@ -156,26 +121,6 @@ func _load_sounds() -> void:
 	available = true
 
 
-func _load_music() -> void:
-	music_available = Assets.has_group("music") and FileAccess.file_exists(Assets.path(MUSIC_TABLE))
-	if not music_available:
-		return
-	var data: Dictionary = JsonFile.read(Assets.path(MUSIC_TABLE))
-	var tracks: Dictionary = data["tracks"]
-	for key: String in tracks:
-		var sections: Array[Section] = []
-		for row: Dictionary in (tracks[key] as Dictionary)["sections"] as Array:
-			var section := Section.new()
-			section.number = row["section"] as int
-			section.file = row["file"] as String
-			section.loop = -1.0 if row["loop"] == null else row["loop"] as float
-			section.delay = row["delay"] as float
-			for c: float in row["cues"] as Array:
-				section.cues.append(c)
-			sections.append(section)
-		_tracks[key.to_int()] = sections
-
-
 ## The step's requests. `sounds_on`: the board hears what the program does not hold back (ArcadeGameFlow.sounds_on).
 func handle(events: SimEvents, fight: FightState, sounds_on: bool) -> void:
 	for e: SimEvents.Event in events.items:
@@ -184,7 +129,7 @@ func handle(events: SimEvents, fight: FightState, sounds_on: bool) -> void:
 				_stop_all(e.a != 0)
 			SimEvents.Kind.MUSIC_STOP:
 				if e.fighter < 0:
-					stop_music()
+					music.stop()
 			SimEvents.Kind.VOICE_OFF:
 				# A fighter's are the PlayStation's voice key-offs, here the board's scripts'.
 				if e.fighter < 0 and sounds_on:
@@ -201,10 +146,10 @@ func handle(events: SimEvents, fight: FightState, sounds_on: bool) -> void:
 					_on_system_sound(e)
 			SimEvents.Kind.MUSIC:
 				if sounds_on:
-					play_music(e.a)
+					music.play(e.a)
 			SimEvents.Kind.MUSIC_SECTION:
 				if sounds_on:
-					_variable = e.a
+					music.write(e.a)
 
 
 func _on_sound(e: SimEvents.Event, fight: FightState) -> void:
@@ -265,7 +210,7 @@ func _stop_all(keep_last: bool) -> void:
 	for channel in CHANNELS:
 		if not keep_last or channel != KEPT_CHANNEL:
 			_end_channel(channel)
-	stop_music()
+	music.stop()
 
 
 func _run_channel(channel: int, run: Running) -> void:
@@ -312,7 +257,7 @@ func advance() -> void:
 		if _note_channel[v] >= 0 and _note_gain[v].size() > 1:
 			var at := mini(_clock - _note_started[v], _note_gain[v].size() - 1)
 			_players[v].volume_linear = _note_gain[v][at]
-	_run_music()
+	music.advance(TICKS_PER_STEP)
 
 
 ## The pause: the voices and the music hold where they are and go on from there. The board's clock
@@ -320,124 +265,4 @@ func advance() -> void:
 func set_paused(paused: bool) -> void:
 	for p in _players:
 		p.stream_paused = paused
-	for p in _music:
-		p.stream_paused = paused
-	if _fade != null and _fade.is_valid():
-		if paused:
-			_fade.pause()
-		else:
-			_fade.play()
-
-
-# ==== the music ===================================================================================
-
-func play_music(sequence: int) -> void:
-	# The script clears the section variables as it starts.
-	_variable = 0
-	_expected = SECTION_FIRST
-	_pending = SECTION_NONE
-	if not music_available or not _tracks.has(sequence):
-		stop_music()
-		return
-	var sections: Array[Section] = []
-	sections.assign(_tracks[sequence] as Array)
-	_track = sections
-	Log.debug("arcade audio: music %02x" % sequence)
-	for section in _track:
-		if section.number != 0:
-			ResourceLoader.load_threaded_request(Assets.path("music/" + section.file))
-	_change_to(_track[0], 0.0, false)
-
-
-func stop_music() -> void:
-	if _fade != null:
-		_fade.kill()
-	for p in _music:
-		p.stop()
-	_current = null
-	_track = []
-	_variable = 0
-	_pending = SECTION_NONE
-
-
-func _music_stream(section: Section) -> AudioStream:
-	var path := Assets.path("music/" + section.file)
-	if not _streams.has(path):
-		var stream: AudioStream
-		if ResourceLoader.load_threaded_get_status(path) == ResourceLoader.THREAD_LOAD_INVALID_RESOURCE:
-			stream = load(path) as AudioStream
-		else:
-			stream = ResourceLoader.load_threaded_get(path) as AudioStream
-		_set_loop(stream, section)
-		_streams[path] = stream
-	return _streams[path] as AudioStream
-
-
-func _set_loop(stream: AudioStream, section: Section) -> void:
-	var ogg := stream as AudioStreamOggVorbis
-	if ogg != null:
-		ogg.loop = section.loop >= 0.0
-		ogg.loop_offset = maxf(section.loop, 0.0)
-
-
-func _change_to(section: Section, from: float, crossfade: bool) -> void:
-	var stream := _music_stream(section)
-	var old := _music[_music_at]
-	_music_at = 1 - _music_at
-	var new := _music[_music_at]
-	if _fade != null:
-		_fade.kill()
-	new.stream = stream
-	new.volume_db = 0.0
-	new.play(from)
-	if crossfade and old.playing:
-		new.volume_db = SILENT_DB
-		_fade = create_tween().set_parallel(true)
-		_fade.tween_property(new, ^"volume_linear", 1.0, SECTION_CROSSFADE)
-		_fade.tween_property(old, ^"volume_linear", 0.0, SECTION_CROSSFADE)
-		_fade.chain().tween_callback(old.stop)
-	else:
-		old.stop()
-	_current = section
-	_last_position = from
-	Log.debug("arcade audio: music section %d (%s)" % [section.number, section.file])
-
-
-func _section_numbered(number: int) -> Section:
-	for section in _track:
-		if section.number == number:
-			return section
-	return null
-
-
-## The sequence's poller and the bars' tests.
-func _run_music() -> void:
-	if _current == null:
-		return
-	if _pending == SECTION_NONE and _variable == _expected:
-		_pending = _expected
-		_expected = SECTION_AGAIN if _expected == SECTION_LAST else _expected + 1
-		var next := _section_numbered(_pending)
-		if next == null:
-			_pending = SECTION_NONE
-		else:
-			_pending_ticks = roundi(next.delay * BOARD_RATE)
-	if _pending != SECTION_NONE:
-		_pending_ticks -= TICKS_PER_STEP
-	var position := _music[_music_at].get_playback_position()
-	if _pending != SECTION_NONE and _pending_ticks <= 0:
-		var cue := _crossed_cue(_last_position, position)
-		if cue >= 0.0:
-			_change_to(_section_numbered(_pending), maxf(position - cue, 0.0), true)
-			_pending = SECTION_NONE
-			return
-	_last_position = position
-
-
-## The cue between two playback positions, a loop's return between them too; else −1.
-func _crossed_cue(before: float, now: float) -> float:
-	for cue in _current.cues:
-		if (now >= before and cue > before and cue <= now) or (now < before and (cue > before or cue <= now)):
-			return cue
-	return -1.0
-
+	music.set_paused(paused)

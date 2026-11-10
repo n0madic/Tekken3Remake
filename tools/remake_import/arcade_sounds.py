@@ -8,6 +8,10 @@ The table gives a section's loop start, the times of those tests (the cues) and 
 through, so the runtime changes section at the same bar as the cabinet
 (docs/research/arcade/audio-and-effects.md#sections).
 
+Converted next to a disc (`--arcade`), only the BGMs are, with the PlayStation tracks they stand for (`ps_tracks`):
+the ARCADE soundtrack plays a fight's track as its arcade BGM, a section further each round
+(docs/research/arcade/audio-and-effects.md#merged-music).
+
 Sounds (`sounds/arcade.json`, `sounds/w<wave>.wav`): the samples as they are, at their rates. What the
 player sequences do with them (which C352 voice, when, how loud, the echoes and the chained name of a
 winner) is read by running them, so that the runtime keeps a plan per request and no number of the scripts.
@@ -57,6 +61,29 @@ FILTER_CUTOFF = 0.45             # of the output's rate: the 2:1 filter
 # Sequences the game starts as music: the BGMs (stage records) and the flow's.
 BGM_SEQUENCES = range(0x10, 0x1F)
 FLOW_SEQUENCES = range(0x60, 0x67)
+
+
+@dataclass(frozen=True)
+class PsTrack:
+    """The arcade BGM a PlayStation fight track stands for."""
+
+    sequence: int
+    first_section: int = 0       # the True Ogre fight goes on in the section the Ogre scene wrote
+    advance: bool = True         # the Ogre fight stays in its intro (FUN_8019EED4 skips the Ogre's BGM)
+
+
+SHARED_BGM = 0x11                # the theme of the arcade's other characters (and the ARCADE soundtrack's stream 6)
+OGRE_BGM = 0x1E
+# PlayStation fight track (the character records' music byte, sound.md#music) → the arcade character's own BGM
+# (the arcade's character records, byte +0x0B). Anna and Tiger have Nina's and Eddy's there; Doctor B. and Gon, who
+# are not in the arcade, the shared theme as in the ARCADE soundtrack.
+PS_TRACKS: dict[int, PsTrack] = {
+    7: PsTrack(0x10), 8: PsTrack(0x12), 9: PsTrack(0x13), 10: PsTrack(0x14), 11: PsTrack(0x15), 12: PsTrack(0x16),
+    13: PsTrack(0x19), 14: PsTrack(0x1B), 15: PsTrack(0x1C), 16: PsTrack(0x1D),
+    17: PsTrack(SHARED_BGM), 18: PsTrack(SHARED_BGM), 19: PsTrack(SHARED_BGM), 20: PsTrack(0x17),
+    21: PsTrack(OGRE_BGM, advance=False), 22: PsTrack(SHARED_BGM), 23: PsTrack(SHARED_BGM), 24: PsTrack(0x16),
+    25: PsTrack(SHARED_BGM), 26: PsTrack(SHARED_BGM), 27: PsTrack(OGRE_BGM, first_section=1), 28: PsTrack(0x1C),
+}
 
 
 @dataclass(frozen=True)
@@ -517,7 +544,10 @@ def section_row(kept: SectionPlan, delay: int, cue_variable: int, name: str, fra
 
 
 def convert_music(program: bytes, wave_rom: bytes, out: Output, tool: media.FFmpeg | None,
-                  sequences: Iterable[int] = (*BGM_SEQUENCES, *FLOW_SEQUENCES), workers: int | None = None) -> None:
+                  sequences: Iterable[int] = (*BGM_SEQUENCES, *FLOW_SEQUENCES), workers: int | None = None,
+                  ps_tracks: dict[int, PsTrack] | None = None) -> None:
+    """`ps_tracks`: the PlayStation tracks the sequences stand for (a conversion next to a disc); those whose
+    sequence is not converted are left out."""
     workers = workers or os.cpu_count() or 1
     groups = sequence_groups(program, sequences)
     firsts = sorted(set(groups.values()))
@@ -532,15 +562,16 @@ def convert_music(program: bytes, wave_rom: bytes, out: Output, tool: media.FFmp
     rendered = sorted(set(kept.values()))
     results = _parallel(_render_job, [(plans[key], tool) for key in rendered], program, wave_rom, workers)
     files: dict[tuple[int, int], tuple[str, int]] = {}
-    peak = 0
+    peaks: dict[tuple[int, int], int] = {}
     for key, (data, extension, frames, section_peak) in zip(rendered, results):
         name = f"s{key[0]:03x}_{key[1]}.{extension}"
         out.write(f"music/{name}", data)
         files[key] = (name, frames)
-        peak = max(peak, section_peak)
+        peaks[key] = section_peak
     tracks: dict[str, dict] = {}
     for sequence, first in groups.items():
         rows = []
+        peak = 0
         for k in range(SECTIONS):
             plan = plans.get((first, k))
             if plan is not None:
@@ -551,10 +582,16 @@ def convert_music(program: bytes, wave_rom: bytes, out: Output, tool: media.FFmp
                 row = section_row(plans[kept[(first, k)]], plan.delay, cue_variable, name, frames)
                 row["section"] = k
                 rows.append(row)
-        tracks[str(sequence)] = {"sections": rows}
-    out.write_json("music/arcade.json", {"tracks": tracks})
+                peak = max(peak, peaks[kept[(first, k)]])
+        # The loudest sample of all its sections: how far a player may raise it before it clips.
+        tracks[str(sequence)] = {"sections": rows, "peak": peak}
+    table: dict[str, Any] = {"tracks": tracks}
+    if ps_tracks is not None:
+        table["ps_tracks"] = {str(track): {"sequence": t.sequence, "first_section": t.first_section, "advance": t.advance}
+                              for track, t in sorted(ps_tracks.items()) if str(t.sequence) in tracks}
+    out.write_json("music/arcade.json", table)
     log.info("arcade music: %d sequences, %d files, %.1f minutes, peak %d of 32767", len(groups), len(files),
-             sum(frames for _, frames in files.values()) / OUTPUT_RATE / 60, peak)
+             sum(frames for _, frames in files.values()) / OUTPUT_RATE / 60, max(peaks.values(), default=0))
 
 
 # ---- what the players do ----
