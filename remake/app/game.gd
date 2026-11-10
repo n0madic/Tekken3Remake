@@ -518,8 +518,8 @@ func _physics_process(_delta: float) -> void:
 
 
 ## Whether the touch controls show only Select and Start: over what Start skips (movies, the
-## title and demonstration, replays) and the records pages without a name to enter, which Start
-## leaves.
+## title and demonstration; not a replay, where a held kick picks the win pose) and the records
+## pages without a name to enter, which Start leaves.
 func _playback() -> bool:
 	if SkipButtons.skippable(flow, movie.playing):
 		return true

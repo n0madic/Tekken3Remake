@@ -26,7 +26,7 @@ func test_cross_and_circle_skip_the_attract_sequence() -> void:
 	expect_equal(_mapped(flow, PadState.CROSS), PadState.CROSS, "✕ on the way to the menu")
 
 
-func test_fights_skip_only_replays_and_the_demonstration() -> void:
+func test_fights_skip_only_the_demonstration() -> void:
 	var flow := _flow()
 	if flow == null:
 		return
@@ -35,7 +35,7 @@ func test_fights_skip_only_replays_and_the_demonstration() -> void:
 	flow.fight.replay_playing = 0
 	expect_equal(_mapped(flow, PadState.CROSS), PadState.CROSS, "✕ in a fight is a punch")
 	flow.fight.replay_playing = 1
-	expect_equal(_mapped(flow, PadState.CROSS), PadState.CROSS | PadState.START, "✕ skips a replay")
+	expect_equal(_mapped(flow, PadState.CROSS), PadState.CROSS, "✕ in a replay picks the win pose, skips nothing")
 	flow.fight.replay_playing = 0
 	flow.region.mode = 6
 	expect_equal(_mapped(flow, PadState.CIRCLE), PadState.CIRCLE | PadState.START, "○ skips the demonstration fight")

@@ -1,6 +1,7 @@
 class_name SkipButtons
-## A convenience of the remake: the game skips its start-up, attract sequence, replays and movies
-## on Start only; ✕ and ○ skip them too (the steps see Start held with them).
+## A convenience of the remake: the game skips its start-up, attract sequence and movies on Start
+## only; ✕ and ○ skip them too (the steps see Start held with them). Not a fight's replay: ✕ and ○
+## are kicks there, held to pick the win pose that follows (issue n0madic/Tekken3Remake#35).
 
 const BUTTONS := PadState.CROSS | PadState.CIRCLE
 
@@ -26,8 +27,8 @@ static func skips_blocking_movie(flow: GameFlow) -> bool:
 	return (pressed[0] | pressed[1]) & (PadState.START | BUTTONS) != 0
 
 
-## Whether what shows is skipped with Start: the boot and title screens, the opening movies, the
-## demonstration and its fight, a fight's replay, an ending or Theater movie.
+## Whether what shows is skipped with ✕ and ○ as with Start: the boot and title screens, the
+## opening movies, the demonstration and its fight, an ending or Theater movie.
 static func skippable(flow: GameFlow, movie_playing: bool) -> bool:
 	if movie_playing:
 		return true
@@ -37,6 +38,6 @@ static func skippable(flow: GameFlow, movie_playing: bool) -> bool:
 		GameFlow.State.TRANSITION:
 			return flow.progress.transition_target in [GameFlow.State.TITLE, GameFlow.State.ENBU]
 		GameFlow.State.FIGHT:
-			# Not the win poses after a replay: the button held there picks the pose.
-			return flow.region.mode == GameMode.DEMO or flow.fight.replay_playing != 0
+			# Not a replay nor the win poses after it: the button held picks the pose.
+			return flow.region.mode == GameMode.DEMO
 	return false
