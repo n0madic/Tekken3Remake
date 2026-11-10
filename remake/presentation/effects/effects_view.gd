@@ -59,6 +59,9 @@ var flipbooks := Node3D.new()        ## the sprites and lights, hidden on steps 
 var _free: Array[Sprite] = []        ## ended sprites, reused by the next spawns
 var _free_lights: Array[OmniLight3D] = []   ## ended lights, hidden, reused by the next ones
 var _quad := QuadMesh.new()
+## The arcade's hit colour GREEN (ArcadeSettings.hit_colour): the hit's flipbook (system set 0, the
+## only record with the exchange word) has red and green exchanged.
+var green_hit := false
 
 
 func setup(effects: EffectData) -> void:
@@ -195,6 +198,7 @@ func _spawn(book: EffectData.Flipbook, at: Vector3, delay: int, drift := Vector3
 	s.material.set_shader_parameter("albedo_texture", book.texture)
 	s.material.set_shader_parameter("frame_scale", (-1.0 if mirrored else 1.0) / book.frames)
 	s.material.set_shader_parameter("over_all", over_all)
+	s.material.set_shader_parameter("exchange_red_green", green_hit and not data.system.is_empty() and book == data.system[0])
 	s.at = at
 	s.node.position = at
 	s.node.scale = Vector3.ONE

@@ -13,6 +13,7 @@ const ROOT_CHANNELS := 0x8021FAC8
 const ROUNDS := 0x80374F36
 const ROUND_TIME := 0x8021FC84
 const NEUTRAL_GUARD := 0x8021FC70
+const GUARD_DAMAGE := 0x8021FDA8
 const CPU_GROUP := 0x8021FB74
 const LIFE_VERSUS := 0x8021FC54
 const LIFE_ONE := 0x8021FDD0
@@ -336,6 +337,7 @@ func _choice(trace: ArcadeTrace) -> ArcadeSimulation.Match:
 	m.rounds = trace.ram(0, ROUNDS, 1)
 	m.round_time = trace.ram(0, ROUND_TIME, -4)
 	m.neutral_guard = trace.ram(0, NEUTRAL_GUARD, 1)
+	m.guard_damage = trace.ram(0, GUARD_DAMAGE, -4)
 	m.cpu_group = trace.ram(0, CPU_GROUP, -4)
 	m.one_player_table = m.cpu_group == 1
 	m.joined = trace.ram(0, JOINED, 1)

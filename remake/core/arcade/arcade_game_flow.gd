@@ -322,11 +322,11 @@ func start_mode(new_mode: int, players: int) -> void:
 	match new_mode:
 		MODE_ARCADE:
 			match_flow.name_entry.phase = 0     # FUN_801B901C
-			var demo_bit := (settings.demo_bit & 1) << 2
+			var versus_change := (settings.versus_change & 1) << 2
 			if settings.event_mode == 0:
-				flags = (flags & ~0x14) | 3 | demo_bit | 8
+				flags = (flags & ~0x14) | 3 | versus_change | 8
 			else:
-				flags = (flags & ~4) | 3 | demo_bit | 0x18
+				flags = (flags & ~4) | 3 | versus_change | 0x18
 			flags &= ~0xE0
 			match_flow.reset_stage_times()
 			ranking.kind = ArcadeRanking.PAGE_USAGE

@@ -1,9 +1,10 @@
 class_name SettingsView
 extends Control
 ## The remake's settings screen (GameSettings): a vector panel over the main menu, opened with
-## Select there (Esc, the keyboard's Select keys, or the gear on touch screens). It has two tabs,
+## Select there (Esc, the keyboard's Select keys, or the gear on touch screens). It has tabs,
 ## switched with L1 / R1, Tab or a click on them: General (the game and sound settings, the display
-## ones beside them) and
+## ones beside them), Game options (the arcade build's operator settings, the cabinet's test menu
+## page; a tab without a setting with choices in this build is not shown) and
 ## Controls (vibration, the touch controls and, where a keyboard can be at hand, the keys of the
 ## two keyboard layouts: a pad picture per player with a field beside each button). The
 ## directions move between the rows and fields by their places on the screen (up and down go on
@@ -22,23 +23,33 @@ const ROWS := [
 	["SETTINGS_GAME", ""], ["gameplay_fixes", "SETTINGS_FIXES_HELP"], ["game_texts", "SETTINGS_TEXTS_HELP"],
 	["language", "SETTINGS_LANGUAGE_HELP"], ["memory_card", "SETTINGS_CARD_HELP"],
 	["SETTINGS_SOUND", ""], ["volume_music", ""], ["volume_sfx", ""], ["volume_voices", ""], ["volume_system", ""],
-	["attract_sound", "SETTINGS_ATTRACT_SOUND_HELP"],
 	["SETTINGS_DISPLAY", ""], ["fullscreen", "SETTINGS_FULLSCREEN_HELP"],
 	["graphics", "SETTINGS_GRAPHICS_HELP"], ["texture_filter", "SETTINGS_FILTER_HELP"],
 	["shading", "SETTINGS_SHADING_HELP"],
 	["texture_pack", "SETTINGS_PACK_HELP"], ["interpolation", "SETTINGS_INTERPOLATION_HELP"],
 	["framing", "SETTINGS_FRAMING_HELP"], ["stage_backdrops", "SETTINGS_BACKDROPS_HELP"],
+	["SETTINGS_OPERATOR", ""], ["arcade_difficulty", "SETTINGS_ARCADE_DIFFICULTY_HELP"],
+	["arcade_fights_one", "SETTINGS_ARCADE_FIGHTS_HELP"], ["arcade_fights_versus", "SETTINGS_ARCADE_FIGHTS_HELP"],
+	["arcade_life_one", "SETTINGS_ARCADE_LIFE_HELP"], ["arcade_life_versus", "SETTINGS_ARCADE_LIFE_HELP"],
+	["arcade_guard_damage", "SETTINGS_ARCADE_GUARD_DAMAGE_HELP"],
+	["arcade_neutral_guard", "SETTINGS_ARCADE_NEUTRAL_GUARD_HELP"], ["arcade_round_time", "SETTINGS_ARCADE_ROUND_TIME_HELP"],
+	["arcade_continue_change", "SETTINGS_ARCADE_CONTINUE_CHANGE_HELP"],
+	["arcade_versus_change", "SETTINGS_ARCADE_VERSUS_CHANGE_HELP"], ["attract_sound", "SETTINGS_ATTRACT_SOUND_HELP"],
+	["arcade_event_mode", "SETTINGS_ARCADE_EVENT_MODE_HELP"], ["arcade_hit_colour", "SETTINGS_ARCADE_HIT_COLOUR_HELP"],
 	["touch_controls", "SETTINGS_TOUCH_HELP"], ["touch_macros", "SETTINGS_MACROS_HELP"],
 	["touch_size", "SETTINGS_TOUCH_SIZE_HELP"], ["default_keys", "SETTINGS_DEFAULT_KEYS_HELP"],
 	["back", ""],
 ]
-const TABS := ["SETTINGS_TAB_GAME", "SETTINGS_TAB_CONTROLS"]
+const TABS := ["SETTINGS_TAB_GAME", "SETTINGS_TAB_OPERATOR", "SETTINGS_TAB_CONTROLS"]
 const GAME := 0
-const CONTROLS := 1
-## Each tab's first row; Back stands on both.
-static var tab_start := PackedInt32Array([0, ROWS.find(["touch_controls", "SETTINGS_TOUCH_HELP"])])
+const OPERATOR := 1
+const CONTROLS := 2
+## Each tab's first row; Back stands on all.
+static var tab_start := PackedInt32Array([0, ROWS.find(["SETTINGS_OPERATOR", ""]),
+	ROWS.find(["touch_controls", "SETTINGS_TOUCH_HELP"])])
 ## Each tab's first row of the second column.
 static var column_break := PackedInt32Array([ROWS.find(["SETTINGS_DISPLAY", ""]),
+	ROWS.find(["arcade_neutral_guard", "SETTINGS_ARCADE_NEUTRAL_GUARD_HELP"]),
 	ROWS.find(["touch_macros", "SETTINGS_MACROS_HELP"])])
 static var back_row := ROWS.size() - 1
 static var default_keys_row := ROWS.find(["default_keys", "SETTINGS_DEFAULT_KEYS_HELP"])
@@ -48,6 +59,11 @@ const FIELD_BUTTONS := [
 	PadState.R2, PadState.R1, PadState.TRIANGLE, PadState.SQUARE, PadState.CIRCLE, PadState.CROSS, PadState.START,
 ]
 const FIELDS_PER_SIDE := 7
+## The test menu's words for the operator settings' values: life bars −2 to +2 around NORMAL, round
+## times from 20 s by 10 s.
+const LIFE_NORMAL := 2
+const ROUND_TIME_FIRST := 20
+const ROUND_TIME_STEP := 10
 const LAYOUTS := 2
 ## The fields follow the rows in the focus order: layout × FIELD_BUTTONS.size() + button.
 static var first_field := ROWS.size()
@@ -134,6 +150,8 @@ func _ready() -> void:
 func open() -> void:
 	keyboard = Pads.has_keyboard()
 	listening = -1
+	if not tab_shown(tab):
+		tab = GAME
 	cursor = _first_item(tab)
 	_suppress = true
 	visible = true
@@ -234,7 +252,10 @@ func _stop_listening() -> void:
 
 
 func switch_tab(step: int) -> void:
-	tab = posmod(tab + step, TABS.size())
+	for n in TABS.size():
+		tab = posmod(tab + step, TABS.size())
+		if tab_shown(tab):
+			break
 	keyboard = Pads.has_keyboard()     # a keyboard attached while the screen is open
 	listening = -1
 	cursor = _first_item(tab)
@@ -340,11 +361,27 @@ static func field_of(layout: int, bit: int) -> int:
 	return first_field + layout * FIELD_BUTTONS.size() + FIELD_BUTTONS.find(bit)
 
 
-## The tab a row or field stands on (−1: Back, on both).
+## The tab a row or field stands on (−1: Back, on every tab).
 static func tab_of(i: int) -> int:
 	if i == back_row:
 		return -1
-	return CONTROLS if is_field(i) or i >= tab_start[CONTROLS] else GAME
+	if is_field(i):
+		return CONTROLS
+	var t := TABS.size() - 1
+	while i < tab_start[t]:
+		t -= 1
+	return t
+
+
+## Whether a tab is shown: General and Controls always, another when one of its settings has a
+## choice in this build.
+func tab_shown(t: int) -> bool:
+	if t == GAME or t == CONTROLS:
+		return true
+	for i in ROWS.size():
+		if tab_of(i) == t and _is_setting(i) and shown(i):
+			return true
+	return false
 
 
 ## A row or field changed by left and right or picked by Cross: the settings that have a value.
@@ -479,6 +516,16 @@ func value_text(key: String) -> String:
 		return tr("SETTINGS_VALUE_CARD") % Settings.number(key)
 	if key == "touch_size":
 		return "%d%%" % Settings.number(key)
+	match key:
+		"arcade_difficulty":
+			return tr("SETTINGS_VALUE_DIFFICULTY_%d" % Settings.number(key))
+		"arcade_fights_one", "arcade_fights_versus":
+			return "%d" % (Settings.number(key) + 1)
+		"arcade_life_one", "arcade_life_versus":
+			return tr("SETTINGS_VALUE_NORMAL") if Settings.number(key) == LIFE_NORMAL \
+				else "%+d" % (Settings.number(key) - LIFE_NORMAL)
+		"arcade_round_time":
+			return tr("SETTINGS_VALUE_SECONDS") % (ROUND_TIME_FIRST + ROUND_TIME_STEP * Settings.number(key))
 	if key == "graphics" and str(v) == "auto":
 		return "%s (%s)" % [tr("SETTINGS_VALUE_AUTO"), tr("SETTINGS_VALUE_" + Settings.preset().to_upper())]
 	return tr("SETTINGS_VALUE_" + str(v).to_upper())
@@ -531,12 +578,13 @@ func _content_lines(t: int, count: int) -> float:
 
 
 ## The panel, the row height and every row's, field's and tab's rectangle for the window's size
-## (the panel keeps its size on both tabs).
+## (the panel keeps its size on every tab shown).
 func _layout() -> void:
 	var count := columns()
 	var content := 0.0
 	for t in TABS.size():
-		content = maxf(content, _content_lines(t, count))
+		if tab_shown(t):
+			content = maxf(content, _content_lines(t, count))
 	var lines := content + EXTRA_LINES + TAB_LINES
 	_row = minf(maxf(MIN_ROW, size.y * ROW_SHARE), (size.y - 2.0 * SCREEN_MARGIN) / lines)
 	var pad := _row * 0.6
@@ -549,10 +597,15 @@ func _layout() -> void:
 	var left := _panel.position.x + pad * 0.6     # the first column's rows, a column further each column_step
 	var column_step := column_width + pad
 	_tab_rects.clear()
-	var tab_width := (width - 2.0 * pad) / TABS.size()
+	var tabs: Array[int] = []
 	for t in TABS.size():
-		_tab_rects.append(Rect2(_panel.position.x + pad + t * tab_width, _panel.position.y + _row * 1.55, tab_width,
-			_row * 0.9))
+		if tab_shown(t):
+			tabs.append(t)
+	var tab_width := (width - 2.0 * pad) / tabs.size()
+	_tab_rects.resize(TABS.size())
+	for n in tabs.size():
+		_tab_rects[tabs[n]] = Rect2(_panel.position.x + pad + n * tab_width, _panel.position.y + _row * 1.55, tab_width,
+			_row * 0.9)
 	_rects.clear()
 	_rects.resize(item_count)
 	_pictures.clear()
@@ -611,15 +664,18 @@ func _draw() -> void:
 	var width := _panel.size.x - 2.0 * pad
 	draw_string(font, Vector2(x, _panel.position.y + row * 1.1), tr("SETTINGS_TITLE"), HORIZONTAL_ALIGNMENT_CENTER,
 		width, int(row * 0.8), VALUE)
+	var strip := Rect2()
 	for t in _tab_rects.size():
 		var r := _tab_rects[t]
+		if r.size == Vector2.ZERO:
+			continue
+		strip = r if strip.size == Vector2.ZERO else strip.merge(r)
 		if t == tab:
 			draw_rect(r, TAB_ON)
 		draw_string(font, Vector2(r.position.x, r.position.y + row * 0.62), tr(str(TABS[t])), HORIZONTAL_ALIGNMENT_CENTER,
 			r.size.x, int(row * 0.5), VALUE if t == tab else MUTED)
 	# One line under every tab sets the tabs apart from the rows.
-	if not _tab_rects.is_empty():
-		var strip := _tab_rects[0].merge(_tab_rects[_tab_rects.size() - 1])
+	if strip.size != Vector2.ZERO:
 		draw_rect(Rect2(strip.position.x, strip.end.y - 2.0, strip.size.x, 2.0), GROUP)
 	var bottom := 0.0
 	for i in ROWS.size():
@@ -673,6 +729,8 @@ func _help(i: int) -> String:
 	var help := tr(str((ROWS[i] as Array)[1])) if not str((ROWS[i] as Array)[1]).is_empty() else ""
 	if _key(i) == "game_texts" and not Settings.usa_converted:
 		help += " " + tr("SETTINGS_TEXTS_MISSING")
+	if _key(i) in GameSettings.OPERATOR_KEYS:
+		help += " " + tr("SETTINGS_OPERATOR_APPLY")
 	return help
 
 

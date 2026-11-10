@@ -434,6 +434,7 @@ func _load() -> void:
 	m.rounds = rounds
 	m.round_time = g.settings.round_time
 	m.neutral_guard = g.settings.neutral_guard
+	m.guard_damage = g.settings.guard_damage
 	m.one_player_table = g.settings.cabinet == 1
 	m.cpu_group = g.settings.cabinet
 	m.difficulty = g.settings.difficulty

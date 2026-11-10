@@ -31,6 +31,7 @@ class Match:
 	var rounds := 1                     ## 0x80374F36: rounds to win − 1
 	var round_time := 2                 ## 0x8021FC84
 	var neutral_guard := 0              ## 0x8021FC70
+	var guard_damage := 0               ## 0x8021FDA8: a guarded hit takes life
 	var life := 0                       ## 0x8021FC54 with two humans, else 0x8021FDD0
 	var one_player_table := false       ## 0x8021FB74 == 1
 	var cpu_group := 0                  ## 0x8021FB74: the CPU's parameter group (FUN_801C2FCC)
@@ -106,6 +107,7 @@ func start_match(choice: Match) -> void:
 	fight.stage = choice.stage
 	fight.rounds_option = choice.rounds
 	fight.round_time_option = choice.round_time
+	fight.chip_damage = choice.guard_damage
 	fight.human_mask = choice.joined
 	fight.region.human_mask = choice.joined
 	(round_flow as ArcadeRoundFlow).start_locked = choice.start_locked

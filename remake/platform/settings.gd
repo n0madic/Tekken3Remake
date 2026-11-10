@@ -2,7 +2,7 @@ class_name GameSettings
 extends Node
 ## The remake's own settings (autoload `Settings`, remake-plan.md#save-data-and-settings): the
 ## Gameplay fixes, the game texts' language (English: the USA release's), the graphics preset and its options, the texture pack, audio
-## volumes, the arcade build's attract sound, touch controls, the keyboard layouts, the interface language and the memory
+## volumes, the arcade build's operator settings (the test menu's GAME OPTIONS), touch controls, the keyboard layouts, the interface language and the memory
 ## card in use (its progress is ProgressCard's). They are kept in
 ## `user://settings.json` apart from the game's progress. The game's own options (difficulty,
 ## rounds, the key configuration, vibration, ...) stay on its OPTIONS screen and in the progress block.
@@ -33,6 +33,18 @@ const SCHEMA := {
 	"volume_voices": [VOLUME_STEPS, []],
 	"volume_system": [VOLUME_STEPS, []],
 	"attract_sound": [true, [true, false]],
+	"arcade_difficulty": [1, [0, 1, 2, 3, 4]],
+	"arcade_fights_one": [1, [0, 1, 2, 3, 4]],
+	"arcade_fights_versus": [1, [0, 1, 2, 3, 4]],
+	"arcade_life_one": [1, [0, 1, 2, 3, 4]],
+	"arcade_life_versus": [3, [0, 1, 2, 3, 4]],
+	"arcade_guard_damage": [false, [false, true]],
+	"arcade_neutral_guard": [true, [true, false]],
+	"arcade_round_time": [2, [0, 1, 2, 3, 4]],
+	"arcade_continue_change": [true, [true, false]],
+	"arcade_versus_change": [false, [false, true]],
+	"arcade_event_mode": [false, [false, true]],
+	"arcade_hit_colour": ["red", ["red", "green"]],
 	"touch_controls": ["auto", ["auto", "on", "off"]],
 	"touch_macros": ["throws", ["throws", "all", "none"]],
 	"touch_size": [100, [70, 85, 100, 115, 130]],
@@ -41,6 +53,12 @@ const SCHEMA := {
 ## {"keyboard_1": {"up": "W", ...}, "keyboard_2": {...}}: each InputRouter.BINDABLE button and its
 ## key's name (OS.get_keycode_string); no key twice, none of InputRouter.RESERVED_KEYS.
 const KEY_BINDINGS := "key_bindings"
+## The cabinet's operator settings (ArcadeSettings, the test menu's GAME OPTIONS page) besides
+## attract_sound: offered in the arcade build only. Their defaults are the menu's factory ones
+## (the descriptors at 0x801FCB58, column +7).
+const OPERATOR_KEYS := ["arcade_difficulty", "arcade_fights_one", "arcade_fights_versus", "arcade_life_one",
+	"arcade_life_versus", "arcade_guard_damage", "arcade_neutral_guard", "arcade_round_time", "arcade_continue_change",
+	"arcade_versus_change", "arcade_event_mode", "arcade_hit_colour"]
 const LAYOUT_NAMES := ["keyboard_1", "keyboard_2"]
 const BUS_VOLUMES := {"volume_music": &"Music", "volume_sfx": &"SFX", "volume_voices": &"Voices", "volume_system": &"System"}
 ## The presets each renderer can draw (remake-plan.md#quality-presets).
@@ -257,6 +275,9 @@ func choices(key: String) -> Array:
 
 func _offered(key: String) -> Array:
 	var list: Array = (SCHEMA[key] as Array)[1]
+	# The cabinet's operator settings, attract_sound among them (the PlayStation's attract always plays).
+	if key in OPERATOR_KEYS or key == "attract_sound":
+		return list if Assets.arcade_only() else [(SCHEMA[key] as Array)[0]]
 	match key:
 		"graphics":
 			return ["auto"] + (RENDERER_PRESETS.get(renderer(), []) as Array)
@@ -275,12 +296,28 @@ func _offered(key: String) -> Array:
 			return [false] if Assets.arcade_only() else list
 		"memory_card":
 			return [1] if Assets.arcade_only() else list
-		"attract_sound":
-			# The cabinet's operator switch (ArcadeSettings.attract_sound); the PlayStation's attract always plays.
-			return list if Assets.arcade_only() else [true]
 		"fullscreen":
 			return list if OS.has_feature("pc") else [false]
 	return list
+
+
+## The arcade build's operator settings (the test menu's GAME OPTIONS page, FUN_80189FF4's copies).
+func arcade_operator() -> ArcadeSettings:
+	var s := ArcadeSettings.new()
+	s.difficulty = number("arcade_difficulty")
+	s.rounds_one = number("arcade_fights_one")
+	s.rounds_versus = number("arcade_fights_versus")
+	s.life_one = number("arcade_life_one")
+	s.life_versus = number("arcade_life_versus")
+	s.guard_damage = 1 if flag("arcade_guard_damage") else 0
+	s.neutral_guard = 1 if flag("arcade_neutral_guard") else 0
+	s.round_time = number("arcade_round_time")
+	s.reselect = 1 if flag("arcade_continue_change") else 0
+	s.versus_change = 1 if flag("arcade_versus_change") else 0
+	s.attract_sound = 1 if flag("attract_sound") else 0
+	s.event_mode = 1 if flag("arcade_event_mode") else 0
+	s.hit_colour = 1 if text("arcade_hit_colour") == "green" else 0
+	return s
 
 
 func set_value(key: String, v: Variant) -> void:

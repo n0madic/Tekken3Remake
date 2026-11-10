@@ -22,6 +22,10 @@ uniform sampler2D albedo_texture : source_color, filter_linear, repeat_disable;
 uniform float frame_scale = 1.0;              // u across the frame: 1 / frames, negative when mirrored
 uniform float frame_offset = 0.0;             // u of the frame's left edge (right edge when mirrored)
 uniform vec4 tint = vec4(1.0);
+// The arcade's hit colour GREEN (FUN_801AF068 with the record's exchange word): red takes green's
+// value and green red's halved, in the palette's 5-bit (sRGB) levels.
+uniform bool exchange_red_green = false;
+const float HALF_LEVEL_LINEAR = 0.2176;       // 0.5 ^ 2.2: a halved sRGB level, in linear light
 uniform bool over_all = false;                // the dust ring: slot 1, over the fighters too
 uniform float units_per_metre = 1000.0;       // WorldSpace.UNITS_PER_METRE
 uniform float depth_near = 0.06;              // FaceKeys.NEAR_CLAMP: nothing is drawn nearer, in metres
@@ -63,7 +67,8 @@ void vertex() {
 
 void fragment() {
 	vec4 texel = texture(albedo_texture, vec2(UV.x * frame_scale + frame_offset, UV.y));
-	ALBEDO = texel.rgb * tint.rgb;
+	vec3 colour = exchange_red_green ? vec3(texel.g, texel.r * HALF_LEVEL_LINEAR, texel.b) : texel.rgb;
+	ALBEDO = colour * tint.rgb;
 	ALPHA = texel.a * tint.a;
 #if CURRENT_RENDERER == RENDERER_COMPATIBILITY
 	// The Compatibility renderer has no depth pre-pass to keep in step: the fragment writes the depth.

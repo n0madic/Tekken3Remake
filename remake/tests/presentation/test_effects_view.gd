@@ -250,3 +250,27 @@ func test_the_charged_balls_glow_is_placed_clear_of_the_sphere() -> void:
 	expect_equal(node.position, Vector3(0, 0, -5), "back at the ball's centre when there is no sphere")
 	expect_equal(node.scale, Vector3.ONE, "at full size")
 	view.free()
+
+
+## The arcade's hit colour GREEN (issue n0madic/Tekken3Remake#30): only the hit's flipbook (system
+## set 0, the one record with the exchange word) has red and green exchanged, and only when chosen.
+func test_a_green_hit_exchanges_only_the_hits_colours() -> void:
+	var data := EffectData.new()
+	for n in 2:
+		var book := EffectData.Flipbook.new()
+		book.frames = 5
+		data.system.append(book)
+	var view := EffectsView.new()
+	view.setup(data)
+	var events := SimEvents.new()
+	for kind in 2:
+		events.add_at(SimEvents.Kind.SPARK, -1, PackedInt32Array([0, 0, 0]), kind)
+	view.step(events)
+	for s in view.sprites:
+		expect(not (s.material.get_shader_parameter("exchange_red_green") as bool), "red by default")
+	view.clear()
+	view.green_hit = true
+	view.step(events)
+	expect(view.sprites[0].material.get_shader_parameter("exchange_red_green") as bool, "green: the hit")
+	expect(not (view.sprites[1].material.get_shader_parameter("exchange_red_green") as bool), "not the others")
+	view.free()

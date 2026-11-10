@@ -1,8 +1,8 @@
 extends TestSuite
-## The settings screen's layout (SettingsView): two tabs (General: the game and sound settings,
-## the display ones beside them; Controls: the touch controls and the keyboard layouts'
+## The settings screen's layout (SettingsView): tabs (General: the game and sound settings,
+## the display ones beside them; Game options, the arcade build's operator settings, only there; Controls: the touch controls and the keyboard layouts'
 ## key fields beside their pad pictures, or a drawn pad holding every button place); two columns on landscape windows, one on narrow windows; every row and
-## field inside the panel and the panel inside the window, none overlapping, on both tabs; the
+## field inside the panel and the panel inside the window, none overlapping, on every tab; the
 ## settings with a single choice not shown; a tap or a drag on a volume's bar sets it there; a key
 ## field takes the next key, Escape keeps its key; the cross at the panel's top right corner closes
 ## the screen.
@@ -107,6 +107,8 @@ func test_single_choices_hidden() -> void:
 
 func test_tabs_and_directions() -> void:
 	var saved := Settings.values.duplicate(true)     # left and right change the settings they pass
+	var manifest := Assets.manifest.duplicate()
+	Assets.manifest["source"] = "jp_rev1"            # a disc's: no Game options between the two
 	var view := _view(Vector2(1280, 720), SettingsView.GAME)
 	view.visible = true
 	view._suppress = false
@@ -128,6 +130,7 @@ func test_tabs_and_directions() -> void:
 	view.handle(PadState.L1)
 	expect_equal(view.tab, SettingsView.GAME, "L1: back")
 	expect_equal(Settings.values, saved, "no setting changed on the way")
+	Assets.manifest = manifest
 	Settings.values = saved
 	Settings._dirty = false
 	view.free()
@@ -162,7 +165,7 @@ func test_down_and_up_visit_every_row_of_both_columns() -> void:
 
 func test_down_leaves_a_column_for_the_other() -> void:
 	var view := _view(Vector2(1280, 720), SettingsView.GAME)
-	var volume := -1                       # the left column's end: the attract sound in the arcade build
+	var volume := -1                       # the left column's end: the last volume
 	for i in SettingsView.column_break[SettingsView.GAME]:
 		if view._rects[i].size != Vector2.ZERO and view._selectable(i):
 			volume = i
@@ -293,3 +296,36 @@ func test_drawn_pad_holds_every_button_place() -> void:
 			expect(bounds.has_point(p), "button %x inside the picture" % bit)
 		if not PadDrawing.SHOULDERS.has(bit):
 			expect(Geometry2D.is_point_in_polygon(spot, body), "button %x on the body" % bit)
+
+
+## The arcade build's Game options tab (issue n0madic/Tekken3Remake#30): between General and
+## Controls there, laid out as the others; a disc's conversion has no such tab.
+func test_game_options_tab_in_the_arcade_build() -> void:
+	var saved := Assets.manifest.duplicate()
+	var saved_values := Settings.values.duplicate(true)
+	var dirty := Settings._dirty
+	Settings.values = GameSettings.sanitized({})
+	Assets.manifest["source"] = "jp_rev1"
+	var view := _view(Vector2(1280, 720), SettingsView.GAME)
+	expect(not view.tab_shown(SettingsView.OPERATOR), "no cabinet, no Game options")
+	expect_equal(view._tab_rects[SettingsView.OPERATOR], Rect2(), "and no place for its tab")
+	view.free()
+	Assets.manifest["source"] = AssetCatalog.ARCADE_SOURCE
+	view = _view(Vector2(1280, 720), SettingsView.GAME)
+	expect(view.tab_shown(SettingsView.OPERATOR), "the cabinet's game options")
+	view.visible = true
+	view._suppress = false
+	view.handle(PadState.R1)
+	expect_equal(view.tab, SettingsView.OPERATOR, "R1: Game options after General")
+	expect_equal(view.cursor, SettingsView.ROWS.find(["arcade_difficulty", "SETTINGS_ARCADE_DIFFICULTY_HELP"]),
+		"on Difficulty")
+	expect_equal(view.value_text("arcade_difficulty"), view.tr("SETTINGS_VALUE_DIFFICULTY_1"), "Medium")
+	expect_equal(view.value_text("arcade_life_versus"), "+1", "the VS life bar +1")
+	expect_equal(view.value_text("arcade_round_time"), view.tr("SETTINGS_VALUE_SECONDS") % 40, "40 s")
+	view.free()
+	_check(Vector2(2400, 1080), 2)
+	_check(Vector2(1280, 720), 2)
+	_check(Vector2(720, 1280), 1)
+	Assets.manifest = saved
+	Settings.values = saved_values
+	Settings._dirty = dirty

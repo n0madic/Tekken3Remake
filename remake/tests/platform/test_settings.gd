@@ -117,6 +117,8 @@ func test_game_texts_follow_the_source() -> void:
 	expect_equal(Settings.choices("gameplay_fixes"), [false], "the fixes are the PlayStation's")
 	expect_equal(Settings.choices("memory_card"), [1], "the arcade has no memory cards")
 	expect_equal(Settings.choices("attract_sound"), [true, false], "the cabinet's operator switch")
+	for key: String in GameSettings.OPERATOR_KEYS:
+		expect(Settings.choices(key).size() > 1, "%s: the test menu's choices" % key)
 	Assets.manifest["gaps"] = ["flow"]
 	expect_equal(Array(Assets.gaps()), ["flow"], "what the conversion could not produce")
 	Assets.manifest.erase("gaps")
@@ -124,6 +126,8 @@ func test_game_texts_follow_the_source() -> void:
 	expect_equal(Assets.source(), "jp_rev1", "a folder converted before sources were recorded")
 	expect(not Assets.arcade_only(), "a disc's conversion")
 	expect_equal(Settings.choices("attract_sound"), [true], "the PlayStation's attract always plays")
+	for key: String in GameSettings.OPERATOR_KEYS:
+		expect_equal(Settings.choices(key).size(), 1, "%s: no cabinet, no choice" % key)
 	Assets.manifest = saved
 	Settings.values["game_texts"] = saved_texts
 
@@ -248,3 +252,25 @@ func test_toggle_fullscreen_follows_the_window() -> void:
 	expect_equal(Settings.flag("fullscreen"), true, "windowed window, setting already on: stays on")
 	Settings.values["fullscreen"] = saved
 	Settings._dirty = was_dirty
+
+
+## The operator settings (issue n0madic/Tekken3Remake#30) default to the test menu's factory values
+## (the GAME OPTIONS descriptors at 0x801FCB58, column +7) and reach ArcadeSettings as the
+## cabinet's EEPROM bytes would.
+func test_arcade_operator() -> void:
+	var saved := Settings.values.duplicate(true)
+	var dirty := Settings._dirty
+	Settings.values = GameSettings.sanitized({})
+	var s := Settings.arcade_operator()
+	var factory := [s.difficulty, s.rounds_one, s.rounds_versus, s.life_one, s.life_versus, s.guard_damage,
+		s.neutral_guard, s.round_time, s.reselect, s.versus_change, s.attract_sound, s.event_mode, s.hit_colour]
+	expect_equal(factory, [1, 1, 1, 1, 3, 0, 1, 2, 1, 0, 1, 0, 0], "MEDIUM, 2 and 2 rounds, life -1 and +1, 40 s, ...")
+	for key: String in GameSettings.OPERATOR_KEYS:
+		var list: Array = (GameSettings.SCHEMA[key] as Array)[1]
+		Settings.values[key] = list[list.size() - 1]
+	s = Settings.arcade_operator()
+	var last := [s.difficulty, s.rounds_one, s.rounds_versus, s.life_one, s.life_versus, s.guard_damage,
+		s.neutral_guard, s.round_time, s.reselect, s.versus_change, s.event_mode, s.hit_colour]
+	expect_equal(last, [4, 4, 4, 4, 4, 1, 0, 4, 0, 1, 1, 1], "each setting's last choice")
+	Settings.values = saved
+	Settings._dirty = dirty

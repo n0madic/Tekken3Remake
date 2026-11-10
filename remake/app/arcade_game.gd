@@ -52,6 +52,7 @@ var _keeps_records := false
 var _store := SaveStore.new()
 var _saved_records := {}
 var _shown_state := -1
+var _operator_changed := false          ## an operator setting changed since the flow read them
 
 
 func _ready() -> void:
@@ -121,9 +122,7 @@ func _load() -> void:
 	var seed_value := options.seed if options.seed >= 0 else Time.get_ticks_usec() & 0x7FFFFFFF
 	Log.debug("arcade game: seed %d" % seed_value)
 	var data := ArcadeFlowData.load_from(Assets.path(ArcadeFlowData.FILE))
-	var operator := ArcadeSettings.new()
-	operator.attract_sound = _attract_sound()
-	flow = ArcadeGameFlow.new(content, data, _rules(), operator, seed_value)
+	flow = ArcadeGameFlow.new(content, data, _rules(), Settings.arcade_operator(), seed_value)
 	flow.progress.day = day
 	flow.progress.apply_schedule(data)
 	# A session that is a test of something leaves the records file as it is.
@@ -150,9 +149,17 @@ func _rules() -> RuleSet:
 	return RuleSet.with_gameplay_fixes() if Settings.flag("gameplay_fixes") else RuleSet.original()
 
 
-## The operator's attract sound switch (EEPROM 0x8036EC59), which the remake's setting stands for.
-func _attract_sound() -> int:
-	return 1 if Settings.flag("attract_sound") else 0
+## The cabinet reads its EEPROM at boot only; here the operator settings changed take effect when
+## no game is on, before a game reads them (a game whose event mode changed under it could not go
+## on, issue n0madic/Tekken3Remake#30). The cabinet copies them into the words the attract changes
+## too (FUN_801BDA64's modes 3 to 5), which the remake does not run.
+func _apply_operator_settings() -> void:
+	if not _operator_changed or not _no_game():
+		return
+	_operator_changed = false
+	flow.settings = Settings.arcade_operator()
+	if fight_view != null:
+		fight_view.effects.green_hit = flow.settings.hit_colour != 0
 
 
 ## A development pad script (game.gd's format): lines `<steps> <pad 1> [<pad 2>]` in hex words.
@@ -206,7 +213,18 @@ func _on_settings_closed() -> void:
 
 ## The gear that opens the settings, where nothing else is on screen: the attract and the title.
 func _gear_shown() -> bool:
-	return not settings_view.visible and (flow.state == ArcadeGameFlow.State.ATTRACT or flow.state == ArcadeGameFlow.State.TITLE)
+	return not settings_view.visible and _idle()
+
+
+## The attract and the title: no game is on.
+func _idle() -> bool:
+	return flow.state == ArcadeGameFlow.State.ATTRACT or flow.state == ArcadeGameFlow.State.TITLE
+
+
+## No game is on: the attract and the title, and the attract's demo fights with the records pages
+## and transitions after them (mode 6 until a Start, which begins a game from any of them).
+func _no_game() -> bool:
+	return _idle() or flow.mode == ArcadeGameFlow.MODE_DEMO
 
 
 ## The touch controls where the settings want them (hidden while the settings are open: the panel
@@ -234,7 +252,9 @@ func _on_setting_changed(key: String) -> void:
 	if key == "stage_backdrops" or key == "graphics":
 		RenderQuality.apply_viewport(get_viewport())
 	elif key == "attract_sound" and flow != null:
-		flow.settings.attract_sound = _attract_sound()
+		flow.settings.attract_sound = Settings.arcade_operator().attract_sound
+	elif key in GameSettings.OPERATOR_KEYS:
+		_operator_changed = true
 	elif key == "touch_controls" or key == "touch_macros" or key == "touch_size":
 		_show_touch()
 
@@ -276,6 +296,7 @@ func _step(pads: PackedInt32Array) -> void:
 	if _release_pads:
 		_release_pads = pads[0] | pads[1] != 0
 		pads = PackedInt32Array([0, 0])
+	_apply_operator_settings()
 	var started := Time.get_ticks_usec()
 	flow.step(ArcadeInput.panel_word(pads[0]), ArcadeInput.panel_word(pads[1]))
 	audio.handle(flow.sim.events, flow.fight, flow.sounds_on())
@@ -355,6 +376,7 @@ func _build_fight_view() -> void:
 	fight_view = FightView.new()
 	add_child(fight_view)
 	fight_view.setup(content.stage_number(fight.stage), effect_data, models, slots, chars)
+	fight_view.effects.green_hit = flow.settings.hit_colour != 0
 
 
 ## The ranking's stage, turning behind its rows (FUN_801E5B14).

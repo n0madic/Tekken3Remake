@@ -44,6 +44,40 @@ SETTING_VOLUME_VOICES,Voices,ボイス
 SETTING_VOLUME_SYSTEM,System sounds,システム音
 SETTING_ATTRACT_SOUND,Attract sound,アトラクトサウンド
 SETTINGS_ATTRACT_SOUND_HELP,"Music and sounds in the attract: the demonstration, the movie and the demo fights, as the cabinet's operator setting allows. Off is silent, as cabinets often are. Takes effect from the next scene.","アトラクト（デモンストレーション、ムービー、デモ対戦）で音楽と効果音を鳴らします。筐体のオペレーター設定にあたります。オフでは無音です。次の場面から有効です。"
+SETTINGS_TAB_OPERATOR,Game options,ゲームオプション
+SETTINGS_OPERATOR,The cabinet's game options,筐体のゲームオプション
+SETTINGS_OPERATOR_APPLY,"Takes effect in the attract or at the title, when no game is on.","ゲーム中でないとき（アトラクトまたはタイトル）に有効になります。"
+SETTING_ARCADE_DIFFICULTY,Difficulty,難易度
+SETTINGS_ARCADE_DIFFICULTY_HELP,"How hard the CPU fights, as the cabinet's operator sets it.","CPUの強さです。筐体のオペレーター設定にあたります。"
+SETTING_ARCADE_FIGHTS_ONE,Rounds to win (1P),勝利ラウンド数（1P）
+SETTING_ARCADE_FIGHTS_VERSUS,Rounds to win (VS),勝利ラウンド数（対戦）
+SETTINGS_ARCADE_FIGHTS_HELP,"The rounds a fighter needs to win a match: against the CPU (1P) or between two players (VS).","試合に勝つために必要なラウンド数：CPU戦（1P）または2人対戦（対戦）。"
+SETTING_ARCADE_LIFE_ONE,Life bar (1P),体力（1P）
+SETTING_ARCADE_LIFE_VERSUS,Life bar (VS),体力（対戦）
+SETTINGS_ARCADE_LIFE_HELP,"The fighters' life at a round's start, against the CPU (1P) or between two players (VS).","ラウンド開始時の体力：CPU戦（1P）または2人対戦（対戦）。"
+SETTING_ARCADE_GUARD_DAMAGE,Guard damage,ガードダメージ
+SETTINGS_ARCADE_GUARD_DAMAGE_HELP,A guarded attack still takes a little life.,ガードした攻撃でも少し体力が減ります。
+SETTING_ARCADE_NEUTRAL_GUARD,Neutral guard,ニュートラルガード
+SETTINGS_ARCADE_NEUTRAL_GUARD_HELP,"A player who holds no direction guards as when holding back, and one who holds down as when holding down-back.","レバーを後ろに入れなくても、ニュートラルで立ちガード、下入れでしゃがみガードになります。"
+SETTING_ARCADE_ROUND_TIME,Round time,ラウンドタイム
+SETTINGS_ARCADE_ROUND_TIME_HELP,The seconds a round lasts.,1ラウンドの秒数です。
+SETTING_ARCADE_CONTINUE_CHANGE,Change at continue,コンティニュー時のキャラ変更
+SETTINGS_ARCADE_CONTINUE_CHANGE_HELP,A player who continues picks a fighter again.,コンティニューしたプレイヤーがキャラクターを選び直します。
+SETTING_ARCADE_VERSUS_CHANGE,Change at VS game,対戦時のキャラ変更
+SETTINGS_ARCADE_VERSUS_CHANGE_HELP,"When a challenger comes in, both players pick their fighters again.","乱入があったとき、両プレイヤーがキャラクターを選び直します。"
+SETTING_ARCADE_EVENT_MODE,Event mode,イベントモード
+SETTINGS_ARCADE_EVENT_MODE_HELP,"Every game is a two-player match for tournaments: Start begins it for both sides.","大会向けにすべてのゲームが2人対戦になります：スタートで両サイドが参加します。"
+SETTING_ARCADE_HIT_COLOUR,Hit colour,ヒットカラー
+SETTINGS_ARCADE_HIT_COLOUR_HELP,The colour of the spark a damaging hit makes.,ダメージを与えたヒットの火花の色です。
+SETTINGS_VALUE_DIFFICULTY_0,Easy,やさしい
+SETTINGS_VALUE_DIFFICULTY_1,Medium,ふつう
+SETTINGS_VALUE_DIFFICULTY_2,Hard,むずかしい
+SETTINGS_VALUE_DIFFICULTY_3,Very hard,とてもむずかしい
+SETTINGS_VALUE_DIFFICULTY_4,Ultra hard,最高にむずかしい
+SETTINGS_VALUE_NORMAL,Normal,標準
+SETTINGS_VALUE_SECONDS,%d s,%d秒
+SETTINGS_VALUE_RED,Red,赤
+SETTINGS_VALUE_GREEN,Green,緑
 SETTING_TOUCH_CONTROLS,Touch controls,タッチ操作
 SETTINGS_TOUCH_HELP,"The on-screen stick and buttons. Auto shows them on touch screens.",画面上のスティックとボタン。自動ではタッチスクリーンで表示します。
 SETTING_TOUCH_MACROS,Touch macros,タッチのマクロ
