@@ -34,3 +34,22 @@ func test_sections_are_found_by_number() -> void:
 	expect_equal(audio._section_numbered(1), first)
 	expect_equal(audio._section_numbered(2), null)
 	audio.free()
+
+
+## On an arcade conversion every BGM (the stage records' sequences 0x10–0x1E) has its intro and
+## sections 1–3, and each of them has cues, the bars the next section can start at: issue
+## n0madic/Tekken3Remake#31 (Jin's BGM, whose channels test the section variable itself, stayed in
+## its intro).
+func test_every_bgm_reaches_its_sections_at_cues() -> void:
+	var path := AssetCatalog.ROOT.path_join(ArcadeAudio.MUSIC_TABLE)
+	if not require(path) or not Assets.arcade_only():
+		return
+	var tracks: Dictionary = (JsonFile.read(path) as Dictionary)["tracks"]
+	for sequence in range(0x10, 0x1F):
+		var rows: Array = (tracks[str(sequence)] as Dictionary)["sections"]
+		var numbers: Array[int] = []
+		for row: Dictionary in rows:
+			numbers.append(row["section"] as int)
+			expect(not (row["cues"] as Array).is_empty(), "%x section %d: cues" % [sequence, row["section"] as int])
+			expect(row["loop"] != null, "%x section %d: loops" % [sequence, row["section"] as int])
+		expect_equal(numbers, [0, 1, 2, 3] as Array[int], "%x: its sections" % sequence)

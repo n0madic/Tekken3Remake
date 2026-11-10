@@ -26,7 +26,9 @@ TRACK_VOICE = 0x11
 FIRST_TRACK = 0x80
 PITCH = 0x1000
 WAVE_VAR = 0x10
-LOOPED_SEQUENCE, SECTIONS_SEQUENCE, ONE_SHOT_SEQUENCE, COPY_SEQUENCE, POLLER_SEQUENCE, PLAYER_SEQUENCE = 1, 2, 3, 4, 0x20, 0x100
+LOOPED_SEQUENCE, SECTIONS_SEQUENCE, ONE_SHOT_SEQUENCE, COPY_SEQUENCE, DIRECT_SEQUENCE, POLLER_SEQUENCE, PLAYER_SEQUENCE = \
+    1, 2, 3, 4, 5, 0x20, 0x100
+POLLER_CHANNEL = 1
 BEAT = 8                                    # ticks per script step
 NOTE_WAIT, BAR_WAIT = 1, 3                  # a note's step, the step that reads the wait and its count
 NOTE_TICKS = (2 + NOTE_WAIT) * BEAT
@@ -140,12 +142,22 @@ def add_sectioned(b: Board) -> None:
     b.add_script(POLLER_SEQUENCE, head + if_equal(sounds.SECTION_VAR, 1, go, test + COMPARE_BYTES) + wait(0) + jump(test)
                  + wait(POLL_WAIT) + set_var(sounds.SECTION_GATE_VAR, 1) + wait(0) + bytes((OP_END,)))
     head = (setup_track(0, LOOPED_WAVE) + set_var(sounds.SECTION_VAR, 0) + set_var(sounds.SECTION_GATE_VAR, 0)
-            + bytes((OP_START, 1, POLLER_SEQUENCE & 0xFF, POLLER_SEQUENCE >> 8)))
+            + bytes((OP_START, POLLER_CHANNEL, POLLER_SEQUENCE & 0xFF, POLLER_SEQUENCE >> 8)))
     intro = b.next_script + len(head)
     bar = note() + wait(BAR_WAIT)
     test = intro + len(bar)
     section = test + COMPARE_BYTES
     b.add_script(SECTIONS_SEQUENCE, head + bar + if_equal(sounds.SECTION_GATE_VAR, 1, section, intro)
+                 + note(0x34) + wait(BAR_WAIT) + note(0x36) + wait(BAR_WAIT) + jump(section))
+
+
+def add_direct(b: Board) -> None:
+    """A melody that tests the section variable itself at each bar, with no poller (Jin's BGM 0x1D has that shape)."""
+    head = setup_track(0, LOOPED_WAVE) + set_var(sounds.SECTION_VAR, 0) + set_var(sounds.SECTION_GATE_VAR, 0)
+    intro = b.next_script + len(head)
+    bar = note() + wait(BAR_WAIT)
+    section = intro + len(bar) + COMPARE_BYTES
+    b.add_script(DIRECT_SEQUENCE, head + bar + if_equal(sounds.SECTION_VAR, 1, section, intro)
                  + note(0x34) + wait(BAR_WAIT) + note(0x36) + wait(BAR_WAIT) + jump(section))
 
 
@@ -259,7 +271,7 @@ class SectionTest(unittest.TestCase):
 
     def test_the_intro_has_a_cue_per_bar(self) -> None:
         plan = sounds.analyse_section(self.program, self.space, SECTIONS_SEQUENCE, 0)
-        repeating = [cue for cue in plan.cues if cue >= plan.loop_start]
+        repeating = [cue for cue in plan.cues[sounds.SECTION_GATE_VAR] if cue >= plan.loop_start]
         self.assertEqual(plan.end - plan.loop_start, BAR_TICKS)
         self.assertEqual(len(repeating), 1)
 
@@ -270,7 +282,42 @@ class SectionTest(unittest.TestCase):
         self.assertGreater(section.delay, 0)
         self.assertEqual(section.end - section.loop_start, 2 * BAR_TICKS)
         # The jump is at one of the intro's bars.
-        self.assertEqual((section.entry - intro.cues[0]) % BAR_TICKS, 0)
+        self.assertEqual((section.entry - intro.cues[sounds.SECTION_GATE_VAR][0]) % BAR_TICKS, 0)
+        self.assertEqual(section.jumps[-1].variable, sounds.SECTION_GATE_VAR)
+
+    def test_the_next_write_waits_until_the_sequence_has_settled(self) -> None:
+        # In BGM 0x1B channel 0 jumps on the section variable a tick before channels 1 and 2: writing the next
+        # number at once left those two in the intro.
+        machine = sounds.Machine(self.program, self.space)
+        writes: list[tuple[int, int]] = []
+        machine.vm.set_var = lambda index, value: writes.append((machine.at, value))   # type: ignore[method-assign]
+        first = sounds.Jump(10, 0, sounds.SECTION_VAR, 10 + sounds.GATE_GRACE_TICKS)
+        second = sounds.Jump(20, 5, sounds.SECTION_GATE_VAR, 20)
+        entry = sounds._to_section(machine, LOOPED_SEQUENCE, (first, second))
+        start = sounds.SCRIPT_READY_TICKS
+        self.assertEqual(writes, [(start, 1), (start + first.settled, 2)])
+        self.assertEqual(entry, start + first.settled + second.ticks)
+
+    def test_the_poller_is_found_and_its_tests_are_no_cues(self) -> None:
+        chain = sounds.explore_sections(self.program, self.space, SECTIONS_SEQUENCE)
+        self.assertEqual(chain.pollers, frozenset({POLLER_CHANNEL}))
+        intro = sounds.analyse_section(self.program, self.space, SECTIONS_SEQUENCE, 0, chain)
+        self.assertEqual(intro.cues[sounds.SECTION_VAR], [])
+
+    def test_a_melody_that_tests_the_section_itself_jumps_at_its_next_bar(self) -> None:
+        # Issue n0madic/Tekken3Remake#31: such BGMs (Jin's, Nina's …) were left in their intro.
+        add_direct(self.b)
+        program = self.b.program()
+        chain = sounds.explore_sections(program, self.space, DIRECT_SEQUENCE)
+        self.assertEqual(len(chain.jumps), 1)
+        self.assertEqual((chain.jumps[0].variable, chain.jumps[0].delay), (sounds.SECTION_VAR, 0))
+        self.assertEqual(chain.pollers, frozenset())
+        intro = sounds.analyse_section(program, self.space, DIRECT_SEQUENCE, 0, chain)
+        section = sounds.analyse_section(program, self.space, DIRECT_SEQUENCE, 1, chain)
+        self.assertEqual(intro.cues[sounds.SECTION_GATE_VAR], [])
+        self.assertEqual((section.entry - intro.cues[sounds.SECTION_VAR][0]) % BAR_TICKS, 0)
+        self.assertLessEqual(chain.jumps[0].ticks, BAR_TICKS)
+        self.assertEqual(section.end - section.loop_start, 2 * BAR_TICKS)
 
     def test_no_section_where_the_script_has_none(self) -> None:
         self.assertIsNone(sounds.analyse_section(self.program, self.space, LOOPED_SEQUENCE, 1))
@@ -311,11 +358,12 @@ class MusicFilesTest(unittest.TestCase):
     def test_the_table_lists_files_by_sequence_and_section(self) -> None:
         b = board()
         add_sectioned(b)
+        add_direct(b)
         b.alias(COPY_SEQUENCE, LOOPED_SEQUENCE)
         with tempfile.TemporaryDirectory() as folder:
             out = Output(Path(folder))
             sounds.convert_music(b.program(), b.wave_rom.tobytes(), out, None,
-                                 (LOOPED_SEQUENCE, COPY_SEQUENCE, SECTIONS_SEQUENCE), workers=1)
+                                 (LOOPED_SEQUENCE, COPY_SEQUENCE, SECTIONS_SEQUENCE, DIRECT_SEQUENCE), workers=1)
             table = json.loads((Path(folder) / "music" / "arcade.json").read_text())["tracks"]
             self.assertEqual(table[str(COPY_SEQUENCE)], table[str(LOOPED_SEQUENCE)])
             sections = table[str(SECTIONS_SEQUENCE)]["sections"]
@@ -325,6 +373,9 @@ class MusicFilesTest(unittest.TestCase):
                 self.assertTrue(row["loop"] is not None and row["loop"] < row["length"])
             self.assertGreater(sections[1]["delay"], 0)
             self.assertEqual(sections[0]["delay"], 0)
+            direct = table[str(DIRECT_SEQUENCE)]["sections"]
+            self.assertEqual([(row["section"], row["delay"]) for row in direct], [(0, 0), (1, 0)])
+            self.assertTrue(direct[0]["cues"], "the intro's bars that test the section variable")
 
 
 class PlayerTest(unittest.TestCase):

@@ -1,11 +1,12 @@
 """The arcade's music and sounds, rendered from the sound chips' ROMs with the driver's port.
 
 Music (`music/arcade.json`, group `music`): each sequence runs in `arcade_sound_vm` over `arcade_c352`, one file per
-section. A BGM is an intro and up to three more sections: the main CPU writes the section variable, a
-channel of the sequence sees it and, a while later, sets the variable the melody and drums test at
-each of their calls; they jump to the section's own loop there. The table gives a section's loop start,
-the times of those tests (the cues) and how long the variable takes to get through, so the runtime changes
-section at the same bar as the cabinet (docs/research/arcade/audio-and-effects.md#sections).
+section. A BGM is an intro and up to three more sections: the main CPU writes the section variable and the
+melody and drums jump to the section's own loop at one of their calls. In most BGMs a polling channel sees the
+write and, a while later, sets a gate variable those calls test; in others they test the section variable itself.
+The table gives a section's loop start, the times of those tests (the cues) and how long the gate takes to get
+through, so the runtime changes section at the same bar as the cabinet
+(docs/research/arcade/audio-and-effects.md#sections).
 
 Sounds (`sounds/arcade.json`, `sounds/w<wave>.wav`): the samples as they are, at their rates. What the
 player sequences do with them (which C352 voice, when, how loud, the echoes and the chained name of a
@@ -42,6 +43,10 @@ SECTION_VAR, SECTION_GATE_VAR = 0xE0, 0xE1
 SECTIONS = 4                     # the intro and the sections 1–3 the variable can name
 SECTION_WAIT_TICKS = 60 * TICK_RATE      # no jump within this: the sequence has no such section
 SECTION_LIMIT_TICKS = 600 * TICK_RATE    # a section that does not repeat is cut here
+# After a channel that tests the section variable itself has jumped: the time a gated jump may still follow (the
+# pollers set the gate 208–253 ticks after the write, the gated channels jump at their next bar).
+GATE_GRACE_TICKS = 1024
+SECTION_AGAIN = 2                # after the last section the variable names 2 and 3 in turn (FUN_8019EED4)
 QUIET_TICKS = TICK_RATE // 4     # silence that ends a sequence which has stopped
 CUE_MERGE_TICKS = 8              # tests of one bar by several channels are one cue
 CROSSFADE_TICKS = 2              # the loop's seam
@@ -206,6 +211,27 @@ class Machine:
 
 # ---- sections ----
 
+@dataclass(frozen=True)
+class Jump:
+    """How a sequence goes into a section once the main CPU writes its number."""
+
+    ticks: int                   # from the write to the end of the tick the first channel jumped in
+    delay: int                   # from the write until the gate variable changed; 0 when the channels test the number
+    variable: int                # what the jumping channels test: the gate variable, or the section variable itself
+    # From the write until the next write may come. The game writes once a round; the search writes as soon as the
+    # sequence has gone over: at the gated jump, as the gate holds the number for the others, but GATE_GRACE_TICKS
+    # after a jump on the section variable itself, as the other channels test it a tick or a bar later.
+    settled: int
+
+
+@dataclass(frozen=True)
+class Chain:
+    """A sequence's way through its sections 1, 2, 3 (as far as it goes) and the channels that only poll."""
+
+    jumps: tuple[Jump, ...]
+    pollers: frozenset[int]      # channels that answer the section variable by setting the gate variable
+
+
 @dataclass
 class SectionPlan:
     """A section's run, on the machine's clock: the mix of tick `entry` is the file's first."""
@@ -215,45 +241,99 @@ class SectionPlan:
     entry: int
     loop_start: int | None       # the tick a loop goes back to
     end: int                     # the first tick after the file
-    cues: list[int]              # the ticks that test the gate variable, in [entry, end)
-    delay: int                   # ticks from the section variable's write until the gate variable changes
+    cues: dict[int, list[int]]   # by variable: the ticks that test it, in [entry, end) (the pollers' tests left out)
+    jumps: tuple[Jump, ...] = ()  # the jumps into sections 1 … `section`
     entry_signature: bytes = b""
     signatures: frozenset[bytes] = frozenset()
 
+    @property
+    def delay(self) -> int:
+        """Ticks from the section variable's write until the gate variable changes (0 for the intro)."""
+        return self.jumps[-1].delay if self.jumps else 0
 
-def _to_section(machine: Machine, sequence: int, section: int) -> tuple[int, int] | None:
-    """Starts the sequence and asks for the sections up to `section`, each as soon as the last is entered. Returns
-    (the section's first tick, the ticks its variable took to pass), or None if the sequence does not go there.
-    The tick of the jump has run when this returns, except for the sequence's start (section 0)."""
-    if section == 0:
-        machine.vm.command(0, vm.START_BIT | sequence)
-        return 1, 0
-    jumped = [False]
-    wanted = [0]
 
-    def watch(_channel: int, variable: int, taken: bool) -> None:
-        if variable == SECTION_GATE_VAR and taken and machine.vm.var(SECTION_GATE_VAR) == wanted[0]:
-            jumped[0] = True
-
-    machine.vm.on_compare = watch
+def _start(machine: Machine, sequence: int) -> None:
     machine.vm.command(0, vm.START_BIT | sequence)
     for _ in range(SCRIPT_READY_TICKS):
         machine.tick()
-    delay = 0
-    for stage in range(1, section + 1):
-        wanted[0] = stage
-        jumped[0] = False
+
+
+def _replay(machine: Machine, jumps: Sequence[Jump]) -> None:
+    """Asks for sections 1, 2 … in turn, each when the sequence has settled in the last; stops at the last jump."""
+    for stage, jump in enumerate(jumps, 1):
         written = machine.at
         machine.vm.set_var(SECTION_VAR, stage)
-        gate_seen = None
-        while not jumped[0]:
+        until = jump.ticks if stage == len(jumps) else jump.settled
+        while machine.at < written + until:
             machine.tick()
-            if gate_seen is None and machine.vm.var(SECTION_GATE_VAR) == stage:
-                gate_seen = machine.at
-            if machine.at - written > SECTION_WAIT_TICKS or not machine.running():
-                return None
-        delay = 0 if gate_seen is None else gate_seen - written
-    return machine.at, delay
+
+
+def _next_jump(machine: Machine, stage: int, pollers: set[int]) -> Jump | None:
+    """Writes the section variable and runs until the sequence goes there. Some channels test the gate variable a
+    poller sets about a bar later, some the section variable itself, and in some sequences both kinds jump: the first
+    gated jump wins, as the gated channels carry the melody (docs/research/arcade/audio-and-effects.md#sections).
+    A jump on the variable itself counts only when no gated jump follows it within GATE_GRACE_TICKS."""
+    written = machine.at
+    machine.vm.set_var(SECTION_VAR, stage)
+    gated: list[int] = []
+    leads: dict[int, int] = {}
+
+    def watch(channel: int, variable: int, taken: bool) -> None:
+        if not taken:
+            return
+        if variable == SECTION_GATE_VAR and machine.vm.var(SECTION_GATE_VAR) == stage and not gated:
+            gated.append(machine.at + 1)         # it runs in the tick about to be counted
+        elif variable == SECTION_VAR and machine.vm.var(SECTION_VAR) == stage:
+            leads.setdefault(channel, machine.at + 1)
+
+    machine.vm.on_compare = watch
+    gate_seen = None
+    while True:
+        machine.tick()
+        if gate_seen is None and machine.vm.var(SECTION_GATE_VAR) == stage:
+            gate_seen = machine.at
+        if gated:
+            ticks = gated[0] - written
+            return Jump(ticks, 0 if gate_seen is None else gate_seen - written, SECTION_GATE_VAR, ticks)
+        lead = min((t for channel, t in leads.items() if channel not in pollers), default=None)
+        timed_out = machine.at - written > SECTION_WAIT_TICKS or not machine.running()
+        if lead is not None and (machine.at - lead > GATE_GRACE_TICKS or timed_out):
+            return Jump(lead - written, 0, SECTION_VAR, lead - written + GATE_GRACE_TICKS)
+        if timed_out:
+            return None
+
+
+def explore_sections(program: bytes, space: c352.WaveSpace, sequence: int) -> Chain:
+    """Asks for sections 1, 2, 3 in turn, each as soon as the sequence has settled in the last, and finds how each is
+    entered. Each search starts again from the sequence's start, as the search runs past the jump."""
+    jumps: list[Jump] = []
+    pollers: set[int] = set()
+    for stage in range(1, SECTIONS):
+        machine = Machine(program, space)
+
+        def answered(channel: int, variable: int, driver: vm.SoundVM = machine.vm) -> None:
+            if variable == SECTION_GATE_VAR and driver.var(SECTION_GATE_VAR) != 0:   # the scripts clear it as they start
+                pollers.add(channel)
+
+        machine.vm.on_variable = answered
+        _start(machine, sequence)
+        _replay(machine, jumps)
+        jump = _next_jump(machine, stage, pollers)
+        if jump is None:
+            break
+        jumps.append(jump)
+    return Chain(tuple(jumps), frozenset(pollers))
+
+
+def _to_section(machine: Machine, sequence: int, jumps: Sequence[Jump]) -> int:
+    """Starts the sequence and takes `jumps`; returns the section's first tick. The tick of the jump has run when this
+    returns, except for the sequence's start (no jumps)."""
+    if not jumps:
+        machine.vm.command(0, vm.START_BIT | sequence)
+        return 1
+    _start(machine, sequence)
+    _replay(machine, jumps)
+    return machine.at
 
 
 def _cues(tests: Iterable[int], entry: int, end: int) -> list[int]:
@@ -267,18 +347,25 @@ def _cues(tests: Iterable[int], entry: int, end: int) -> list[int]:
     return cues
 
 
-def analyse_section(program: bytes, space: c352.WaveSpace, sequence: int, section: int) -> SectionPlan | None:
-    """Runs the section without its sound: where it starts, repeats and ends."""
-    machine = Machine(program, space)
-    reached = _to_section(machine, sequence, section)
-    if reached is None:
-        return None
-    entry, delay = reached
-    tests: list[int] = []
+def _cues_of(tests: dict[int, list[int]], entry: int, end: int) -> dict[int, list[int]]:
+    return {variable: _cues(ticks, entry, end) for variable, ticks in tests.items()}
 
-    def watch(_channel: int, variable: int, _taken: bool) -> None:
-        if variable == SECTION_GATE_VAR:
-            tests.append(machine.at + 1)         # it runs in the tick about to be counted
+
+def analyse_section(program: bytes, space: c352.WaveSpace, sequence: int, section: int,
+                    chain: Chain | None = None) -> SectionPlan | None:
+    """Runs the section without its sound: where it starts, repeats and ends. `chain` is `explore_sections`'s."""
+    if chain is None:
+        chain = explore_sections(program, space, sequence)
+    if section > len(chain.jumps):
+        return None
+    jumps = chain.jumps[:section]
+    machine = Machine(program, space)
+    entry = _to_section(machine, sequence, jumps)
+    tests: dict[int, list[int]] = {SECTION_VAR: [], SECTION_GATE_VAR: []}
+
+    def watch(channel: int, variable: int, _taken: bool) -> None:
+        if variable in tests and channel not in chain.pollers:
+            tests[variable].append(machine.at + 1)   # it runs in the tick about to be counted
 
     machine.vm.on_compare = watch
     seen: dict[bytes, int] = {}
@@ -308,13 +395,13 @@ def analyse_section(program: bytes, space: c352.WaveSpace, sequence: int, sectio
             break
     if first is None or period is None:
         end = max(entry + 1, machine.at - silent + 1)
-        return SectionPlan(sequence, section, entry, None, end, _cues(tests, entry, end), delay, entry_signature)
+        return SectionPlan(sequence, section, entry, None, end, _cues_of(tests, entry, end), jumps, entry_signature)
     # The loop starts where the writes start to repeat: before that, the notes of what came before still ring.
     start = first + period
     while start > entry + 1 and per_tick.get(start - 1) == per_tick.get(start - 1 + period):
         start -= 1
     end = start + period
-    return SectionPlan(sequence, section, entry, start, end, _cues(tests, entry, end), delay, entry_signature,
+    return SectionPlan(sequence, section, entry, start, end, _cues_of(tests, entry, end), jumps, entry_signature,
                        frozenset(repeated))
 
 
@@ -336,8 +423,7 @@ def render_section(program: bytes, space: c352.WaveSpace, plan: SectionPlan) -> 
     """The section's samples (stereo, the chip's rate, the chip's sum): the same run with the mix on."""
     machine = Machine(program, space)
     machine.render_from = plan.entry
-    reached = _to_section(machine, plan.sequence, plan.section)
-    if reached is None or reached[0] != plan.entry:
+    if _to_section(machine, plan.sequence, plan.jumps) != plan.entry:
         raise vm.SoundVmError(f"sequence {plan.sequence:#x}: section {plan.section} runs differently the second time")
     end = plan.end + (CROSSFADE_TICKS if plan.loop_start is not None else 0)
     while machine.at < end:
@@ -375,7 +461,12 @@ def _parallel(function: Callable[[Any], Any], jobs: Sequence[Any], program: byte
         return list(pool.map(function, jobs))
 
 
-def _analyse_job(job: tuple[int, int]) -> SectionPlan | None:
+def _explore_job(sequence: int) -> Chain:
+    assert _space is not None
+    return explore_sections(_program, _space, sequence)
+
+
+def _analyse_job(job: tuple[int, int, Chain]) -> SectionPlan | None:
     assert _space is not None
     return analyse_section(_program, _space, *job)
 
@@ -407,14 +498,20 @@ def same_section(a: SectionPlan | None, b: SectionPlan | None) -> bool:
     return a is not None and b is not None and a.entry_signature == b.entry_signature and a.signatures == b.signatures
 
 
-def section_row(kept: SectionPlan, delay: int, name: str, frames: int) -> dict:
-    """A section's row of the table, its times in seconds of the file."""
+def next_section(section: int) -> int:
+    """The section the next write of the variable asks for: 1, 2, 3, then 2 and 3 in turn."""
+    return section + 1 if section + 1 < SECTIONS else SECTION_AGAIN
+
+
+def section_row(kept: SectionPlan, delay: int, cue_variable: int, name: str, frames: int) -> dict:
+    """A section's row of the table, its times in seconds of the file; its cues are the tests of `cue_variable`, the
+    variable the jump to the next section tests."""
     return {
         "section": kept.section,
         "file": name,
         "length": frames / OUTPUT_RATE,
         "loop": None if kept.loop_start is None else (kept.loop_start - kept.entry) / TICK_RATE,
-        "cues": [(c - kept.entry) / TICK_RATE for c in kept.cues],
+        "cues": [(c - kept.entry) / TICK_RATE for c in kept.cues[cue_variable]],
         "delay": delay / TICK_RATE,
     }
 
@@ -424,8 +521,10 @@ def convert_music(program: bytes, wave_rom: bytes, out: Output, tool: media.FFmp
     workers = workers or os.cpu_count() or 1
     groups = sequence_groups(program, sequences)
     firsts = sorted(set(groups.values()))
-    jobs = [(s, k) for s in firsts for k in range(SECTIONS)]
-    plans = {job: plan for job, plan in zip(jobs, _parallel(_analyse_job, jobs, program, wave_rom, workers)) if plan is not None}
+    chains = dict(zip(firsts, _parallel(_explore_job, firsts, program, wave_rom, workers)))
+    jobs = [(s, k, chains[s]) for s in firsts for k in range(SECTIONS) if k <= len(chains[s].jumps)]
+    plans = {(s, k): plan for (s, k, _), plan in zip(jobs, _parallel(_analyse_job, jobs, program, wave_rom, workers))
+             if plan is not None}
     kept: dict[tuple[int, int], tuple[int, int]] = {}
     for (sequence, section), plan in plans.items():
         same = [k for k in range(section) if same_section(plans.get((sequence, k)), plan)]
@@ -446,7 +545,10 @@ def convert_music(program: bytes, wave_rom: bytes, out: Output, tool: media.FFmp
             plan = plans.get((first, k))
             if plan is not None:
                 name, frames = files[kept[(first, k)]]
-                row = section_row(plans[kept[(first, k)]], plan.delay, name, frames)
+                # The jump back from 3 to 2 is taken as the jump from 1 to 2 (`inferred`: so in every sequence run).
+                after = plans.get((first, next_section(k)))
+                cue_variable = after.jumps[-1].variable if after is not None else SECTION_GATE_VAR
+                row = section_row(plans[kept[(first, k)]], plan.delay, cue_variable, name, frames)
                 row["section"] = k
                 rows.append(row)
         tracks[str(sequence)] = {"sections": rows}

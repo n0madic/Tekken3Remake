@@ -115,6 +115,8 @@ class SoundVM:
         self.mod_table = self._le(DIR_MODULATIONS)
         # Called when a channel's script tests a variable (for the sections' cues): (channel, variable, taken).
         self.on_compare: Callable[[int, int, bool], None] | None = None
+        # Called when a channel's script sets a variable (which channel answers the sections): (channel, variable).
+        self.on_variable: Callable[[int, int], None] | None = None
         self._ops = {code: getattr(self, name) for code, name in _OPS.items()}
 
     # ---- the main CPU's side ----
@@ -727,6 +729,8 @@ class SoundVM:
         else:
             raise SoundVmError(f"arithmetic kind {kind}: no script uses it")
         self._w16(dst, value & 0xFFFF)
+        if self.on_variable is not None:
+            self.on_variable(self.ch, x)
 
     def _compare_arg(self, r3: int, immediate: bool, wide: bool) -> tuple[int, int]:
         """0x6340: an argument after `r3`; returns its value and the new `r3`."""
