@@ -4,7 +4,8 @@ extends Control
 ## wide, 240 lines), with a smooth filter. An Ogg Theora movie (`video`: its variants, preferred
 ## first; a build packs one) plays through a VideoStreamPlayer; the fallback (`frames` +
 ## `audio`, a MovieFile and a WAV) shows the frame due at the audio position until the entry's
-## `duration`. `finished` is emitted at the end, or when `stop()` is called.
+## `duration`. `finished` is emitted at the end, or when `stop()` is called. An entry with `loop`
+## (the descriptor's restart flag: Gon's ending) starts over at its end instead, until `stop()`.
 ## An ending movie (`caption_movie`, its place in the ending list) shows the caption set `captions`
 ## names for it over the picture by decoded frame: the Theora movie's frame from the entry's
 ## `frame_slots` (each decoded frame's first slot of the `fps` grid), the fallback's from the frame
@@ -29,6 +30,7 @@ var _frame_times := PackedFloat64Array()
 var _width := 0.0
 var _lines := DISPLAY_LINES
 var _duration := 0.0
+var _loop := false
 var _started_at := 0.0
 
 
@@ -65,6 +67,7 @@ func play(folder: String, entry: Dictionary, volume: float, caption_movie := -1)
 	for slot: Variant in entry.get("frame_slots", []):
 		_frame_times.append(JsonFile.number(slot) / float(fps))
 	_show_caption(-1)
+	_loop = entry.get("loop", false) == true
 	if entry.has("video"):
 		var variants: Array = entry["video"]
 		var stream := _first_video(folder, variants)
@@ -74,6 +77,7 @@ func play(folder: String, entry: Dictionary, volume: float, caption_movie := -1)
 		video.stream = stream
 		video.volume_db = linear_to_db(volume)
 		video.visible = true
+		video.loop = _loop
 		_start()
 		video.play()
 		if not video.is_playing():
@@ -115,6 +119,14 @@ func _start() -> void:
 	_place_video()
 
 
+## The fallback movie over again (a looping entry at its end).
+func _from_start() -> void:
+	_started_at = Time.get_ticks_msec() / 1000.0
+	shown = -1
+	if audio.stream != null:
+		audio.play()
+
+
 func stop() -> void:
 	if not playing:
 		return
@@ -142,8 +154,11 @@ func _process(_delta: float) -> void:
 	var t := audio.get_playback_position() + AudioServer.get_time_since_last_mix() if audio.playing \
 		else Time.get_ticks_msec() / 1000.0 - _started_at
 	if t >= _duration:
-		stop()
-		return
+		if not _loop:
+			stop()
+			return
+		_from_start()
+		t = 0.0
 	var i := shown
 	while i + 1 < movie.frame_count() and movie.frame_time(i + 1) <= t:
 		i += 1

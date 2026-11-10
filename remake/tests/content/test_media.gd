@@ -85,3 +85,51 @@ func test_converted_captions() -> void:
 	for entry: Dictionary in endings:
 		expect(not (entry.get("frame_slots", []) as Array).is_empty() and JsonFile.number(entry.get("fps", 0)) > 0,
 			"%s has its frames' slots" % entry["name"])
+
+
+## A one-frame fallback movie (MovieFile's container) at `path`.
+static func _write_movie(path: String) -> void:
+	var img := Image.create(16, 16, false, Image.FORMAT_RGB8)
+	img.fill(Color.RED)
+	var jpg := img.save_jpg_to_buffer()
+	var f := FileAccess.open(path, FileAccess.WRITE)
+	f.store_buffer(MovieFile.MAGIC.to_ascii_buffer())
+	f.store_32(MovieFile.VERSION)
+	f.store_16(16)
+	f.store_16(16)
+	f.store_32(1)
+	f.store_32(150)
+	f.store_32(4 + 4 + 4 + 4 + 4 + 12)
+	f.store_32(jpg.size())
+	f.store_32(0)
+	f.store_buffer(jpg)
+	f.close()
+
+
+## MoviePlayer at the end of a movie: it finishes, or starts over when the entry loops (the
+## descriptor's restart flag, Gon's ending: issue n0madic/Tekken3Remake#34) until it is stopped.
+func test_a_looping_movie_starts_over_at_its_end() -> void:
+	var path := "user://test_movie_loop_%d.bin" % OS.get_process_id()
+	_write_movie(path)
+	for loop: bool in [false, true]:
+		var player := MoviePlayer.new()
+		(Engine.get_main_loop() as SceneTree).root.add_child(player)
+		var ended := [0]
+		player.finished.connect(func() -> void: ended[0] += 1)
+		var entry := {"frames": path.get_file(), "duration": 0.5, "loop": loop}
+		expect(player.play(path.get_base_dir(), entry, 1.0), "plays")
+		player._process(0.0)
+		expect_equal(player.shown, 0, "the first frame")
+		player._started_at -= 1.0
+		player._process(0.0)
+		if loop:
+			expect(player.playing, "a looping movie plays on past its end")
+			expect_equal(ended[0], 0, "and does not finish")
+			expect_equal(player.shown, 0, "from its first frame")
+			player.stop()
+			expect_equal(ended[0], 1, "until it is stopped")
+		else:
+			expect(not player.playing, "a movie ends at its end")
+			expect_equal(ended[0], 1, "finished")
+		player.free()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))

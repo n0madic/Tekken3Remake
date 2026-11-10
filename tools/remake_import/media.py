@@ -69,6 +69,8 @@ VORBIS_QUALITY = 4               # libvorbis -q:a (−1 worst … 10 best), musi
 THEORA, VORBIS = "libtheora", "libvorbis"
 TITLE_SECTORS = 0x800B9E38       # title.ovl (the opening movies): 16-byte rows: first, last XAS sector
 TITLE_MOVIES = 0x800BA28C        # 16-byte descriptors: row, width, height, last frame, volume, flags
+MOVIE_RESTART = 0x4              # descriptor flag: the player rereads the stream from its start at the
+                                 # last frame instead of ending (FUN_8010E4B4): Gon's ending until Start
 MOVIE_WHITE_END = 0x8            # descriptor flag: the screen turns white when the movie ends
 MOVIE_CAPTIONS = 0xF00           # descriptor flags: the caption set shown over the movie (0 none)
 DESCRIPTOR_FLAGS = 0x0A          # the flags' place in a 16-byte movie descriptor
@@ -282,7 +284,8 @@ def _convert_listed(out: Output, tool: FFmpeg, name: str, movie: _Movie, raw: by
     """A movie of an overlay's list converted (`_movie_sectors`); returns its movies.json entry."""
     files, duration = convert_movie(out, tool, name, raw, arrivals)
     return {"name": name, **files, "width": movie.width, "height": movie.height, "volume": movie.volume,
-            "duration": round(duration, 3), "white_end": bool(movie.flags & MOVIE_WHITE_END)}
+            "duration": round(duration, 3), "white_end": bool(movie.flags & MOVIE_WHITE_END),
+            "loop": bool(movie.flags & MOVIE_RESTART)}
 
 
 def convert_title_movies(disc: Disc, out: Output, tool: FFmpeg) -> None:

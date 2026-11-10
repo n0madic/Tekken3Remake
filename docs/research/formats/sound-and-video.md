@@ -77,7 +77,7 @@ The movie player lives in `ending.ovl` (game state 19, `0x8010E8C0`; custom vers
 | `+0x02`, `+0x04` | `s16` width, height |
 | `+0x06` | `s16` last frame |
 | `+0x08` | `u8` audio volume |
-| `+0x0A` | `u16` flags: bits 0–1 end/fade mode, bit 2 restart the stream when it runs past its range, bit 3 clears the screen to white instead of black when the movie ends (`FUN_8010D228`), bits 8–11 caption set (1–4) drawn over the movie |
+| `+0x0A` | `u16` flags: bits 0–1 end/fade mode, bit 2 loop: at the last frame (or a frame number lower than the one shown) the player clears the ring and rereads the stream from its first sector instead of ending (`FUN_8010E4B4`), so the movie plays until Start; only descriptor 20, Gon's ending, has it, bit 3 clears the screen to white instead of black when the movie ends (`FUN_8010D228`), bits 8–11 caption set (1–4) drawn over the movie |
 | `+0x0C` | `u32` (−1) |
 
 Descriptor 0 is the opening (volume 112), 1 and 2 the logo, and 3–23 the endings. `title.ovl` carries its own copy of the tables (sector rows at `0x800B9E38`, descriptors at `0x800BA28C`) for the opening movies of the title sequence: descriptor 0 the opening (rows 21, sectors 233,673–248,408, played to frame 1,942) and 1 the logo (row 22, flags `0xB`: the screen turns white when it ends). The ending index is looked up in `0x800B9BFC` by `character · 4 + costume` of the winning player: characters 0–18 use descriptors `3 + character`, except that Tiger (Eddy's costume 2) uses 22, Panda (Kuma's costume 1) uses 23, Doctor B. uses Yoshimitsu's movie and True Ogre uses Ogre's; costume 3 has no entry. Two further table pairs (source kinds 1 and 2) describe development layouts with file names or different sector ranges and are not used by the retail disc.
