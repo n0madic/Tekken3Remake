@@ -92,5 +92,15 @@ func keep_matrices(old: FighterBody) -> void:
 	gon_gaze = old.gon_gaze
 
 
+## The skeleton of a whole-record copy (Tekken Ball's stand-in attacker takes the hitter's 0x188C
+## bytes): the same model, the record's matrices as they are. The look-at state is per player, not
+## in the record, and starts afresh.
+func record_copy() -> FighterBody:
+	var copy := FighterBody.new(model, attachments.tables, attachments.pose_tables, attachments.solver)
+	copy.keep_matrices(self)
+	copy.stick_shown = stick_shown
+	return copy
+
+
 func scale_base() -> int:
 	return model.scale_fixed()

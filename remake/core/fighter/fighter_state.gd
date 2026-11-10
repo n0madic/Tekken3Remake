@@ -10,7 +10,7 @@ extends RefCounted
 
 const RECORDS := 0x800A96F0      ## the fighter records in the game's RAM
 const RECORD_SIZE := 0x188C
-## The properties copy_from leaves out: the skeleton (the copy is never animated or drawn) and the
+## The properties copy_from leaves out: the skeleton (copied on its own, FighterBody.record_copy) and the
 ## views of other fields (`move` would set root_move to the pose move, `anchor` is pos_x … pos_z).
 const NOT_COPIED: Array[String] = ["body", "move", "anchor"]
 
@@ -317,7 +317,8 @@ func set_costume(slot: int, tables: FighterTables) -> void:
 
 ## The whole record copied from `other` (Tekken Ball copies the hitter's record into the third
 ## record, the ball's attacker). Move rows, banks and texts are shared data; everything the
-## record owns is copied.
+## record owns is copied, the skeleton's matrices too (+0x8B0 on: the hitter's head may turn
+## towards the copy's joints when the charged ball hits it).
 func copy_from(other: FighterState) -> void:
 	for p in get_property_list():
 		if p["usage"] & PROPERTY_USAGE_SCRIPT_VARIABLE == 0:
@@ -326,6 +327,7 @@ func copy_from(other: FighterState) -> void:
 		if name in NOT_COPIED:
 			continue
 		set(name, _copied(other.get(name)))
+	body = other.body.record_copy() if other.body != null else null
 
 
 static func _copied(v: Variant) -> Variant:
