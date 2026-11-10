@@ -13,8 +13,8 @@ reads it directly and the export packs it into the PCK. It is git-ignored and
 must never be published.
 
     python3 tools/remake_import/convert.py --image IMAGE [--image IMAGE] [--out DIR] [--no-music]
-                                           [--no-movies] [--ffmpeg PATH] [--arcade ZIP]
-    python3 tools/remake_import/convert.py --arcade ZIP [--out DIR]
+                                           [--no-movies] [--ffmpeg PATH] [--arcade ZIP] [--music-parts]
+    python3 tools/remake_import/convert.py --arcade ZIP [--out DIR] [--music-parts]
 
 `--arcade` adds the arcade version's polygonal stage scenes, skies and floors from MAME's
 `tekken3` ROM set (arcade.py), which the remake draws instead of the PlayStation's backdrops,
@@ -104,7 +104,7 @@ def texture_index(out: Output) -> dict[str, str]:
     return index
 
 
-def convert_arcade_music(path: Path, out: Output, tool: media.FFmpeg) -> None:
+def convert_arcade_music(path: Path, out: Output, tool: media.FFmpeg, music_parts: bool = False) -> None:
     """The arcade's BGMs for the ARCADE soundtrack's fights (arcade_sounds.PS_TRACKS); without the set's sound
     chips the soundtrack stays the disc's."""
     try:
@@ -113,7 +113,7 @@ def convert_arcade_music(path: Path, out: Output, tool: media.FFmpeg) -> None:
         log.warning("arcade music: %s; the ARCADE soundtrack stays the disc's", e)
         return
     arcade_sounds.convert_music(program, wave_rom, out, tool, arcade_sounds.BGM_SEQUENCES,
-                                ps_tracks=arcade_sounds.PS_TRACKS)
+                                ps_tracks=arcade_sounds.PS_TRACKS, music_parts=music_parts)
 
 
 def convert_arcade_only(args: argparse.Namespace) -> int:
@@ -131,7 +131,7 @@ def convert_arcade_only(args: argparse.Namespace) -> int:
     try:
         tool = None if args.no_movies and args.no_music else media.find_ffmpeg(args.ffmpeg)
         fields = arcade_game.convert(arc, out, STAGE_LETTERS, arcade.sound_chips(args.arcade),
-                                     None if args.no_movies else tool, None if args.no_music else tool)
+                                     None if args.no_movies else tool, None if args.no_music else tool, args.music_parts)
     except (arcade.ArcadeError, media.MediaError) as e:
         log.error("arcade: %s", e)
         return 1
@@ -160,12 +160,17 @@ def main() -> int:
     parser.add_argument("--arcade", type=Path, help="MAME's tekken3 ROM set (a .zip, World ver. E1): adds "
                         "the arcade stage scenes, skies and floors (stages 0–12), character models (costume slots 0–40) "
                         "and 64 × 64 effect flipbooks; alone, without --image, the game is converted from it")
+    parser.add_argument("--music-parts", action="store_true", help="the arcade's music with a file per group of "
+                        "channels that change section together, so each changes at its own bar as on the cabinet "
+                        "(about 70 %% more music); default: a file per section")
     parser.add_argument("--texture-sources", type=Path, help="also record where each picture's texels come "
                         "from in VRAM, to this file (for tools/remake/texture_pack.py import-duckstation; "
                         "game data: keep it private)")
     args = parser.parse_args()
     if not args.image and args.arcade is None:
         parser.error("give --image, one per release, or --arcade")
+    if args.music_parts and (args.no_music or args.arcade is None):
+        log.warning("--music-parts has no effect: it splits the arcade's music, which needs --arcade and no --no-music")
 
     # The run deletes files it did not produce; never do that in a folder it did not create.
     if is_foreign_folder(args.out):
@@ -248,7 +253,7 @@ def main() -> int:
             if not args.no_music:
                 media.convert_music(disc, out, tool, MUSIC_TRACKS)
                 if arcade_set is not None:
-                    convert_arcade_music(args.arcade, out, tool)
+                    convert_arcade_music(args.arcade, out, tool, args.music_parts)
             if not args.no_movies:
                 media.convert_title_movies(disc, out, tool)
                 media.convert_ending_movies(disc, out, tool)

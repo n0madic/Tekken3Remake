@@ -26,7 +26,7 @@ from vram import Vram  # noqa: E402
 DEFAULT_OUT = ROOT / "remake" / "imported"
 EXE_BASE = 0x80010000
 EXE_HEADER = 0x800
-CONVERTER_VERSION = 3       # raised when the remake cannot read older output (AssetCatalog.CONVERTER_VERSION)
+CONVERTER_VERSION = 4       # raised when the remake cannot read older output (AssetCatalog.CONVERTER_VERSION)
 SIDECARS = (".import", ".uid")  # written by Godot next to imported files (textures, movies)
 BNS_RECORDS = 303
 # The overlays by name: BNS record and slot (0 the mode slot, 1 the screen slot).

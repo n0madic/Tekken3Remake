@@ -137,7 +137,9 @@ The game starts as the arcade build when `remake/imported/` was converted from t
 That folder holds one conversion: converting the set alone replaces a disc conversion's files, and a
 disc conversion replaces the arcade's, so convert again to switch. The Python, Godot and FFmpeg
 requirements are those above; `CONVERT_ARGS='--no-music --no-movies'` leaves out the music and the
-attract movie.
+attract movie. `CONVERT_ARGS='--music-parts'` (for music lovers; also with a disc and `--arcade`) changes
+the music's sections channel group by channel group, at the bar the cabinet does, where by default
+some melody lines start a section a bar late; it takes about 70 % more space for the arcade music.
 
 - **What it has:** the attract with its demonstration fights and movie, the title, character select,
   the ladder with the Ogre scene and True Ogre, continue, a second player joining a fight, the

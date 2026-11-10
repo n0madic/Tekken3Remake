@@ -23,6 +23,7 @@ Addresses in the comments are the H8's. State lives in `m`, the RAM at 0x080000â
 
 from __future__ import annotations
 
+import struct
 from collections.abc import Callable
 from typing import Protocol
 
@@ -131,6 +132,11 @@ class SoundVM:
 
     def var(self, index: int) -> int:
         return self._r16(VARS + 2 * index)
+
+    def voice_channels(self) -> list[int | None]:
+        """Per voice the channel whose track holds it; None while no track does."""
+        owners = struct.unpack_from(f">{VOICES}H", self.m, VOICE_OWNERS)
+        return [(owner - TRACK_BASE) // CHANNEL_TRACKS if owner else None for owner in owners]
 
     def write_shared(self, offset: int, value: int) -> None:
         """A word of the main CPU at its offset in the shared RAM."""

@@ -10,6 +10,7 @@ Key-ons and key-offs run on the write to register 0x202.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from functools import cache
 
 import numpy as np
@@ -139,6 +140,14 @@ class Chip:
         for v in self.voices:
             if v.flags & BUSY:
                 self._run_voice(v, samples, out)
+        return out
+
+    def advance_parts(self, parts: Sequence[int], count: int, samples: int = TICK_SAMPLES) -> np.ndarray:
+        """The next samples as `advance`'s, but each voice added to its part's mix: (count, samples, 2)."""
+        out = np.zeros((count, samples, 2), dtype=np.int64)
+        for v, part in zip(self.voices, parts):
+            if v.flags & BUSY:
+                self._run_voice(v, samples, out[part])
         return out
 
     def _run_voice(self, v: Voice, n: int, out: np.ndarray | None) -> None:

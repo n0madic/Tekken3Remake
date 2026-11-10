@@ -7,6 +7,7 @@ import shutil
 import struct
 import tempfile
 import unittest
+import wave
 from pathlib import Path
 
 import numpy as np
@@ -29,6 +30,9 @@ WAVE_VAR = 0x10
 LOOPED_SEQUENCE, SECTIONS_SEQUENCE, ONE_SHOT_SEQUENCE, COPY_SEQUENCE, DIRECT_SEQUENCE, POLLER_SEQUENCE, PLAYER_SEQUENCE = \
     1, 2, 3, 4, 5, 0x20, 0x100
 POLLER_CHANNEL = 1
+LEAD_CHANNEL, LEAD_VOICE = 2, 1
+TWO_PARTS_SEQUENCE, SLOW_POLLER_SEQUENCE, LEAD_SEQUENCE = 6, 0x21, 0x22
+SLOW_POLL_WAIT = 100                        # steps of a tick: longer than a bar
 BEAT = 8                                    # ticks per script step
 NOTE_WAIT, BAR_WAIT = 1, 3                  # a note's step, the step that reads the wait and its count
 NOTE_TICKS = (2 + NOTE_WAIT) * BEAT
@@ -159,6 +163,29 @@ def add_direct(b: Board) -> None:
     section = intro + len(bar) + COMPARE_BYTES
     b.add_script(DIRECT_SEQUENCE, head + bar + if_equal(sounds.SECTION_VAR, 1, section, intro)
                  + note(0x34) + wait(BAR_WAIT) + note(0x36) + wait(BAR_WAIT) + jump(section))
+
+
+def add_two_parts(b: Board) -> None:
+    """Channel 0 waits for the gate a slow poller sets; channel 2 tests the section variable itself and so jumps bars
+    earlier (BGMs 0x10–0x14 have that shape)."""
+    head = steps(1)
+    test = b.next_script + len(head)
+    go = test + COMPARE_BYTES + len(wait(0)) + len(jump(0))
+    b.add_script(SLOW_POLLER_SEQUENCE, head + if_equal(sounds.SECTION_VAR, 1, go, test + COMPARE_BYTES) + wait(0)
+                 + jump(test) + wait(SLOW_POLL_WAIT) + set_var(sounds.SECTION_GATE_VAR, 1) + wait(0) + bytes((OP_END,)))
+
+    def melody(sequence: int, head: bytes, variable: int) -> None:
+        intro = b.next_script + len(head)
+        bar = note() + wait(BAR_WAIT)
+        section = intro + len(bar) + COMPARE_BYTES
+        b.add_script(sequence, head + bar + if_equal(variable, 1, section, intro)
+                     + note(0x34) + wait(BAR_WAIT) + note(0x36) + wait(BAR_WAIT) + jump(section))
+
+    melody(LEAD_SEQUENCE, setup_track(LEAD_VOICE, LOOPED_WAVE), sounds.SECTION_VAR)
+    melody(TWO_PARTS_SEQUENCE, setup_track(0, LOOPED_WAVE) + set_var(sounds.SECTION_VAR, 0)
+           + set_var(sounds.SECTION_GATE_VAR, 0)
+           + bytes((OP_START, POLLER_CHANNEL, SLOW_POLLER_SEQUENCE & 0xFF, SLOW_POLLER_SEQUENCE >> 8))
+           + bytes((OP_START, LEAD_CHANNEL, LEAD_SEQUENCE & 0xFF, LEAD_SEQUENCE >> 8)), sounds.SECTION_GATE_VAR)
 
 
 def add_player(b: Board) -> None:
@@ -293,7 +320,7 @@ class SectionTest(unittest.TestCase):
         machine.vm.set_var = lambda index, value: writes.append((machine.at, value))   # type: ignore[method-assign]
         first = sounds.Jump(10, 0, sounds.SECTION_VAR, 10 + sounds.GATE_GRACE_TICKS)
         second = sounds.Jump(20, 5, sounds.SECTION_GATE_VAR, 20)
-        entry = sounds._to_section(machine, LOOPED_SEQUENCE, (first, second))
+        entry, = sounds._part_entries(machine, LOOPED_SEQUENCE, (first, second), (second.ticks,))
         start = sounds.SCRIPT_READY_TICKS
         self.assertEqual(writes, [(start, 1), (start + first.settled, 2)])
         self.assertEqual(entry, start + first.settled + second.ticks)
@@ -318,6 +345,43 @@ class SectionTest(unittest.TestCase):
         self.assertEqual((section.entry - intro.cues[sounds.SECTION_VAR][0]) % BAR_TICKS, 0)
         self.assertLessEqual(chain.jumps[0].ticks, BAR_TICKS)
         self.assertEqual(section.end - section.loop_start, 2 * BAR_TICKS)
+
+    def test_channels_that_test_the_section_itself_are_a_part_of_their_own(self) -> None:
+        add_two_parts(self.b)
+        program = self.b.program()
+        chain = sounds.explore_sections(program, self.space, TWO_PARTS_SEQUENCE)
+        self.assertEqual(len(chain.parts), 2)
+        self.assertEqual(chain.parts[1].channels, frozenset({LEAD_CHANNEL}))
+        self.assertEqual(chain.part_of(LEAD_CHANNEL), 1)
+        self.assertEqual(chain.part_of(0), 0)
+        (lead_variable, lead_ticks), = chain.parts[1].moves
+        (main_variable, main_ticks), = chain.parts[0].moves
+        self.assertEqual((lead_variable, main_variable), (sounds.SECTION_VAR, sounds.SECTION_GATE_VAR))
+        self.assertLess(lead_ticks, main_ticks)
+        # The lead's channel starts a tick after channel 0, so its bars are a tick later.
+        self.assertEqual((main_ticks - lead_ticks + 1) % BAR_TICKS, 0, "a bar or more earlier")
+        section = sounds.analyse_section(program, self.space, TWO_PARTS_SEQUENCE, 1, chain)
+        self.assertEqual(section.entries[1] - section.entries[0], lead_ticks - main_ticks)
+        self.assertEqual(section.start, section.entries[1])
+
+    def test_the_parts_add_up_to_the_whole_mix(self) -> None:
+        add_two_parts(self.b)
+        program = self.b.program()
+        chain = sounds.explore_sections(program, self.space, TWO_PARTS_SEQUENCE)
+        for number in (0, 1):
+            plan = sounds.analyse_section(program, self.space, TWO_PARTS_SEQUENCE, number, chain)
+            whole = sounds.render_section(program, self.space, plan)
+            main, lead = sounds.render_parts(program, self.space, plan, chain.channel_parts())
+            skip = (plan.entry - plan.entries[1]) * c352.TICK_SAMPLES
+            self.assertEqual(len(main), len(whole))
+            self.assertEqual(len(lead), len(whole) + skip)
+            self.assertGreater(float(np.abs(lead).max()), 0.0)
+            self.assertTrue(np.allclose(main + lead[skip:], whole))
+
+    def test_one_part_where_every_channel_jumps_together(self) -> None:
+        chain = sounds.explore_sections(self.program, self.space, SECTIONS_SEQUENCE)
+        self.assertEqual(len(chain.parts), 1)
+        self.assertIsNone(chain.channel_parts())
 
     def test_no_section_where_the_script_has_none(self) -> None:
         self.assertIsNone(sounds.analyse_section(self.program, self.space, LOOPED_SEQUENCE, 1))
@@ -354,6 +418,12 @@ class SectionTest(unittest.TestCase):
         self.assertEqual(groups, {LOOPED_SEQUENCE: LOOPED_SEQUENCE, COPY_SEQUENCE: LOOPED_SEQUENCE, ONE_SHOT_SEQUENCE: ONE_SHOT_SEQUENCE})
 
 
+def wav_samples(path: Path) -> np.ndarray:
+    """A 16-bit stereo WAV's frames."""
+    with wave.open(str(path)) as f:
+        return np.frombuffer(f.readframes(f.getnframes()), np.int16).reshape(-1, 2).astype(np.int32)
+
+
 class MusicFilesTest(unittest.TestCase):
     def test_the_table_lists_files_by_sequence_and_section(self) -> None:
         b = board()
@@ -368,16 +438,63 @@ class MusicFilesTest(unittest.TestCase):
             self.assertEqual(table[str(COPY_SEQUENCE)], table[str(LOOPED_SEQUENCE)])
             sections = table[str(SECTIONS_SEQUENCE)]["sections"]
             self.assertEqual([row["section"] for row in sections], [0, 1])
+            self.assertEqual([len(row["parts"]) for row in sections], [1, 1])
             for row in sections:
-                self.assertTrue((Path(folder) / "music" / row["file"]).exists())
-                self.assertTrue(row["loop"] is not None and row["loop"] < row["length"])
-            self.assertGreater(sections[1]["delay"], 0)
+                part = row["parts"][0]
+                self.assertTrue((Path(folder) / "music" / part["file"]).exists())
+                self.assertTrue(part["loop"] is not None and part["loop"] < part["length"])
+            self.assertGreater(sections[1]["parts"][0]["delay"], 0)
             self.assertGreater(table[str(SECTIONS_SEQUENCE)]["peak"], 0, "the loudest sample of its sections")
-            self.assertEqual(sections[0]["delay"], 0)
+            self.assertEqual(sections[0]["parts"][0]["delay"], 0)
             direct = table[str(DIRECT_SEQUENCE)]["sections"]
-            self.assertEqual([(row["section"], row["delay"]) for row in direct], [(0, 0), (1, 0)])
-            self.assertTrue(direct[0]["cues"], "the intro's bars that test the section variable")
+            self.assertEqual([(row["section"], row["parts"][0]["delay"]) for row in direct], [(0, 0), (1, 0)])
+            self.assertTrue(direct[0]["parts"][0]["cues"], "the intro's bars that test the section variable")
             self.assertNotIn("ps_tracks", json.loads((Path(folder) / "music" / "arcade.json").read_text()))
+
+    def test_a_part_of_its_own_has_its_files_cues_and_delay(self) -> None:
+        b = board()
+        add_two_parts(b)
+        with tempfile.TemporaryDirectory() as folder:
+            out = Output(Path(folder))
+            sounds.convert_music(b.program(), b.wave_rom.tobytes(), out, None, (TWO_PARTS_SEQUENCE,), workers=1,
+                                 music_parts=True)
+            sections = json.loads((Path(folder) / "music" / "arcade.json").read_text())["tracks"][str(TWO_PARTS_SEQUENCE)]["sections"]
+            self.assertEqual([[p["file"] for p in row["parts"]] for row in sections],
+                             [["s006_0.wav", "s006_0_p1.wav"], ["s006_1.wav", "s006_1_p1.wav"]])
+            for row in sections:
+                for part in row["parts"]:
+                    self.assertTrue((Path(folder) / "music" / part["file"]).exists())
+        main, lead = sections[1]["parts"]
+        self.assertGreater(main["delay"], 0, "the gated channels wait for the poller")
+        self.assertEqual(lead["delay"], 0, "the lead tests the section variable itself")
+        self.assertGreater(lead["length"], main["length"], "its file starts bars earlier")
+        self.assertAlmostEqual(lead["length"] - lead["loop"], main["length"] - main["loop"], places=4)
+        intro_main, intro_lead = sections[0]["parts"]
+        self.assertTrue(intro_main["cues"] and intro_lead["cues"])
+        self.assertNotEqual(intro_main["cues"], intro_lead["cues"], "each part's own bars")
+
+    def test_by_default_a_section_is_one_file_of_every_channel_changing_with_the_gated_ones(self) -> None:
+        b = board()
+        add_two_parts(b)
+        converted = {}
+        for music_parts in (False, True):
+            with tempfile.TemporaryDirectory() as folder:
+                out = Output(Path(folder))
+                sounds.convert_music(b.program(), b.wave_rom.tobytes(), out, None, (TWO_PARTS_SEQUENCE,), workers=1,
+                                     music_parts=music_parts)
+                music = Path(folder) / "music"
+                rows = json.loads((music / "arcade.json").read_text())["tracks"][str(TWO_PARTS_SEQUENCE)]["sections"]
+                converted[music_parts] = rows, {f.name: wav_samples(f) for f in music.glob("*.wav")}
+        (whole, whole_files), (split, split_files) = converted[False], converted[True]
+        self.assertEqual([[p["file"] for p in row["parts"]] for row in whole], [["s006_0.wav"], ["s006_1.wav"]])
+        for whole_row, split_row in zip(whole, split):
+            one, (main, lead) = whole_row["parts"][0], split_row["parts"]
+            self.assertEqual({k: one[k] for k in ("length", "loop", "delay")}, {k: main[k] for k in ("length", "loop", "delay")},
+                             "the gated channels' bar")
+            # The parts end together; past the filter's reach at the file's start, the whole is their sum.
+            mixed = split_files[main["file"]] + split_files[lead["file"]][-len(split_files[main["file"]]):]
+            difference = np.abs(whole_files[one["file"]] - mixed)[sounds.FILTER_TAPS:]
+            self.assertLessEqual(int(difference.max()), 2, "every channel in it, on the same samples")
 
     def test_next_to_a_disc_the_table_names_the_tracks_of_converted_sequences(self) -> None:
         b = board()

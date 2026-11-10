@@ -278,10 +278,10 @@ func test_dropped_loads_do_not_block() -> void:
 
 ## SectionMusic without files: every section is a second of silence.
 class SilentSections extends SectionMusic:
-	func _request(_section: Section) -> void:
+	func _request(_part: Part) -> void:
 		pass
 
-	func _music_stream(_section: Section) -> AudioStream:
+	func _music_stream(_part: Part) -> AudioStream:
 		var stream := AudioStreamWAV.new()
 		stream.mix_rate = 8000
 		stream.data = PackedByteArray()
@@ -301,7 +301,7 @@ func _sections_director() -> AudioDirector:
 	(Engine.get_main_loop() as SceneTree).root.add_child(director)
 	var rows: Array = []
 	for k in 4:
-		rows.append({"section": k, "file": "s_%d" % k, "loop": 0.0, "delay": 0.0, "cues": [0.5]})
+		rows.append({"section": k, "parts": [{"file": "s_%d" % k, "length": 1.0, "loop": 0.0, "delay": 0.0, "cues": [0.5]}]})
 	director.sections.load_table({
 		"tracks": {"29": {"sections": rows, "peak": 16384}, "30": {"sections": rows, "peak": 30000}},
 		"ps_tracks": {

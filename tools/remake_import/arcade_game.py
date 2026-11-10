@@ -104,19 +104,21 @@ def convert_effects(arc: arcade.ArcadeSet, out: Output) -> None:
     })
 
 
-def convert_sounds(arc: arcade.ArcadeSet, out: Output, sound: tuple[bytes, bytes], tool: media.FFmpeg | None) -> None:
-    """The sound board's samples and, with FFmpeg (`tool`), its music: `sound` is `arcade.sound_chips`'s."""
+def convert_sounds(arc: arcade.ArcadeSet, out: Output, sound: tuple[bytes, bytes], tool: media.FFmpeg | None,
+                   music_parts: bool = False) -> None:
+    """The sound board's samples and, with FFmpeg (`tool`), its music: `sound` is `arcade.sound_chips`'s;
+    `music_parts`: arcade_sounds.convert_music's."""
     program, wave_rom = sound
     table = [arc.prog_values("<2H", arcade_tables.SOUND_TABLE + 4 * i) for i in range(arcade_tables.SOUND_COUNT)]
     voices = {wave for i in range(arcade_tables.VOICE_SET_COUNT)
               for wave in arcade_tables.voice_set(arc, arcade_tables.VOICE_SETS + arcade_tables.VOICE_SET_BYTES * i)["voices"]}
     arcade_sounds.convert_sounds(program, wave_rom, out, table, voices)
     if tool is not None:
-        arcade_sounds.convert_music(program, wave_rom, out, tool)
+        arcade_sounds.convert_music(program, wave_rom, out, tool, music_parts=music_parts)
 
 
 def convert(arc: arcade.ArcadeSet, out: Output, letters: str, sound: tuple[bytes, bytes], tool: media.FFmpeg | None = None,
-            music_tool: media.FFmpeg | None = None) -> dict:
+            music_tool: media.FFmpeg | None = None, music_parts: bool = False) -> dict:
     """Converts the set; returns the manifest's fields. FFmpeg: `tool` for the movie, `music_tool` for the music;
     without them neither is converted."""
     characters = convert_characters(arc, out)
@@ -130,7 +132,7 @@ def convert(arc: arcade.ArcadeSet, out: Output, letters: str, sound: tuple[bytes
     arcade_screens.convert(arc, out)
     if tool is not None:
         arcade_movie.convert(arc, out, tool)
-    convert_sounds(arc, out, sound, music_tool)
+    convert_sounds(arc, out, sound, music_tool, music_parts)
     return {
         "source": "arcade",
         "source_image_sha256": hashlib.sha256(arc.program_rom).hexdigest(),

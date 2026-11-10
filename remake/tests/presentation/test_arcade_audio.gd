@@ -2,28 +2,24 @@ extends TestSuite
 ## SectionMusic's decisions that need no files: the music's cues, and its sections on made-up ones.
 
 
-func _audio() -> SectionMusic:
-	var audio := SectionMusic.new()
-	audio._current = SectionMusic.Section.new()
-	audio._current.cues = PackedFloat32Array([2.0, 4.0, 6.0])
-	return audio
+const CUES := [2.0, 4.0, 6.0]
+
+
+func _crossed(before: float, now: float) -> float:
+	return SectionMusic._crossed_cue(PackedFloat32Array(CUES), before, now)
 
 
 func test_a_cue_counts_when_the_position_passes_it() -> void:
-	var audio := _audio()
-	expect_equal(audio._crossed_cue(1.0, 1.5), -1.0)
-	expect_equal(audio._crossed_cue(1.5, 2.0), 2.0)
-	expect_equal(audio._crossed_cue(2.0, 2.5), -1.0, "the position it was at does not count again")
-	expect_equal(audio._crossed_cue(3.9, 4.1), 4.0)
-	audio.free()
+	expect_equal(_crossed(1.0, 1.5), -1.0)
+	expect_equal(_crossed(1.5, 2.0), 2.0)
+	expect_equal(_crossed(2.0, 2.5), -1.0, "the position it was at does not count again")
+	expect_equal(_crossed(3.9, 4.1), 4.0)
 
 
 func test_a_loops_return_passes_the_cues_on_both_sides() -> void:
-	var audio := _audio()
-	expect_equal(audio._crossed_cue(5.9, 1.0), 6.0, "before the return")
-	expect_equal(audio._crossed_cue(6.5, 2.5), 2.0, "after the return")
-	expect_equal(audio._crossed_cue(6.5, 1.0), -1.0, "none in between")
-	audio.free()
+	expect_equal(_crossed(5.9, 1.0), 6.0, "before the return")
+	expect_equal(_crossed(6.5, 2.5), 2.0, "after the return")
+	expect_equal(_crossed(6.5, 1.0), -1.0, "none in between")
 
 
 func test_the_written_sections_go_1_2_3_then_2_and_3() -> void:
@@ -36,13 +32,84 @@ func test_the_written_sections_go_1_2_3_then_2_and_3() -> void:
 
 
 func test_sections_are_found_by_number() -> void:
-	var audio := _audio()
+	var audio := SectionMusic.new()
 	var first := SectionMusic.Section.new()
 	first.number = 1
 	audio._track = [first]
 	expect_equal(audio._section_numbered(1), first)
 	expect_equal(audio._section_numbered(2), null)
 	audio.free()
+
+
+## SectionMusic on a clock of its own and silent files: what it starts, and when.
+class ClockedSections extends SectionMusic:
+	var now := 0.0
+	var started: Dictionary = {}       ## file → the time it started
+
+	func _request(_part: Part) -> void:
+		pass
+
+	func _music_stream(part: Part) -> AudioStream:
+		started[part.file] = now
+		var stream := AudioStreamWAV.new()
+		stream.mix_rate = 8000
+		stream.data = PackedByteArray()
+		stream.data.resize(16000)
+		return stream
+
+	func _position(_lane: Lane) -> float:
+		return now
+
+
+func _part(file: String, cue: float, delay: float, length := 2.0) -> Dictionary:
+	return {"file": file, "length": length, "loop": 0.0, "delay": delay, "cues": [cue]}
+
+
+## Where a BGM's channels go into a section at different bars (the gated ones a bar after those that
+## test the section variable itself), each part's file changes at its own bar, after its own delay.
+func test_each_part_changes_section_at_its_own_bar() -> void:
+	var music := ClockedSections.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(music)
+	music.available = true
+	music.load_table({"tracks": {"16": {"sections": [
+		{"section": 0, "parts": [_part("main_0", 1.0, 0.0), _part("lead_0", 0.5, 0.0)]},
+		{"section": 1, "parts": [_part("main_1", 1.0, 0.25), _part("lead_1", 0.5, 0.0)]},
+	]}}})
+	music.play(16)
+	expect_equal(music.started.keys(), ["main_0", "lead_0"])
+	music.write(1)
+	var section_at_lead := -1
+	for step in 90:
+		music.now = step / 60.0
+		music.advance(2)
+		if music.started.has("lead_1") and section_at_lead < 0:
+			section_at_lead = music._current.number
+	expect(is_equal_approx(music.started.get("lead_1", -1.0) as float, 0.5), "the lead at its cue")
+	expect(is_equal_approx(music.started.get("main_1", -1.0) as float, 1.0), "the others at theirs, after the gate")
+	expect_equal(section_at_lead, 0, "the section is reached when every part has gone over")
+	expect_equal(music._current.number, 1)
+	music.stop()
+	music.free()
+
+
+## Started in a section (the PlayStation's True Ogre track), the parts play together: one whose
+## channels went into it earlier (a longer file, as every part ends at the same tick) is that much
+## further into its file.
+func test_parts_started_in_a_section_play_together() -> void:
+	var music := ClockedSections.new()
+	(Engine.get_main_loop() as SceneTree).root.add_child(music)
+	music.available = true
+	music.load_table({"tracks": {"16": {"sections": [
+		{"section": 0, "parts": [_part("main_0", 1.0, 0.0), _part("lead_0", 0.5, 0.0)]},
+		{"section": 1, "parts": [_part("main_1", 1.0, 0.25), _part("lead_1", 0.5, 0.0, 2.5)]},
+	]}}})
+	music.play(16)
+	expect_equal([music._lanes[0].last_position, music._lanes[1].last_position], [0.0, 0.0], "the intro")
+	music.play(16, 1)
+	expect_equal(music._lanes[0].last_position, 0.0)
+	expect_equal(music._lanes[1].last_position, 0.5, "the lead a bar into its file")
+	music.stop()
+	music.free()
 
 
 ## On an arcade conversion every BGM (the stage records' sequences 0x10–0x1E) has its intro and
@@ -59,8 +126,10 @@ func test_every_bgm_reaches_its_sections_at_cues() -> void:
 		var numbers: Array[int] = []
 		for row: Dictionary in rows:
 			numbers.append(row["section"] as int)
-			expect(not (row["cues"] as Array).is_empty(), "%x section %d: cues" % [sequence, row["section"] as int])
-			expect(row["loop"] != null, "%x section %d: loops" % [sequence, row["section"] as int])
+			for part: Dictionary in row["parts"] as Array:
+				var name := "%x section %d, %s" % [sequence, row["section"] as int, part["file"] as String]
+				expect(not (part["cues"] as Array).is_empty(), "%s: cues" % name)
+				expect(part["loop"] != null, "%s: loops" % name)
 		expect_equal(numbers, [0, 1, 2, 3] as Array[int], "%x: its sections" % sequence)
 
 
