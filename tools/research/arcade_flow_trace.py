@@ -50,6 +50,7 @@ START = 0x8000
 BOOT, TRANSITION, ATTRACT, TITLE, MATCH, SELECT, RANKING, ENDING = 0, 1, 2, 3, 4, 5, 7, 8
 FIGHT_SUB = afh.FIGHT_SUB_STATE
 CONTINUE_SUB = 9
+ENDING_FIRST_PAGE = 7                   # the staff roll's first replay
 ROUND_FIGHTING = 1                      # 0x8021F0C0
 
 # A fighter's record.
@@ -159,6 +160,10 @@ SCENARIOS = {s.name: s for s in (
              presses=(_START_AT_ATTRACT, _PICK, press(MATCH, FIGHT_SUB, 400, 0, START), press(SELECT, None, 40, LP, LP))),
     # The whole ladder won, Ogre's scene and True Ogre, the ending and the staff roll, the name entry.
     Scenario("ladder", 40000, day=120, ko_side=1, presses=(_START_AT_ATTRACT, _PICK)),
+    # The same, with Start during the staff roll's first replay; the ranking is left alone and the
+    # attract's first demonstration follows.
+    Scenario("ladder_skip", 26000, day=120, ko_side=1,
+             presses=(_START_AT_ATTRACT, _PICK, press(ENDING, ENDING_FIRST_PAGE, 120, START))),
 )}
 
 

@@ -156,6 +156,10 @@ func test_ladder() -> void:
 	_run("ladder")
 
 
+func test_ladder_skip() -> void:
+	_run("ladder_skip")
+
+
 func _run(scenario: String) -> void:
 	if not require(ArcadeFlowTrace.path(scenario), "run tools/research/arcade_flow_trace.py first"):
 		return
@@ -175,6 +179,10 @@ func _run(scenario: String) -> void:
 	var flow := ArcadeGameFlow.new(_content, _data, RuleSet.original(), ArcadeSettings.new(), head["seed"] as int)
 	flow.progress.day = trace.ram(0, DAY, 2)    # what the game ran with (older recordings lost the scenario's day)
 	flow.progress.apply_schedule(_data)
+	# The game applies the schedule when a game starts (FUN_801BAE34); until then its unlocks are the
+	# power-on ones, which the remake's constructor has already replaced.
+	flow.progress.unlocked = trace.ram(0, PROGRESS["unlocked"][0] as int, PROGRESS["unlocked"][1] as int)
+	flow.progress.costumes = trace.ram(0, PROGRESS["costumes"][0] as int, PROGRESS["costumes"][1] as int)
 	_compare(scenario, trace, flow)
 
 

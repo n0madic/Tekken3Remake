@@ -69,8 +69,16 @@ func _set_up() -> void:
 	sim.camera.step(f0, f1)
 	(sim.camera as ArcadeCamera).scene_start(REEL_LIST, f0, f1)
 	reel_over = false
-	(fight.replay as ArcadeReplay).clear_kept()
+	_replay_init(fight.replay as ArcadeReplay)
 	sim.effect_objects.round_start()
+
+
+## FUN_80194EFC(0), (1), (2): no kept fights, none stored, and the replay records again. A staff roll
+## left with Start keeps playing its kept fight until then, which would move the fighters' roots.
+func _replay_init(replay: ArcadeReplay) -> void:
+	replay.clear_kept()
+	replay.stored = 0
+	replay.reset()
 
 
 func _running() -> bool:
