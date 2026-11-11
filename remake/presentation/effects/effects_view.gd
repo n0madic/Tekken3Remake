@@ -123,6 +123,16 @@ func step(events: SimEvents) -> void:
 					_spawn(data.dust, p, i * data.dust_interval, Vector3.ZERO, false, true)
 
 
+## The step's effect objects: the pool as its update drew it (EFFECT_OBJECTS_DRAW), none on a step
+## that did not run it. The arcade's scenes do not, so a replay skipped with sparks in flight leaves
+## them in the pool undrawn until True Ogre's round clears it (issue n0madic/Tekken3Remake#37).
+func show_objects(events: SimEvents, pool: EffectPool) -> void:
+	if events.has(SimEvents.Kind.EFFECT_OBJECTS_DRAW):
+		objects.show_pool(pool)
+	else:
+		objects.clear()
+
+
 ## Every rendered frame, with the camera's position and viewing direction and Tekken Ball's solid
 ## ball as `BallView.occluder` gives it: the sprites the game draws over the ball are placed clear
 ## of the sphere (`pull_over_ball`), the others where they are; the effect objects likewise.

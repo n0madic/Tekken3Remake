@@ -35,6 +35,7 @@ enum Kind {
 	STAFF_ROLL_BANK, ## FUN_8007517c: the staff roll's bank (ending.ovl) replaces the first voice bank
 	MUSIC_SECTION, ## a: the arcade BGM's section variable (ArcadeRoundSounds)
 	EFFECT_BOOK,  ## a: flipbook set (0, 1), b: the costume slot whose flipbook it now is (the arcade's FUN_801ACA14)
+	EFFECT_OBJECTS_DRAW, ## the effect objects' update ran and drew the pool this step (EffectsUpdate, the arcade's FUN_801DC990); a step without it draws none (the arcade's scenes)
 }
 
 ## EFFECTS_DRAW modes: the game's flipbook and dust ring draw calls (FUN_80077744,

@@ -274,3 +274,29 @@ func test_a_green_hit_exchanges_only_the_hits_colours() -> void:
 	expect(view.sprites[0].material.get_shader_parameter("exchange_red_green") as bool, "green: the hit")
 	expect(not (view.sprites[1].material.get_shader_parameter("exchange_red_green") as bool), "not the others")
 	view.free()
+
+
+## The effect objects are drawn only on a step whose update ran (EFFECT_OBJECTS_DRAW): the arcade's
+## scenes skip it, and a replay skipped with sparks in flight left them in the Ogre scene (issue
+## n0madic/Tekken3Remake#37).
+func test_effect_objects_drawn_only_by_their_update() -> void:
+	var data := EffectData.new()
+	data.objects = {"quads": [[], [[-55, -55], [55, -55], [-55, 55], [55, 55]]],
+			"uv_tables": [{"size": 16, "frames": [[16, 0]], "palette": 1, "half": false}]}
+	var view := EffectsView.new()
+	view.setup(data)
+	var pool := EffectPool.new()
+	var o := EffectObjects.Obj.new()
+	o.flags |= EffectObjects.VISIBLE
+	o.model = 1
+	o.uv_table = 1
+	o.uv = 0
+	pool.objects.append(o)
+	var events := SimEvents.new()
+	events.add(SimEvents.Kind.EFFECT_OBJECTS_DRAW, -1)
+	view.show_objects(events, pool)
+	expect_equal(view.objects.additive.multimesh.visible_instance_count, 1, "a step that updates the pool draws it")
+	events.clear()
+	view.show_objects(events, pool)
+	expect_equal(view.objects.additive.multimesh.visible_instance_count, 0, "a step without the update draws none")
+	view.free()

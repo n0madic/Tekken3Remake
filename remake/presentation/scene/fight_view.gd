@@ -199,7 +199,7 @@ func apply(sim: FightSimulation) -> void:
 	if _wind.tables != null:
 		_wind.step()
 	effects.step(sim.events)
-	effects.objects.show_pool(sim.fight.effects)
+	effects.show_objects(sim.events, sim.fight.effects)
 	var view := sim.camera.view.copy()
 	rig.set_view(view, _is_cut(view))
 	_last_view = view

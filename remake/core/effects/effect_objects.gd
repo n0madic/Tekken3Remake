@@ -125,6 +125,7 @@ static func _spawn_glows(fight: FightState) -> void:
 ## EffectsUpdate (0x8006F8A8). `enabled` is FightFrame's 0x800958C0 (0 while the fight only
 ## draws): the objects update and are counted only when it is set.
 static func update(fight: FightState, enabled: bool, events: SimEvents) -> void:
+	events.add(SimEvents.Kind.EFFECT_OBJECTS_DRAW, -1)
 	var pool := fight.effects
 	pool.segments[0].clear()
 	pool.segments[1].clear()

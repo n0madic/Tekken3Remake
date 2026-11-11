@@ -489,7 +489,7 @@ func _stopped_frame(f0: FighterState, f1: FighterState) -> void:
 	round_sounds.step(fight, events)
 	frame_view()
 	(animation as ArcadeAnimation).update_pair()
-	effect_objects.update(false)
+	effect_objects.update(false, events)
 	events.add(SimEvents.Kind.EFFECTS_DRAW, -1, SimEvents.EFFECTS_HOLD)
 	ArcadeInput.source(fight, f0, panels, fight.input_mode[0], cpu)
 	ArcadeInput.source(fight, f1, panels, fight.input_mode[1], cpu)
@@ -552,7 +552,7 @@ func _arcade_frame(f0: FighterState, f1: FighterState) -> void:
 func _effects_update(enabled: bool) -> void:
 	effect_objects.descriptor_spawn(fight.fighters[0], enabled)
 	effect_objects.descriptor_spawn(fight.fighters[1], enabled)
-	effect_objects.update(enabled)
+	effect_objects.update(enabled, events)
 
 
 ## FUN_801AE9DC, FUN_801A6DBC. `fighter_view` is for presentation, which reads the display's points in

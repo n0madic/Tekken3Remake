@@ -112,7 +112,8 @@ func _spawn_glows() -> void:
 
 
 ## FUN_801DC990. `enabled` is the frame's 0x8021FB38: without it the objects only draw.
-func update(enabled: bool) -> void:
+func update(enabled: bool, events: SimEvents) -> void:
+	events.add(SimEvents.Kind.EFFECT_OBJECTS_DRAW, -1)
 	var pool := fight.effects
 	pool.segments[0].clear()
 	pool.segments[1].clear()
