@@ -26,6 +26,11 @@ func _depth_at(z: float) -> float:
 	return CameraRig.NEAR * (CameraRig.FAR - z) / (z * (CameraRig.FAR - CameraRig.NEAR))
 
 
+## The depth the band gives a stage point `z` metres ahead: the one STAGE_DEPTH_NEAR ahead at its top.
+func _band_depth(z: float) -> float:
+	return _constant("STAGE_DEPTH_BASE") + _constant("STAGE_DEPTH_SPAN") * _depth_at(z) / _depth_at(_constant("STAGE_DEPTH_NEAR"))
+
+
 func test_band_is_inside_the_depth_range() -> void:
 	var base := _constant("STAGE_DEPTH_BASE")
 	var span := _constant("STAGE_DEPTH_SPAN")
@@ -43,16 +48,31 @@ func test_band_lies_behind_everything_dynamic() -> void:
 	expect(range_m >= 32.768 + 5.0, "the ordering table's last entry (32.8 m) and the biases beyond it are within")
 
 
-## What the squeeze costs a 24-bit depth buffer: the distance one step of it covers inside the band.
+## What the squeeze costs a 24-bit depth buffer (the Mobile renderer on Android GPUs, the web):
+## the distance one step of it covers inside the band. The arcade scene's eaves, pillars and
+## balustrades, 10 to 60 m away, z-fought when the band held the depths from the near plane.
 func test_band_keeps_the_stage_resolved_on_a_24_bit_buffer() -> void:
 	var span := _constant("STAGE_DEPTH_SPAN")
-	for case: Array in [[3.0, 0.02], [10.0, 0.2]]:
+	var scale := span / _depth_at(_constant("STAGE_DEPTH_NEAR"))
+	for case: Array in [[3.0, 0.001], [10.0, 0.005], [30.0, 0.02], [60.0, 0.08]]:
 		var z: float = case[0]
 		var limit: float = case[1]
 		# d(z) = near (far − z) / (z (far − near)), so a step of the band is a depth step of
-		# STEP / span, which covers z² (far − near) / (near · far) times that many metres.
-		var step := STEP_24_BIT / span * z * z * (CameraRig.FAR - CameraRig.NEAR) / (CameraRig.NEAR * CameraRig.FAR)
-		expect(step <= limit, "at %d m one step covers %.3f m, at most %.2f" % [int(z), step, limit])
+		# STEP / scale, which covers z² (far − near) / (near · far) times that many metres.
+		var step := STEP_24_BIT / scale * z * z * (CameraRig.FAR - CameraRig.NEAR) / (CameraRig.NEAR * CameraRig.FAR)
+		expect(step <= limit, "at %d m one step covers %.4f m, at most %.3f" % [int(z), step, limit])
+
+
+func test_a_nearer_stage_surface_stays_behind_what_lies_beyond_it() -> void:
+	var near := _constant("STAGE_DEPTH_NEAR")
+	var top := _constant("STAGE_DEPTH_BASE") + _constant("STAGE_DEPTH_SPAN")
+	expect(is_equal_approx(_band_depth(near), top), "the band's top is the depth STAGE_DEPTH_NEAR ahead")
+	expect(_band_depth(CameraRig.FAR) < _band_depth(near), "farther stage surfaces lie lower in the band")
+	# A surface nearer than that rises above the band, but anything 12 times as far is in front of it.
+	for z: float in [CameraRig.NEAR * 1.2, 0.2, 0.5, 1.4, 3.0, near]:
+		expect(_band_depth(z) < _depth_at(12.0 * z), "a stage surface %.2f m ahead lies behind a body %.1f m ahead" % [z, 12.0 * z])
+	# The arcade scene's nearest seen (stage 5's opening) leaves the fighters in front of it.
+	expect(_band_depth(1.4) < _depth_at(10.0), "the arcade scene at 1.4 m lies behind a fighter 10 m ahead")
 
 
 func test_backdrop_quad_lies_behind_the_band() -> void:
@@ -72,8 +92,10 @@ func test_compatibility_writes_the_depth_from_the_fragment() -> void:
 	var include := FileAccess.get_file_as_string(INCLUDE)
 	expect(include.contains("#if CURRENT_RENDERER == RENDERER_COMPATIBILITY"),
 		"Compatibility has no depth pre-pass: it writes DEPTH, the others shift the vertices")
-	expect(include.contains("? STAGE_DEPTH_BASE + FRAGCOORD.z * STAGE_DEPTH_SPAN : FRAGCOORD.z;"), "its fragment write is the band's")
-	expect(include.contains("POSITION.z = POSITION.z * STAGE_DEPTH_SPAN"), "theirs shifts the clip-space depth")
+	expect(include.contains("? STAGE_DEPTH_BASE + FRAGCOORD.z * stage_depth_scale(PROJECTION_MATRIX) : FRAGCOORD.z;"), "its fragment write is the band's")
+	expect(include.contains("POSITION.z = POSITION.z * stage_depth_scale(PROJECTION_MATRIX)"), "theirs shifts the clip-space depth")
+	expect(include.contains("return STAGE_DEPTH_SPAN / (0.5 * c.z / c.w + 0.5);"),
+		"OpenGL's clip depth (−1..1) is taken to the window's (0..1) for the band's top")
 
 
 func test_only_the_cameras_perspective_pass_is_shifted() -> void:
