@@ -43,6 +43,29 @@ func test_wide_and_tall_windows() -> void:
 	rig.free()
 
 
+## A sky laid out on the screen (the arcade's) tells the rig how far up it covers, for the view's
+## pitch, in place of the coverage; the rest of a tall window extends downwards.
+func test_a_screen_sky_limits_a_tall_window() -> void:
+	var rig := CameraRig.new()
+	rig._ready()
+	rig.set_view(CameraView.new(200, 0, 0, -1000, -3000, 500), true)
+	rig.coverage = PackedInt32Array([90])
+	var pitches: Array[float] = []
+	rig.sky_cover = func(pitch: float, frame_half_tan: float) -> float:
+		pitches.append(pitch)
+		return frame_half_tan * 1.25
+	rig.place(1.0, Vector2(1080, 1920))
+	expect(pitches.size() == 1 and is_equal_approx(pitches[0], WorldSpace.radians(200)), "it gets the view's pitch: %s" % [pitches])
+	var up := rig.frame_tan.x * 1920.0 / 1080.0 + rig.camera.frustum_offset.y / CameraRig.NEAR
+	expect(is_equal_approx(up, rig.frame_tan.y * 1.25), "up to where it covers, not the coverage's: %f" % up)
+	expect(rig.frame_rect.position.y > 0.0 and rig.frame_rect.get_center().y < 0.5, "the 4:3 frame near the top: %s" % rig.frame_rect)
+	rig.sky_cover = func(_pitch: float, _frame_half_tan: float) -> float: return INF
+	rig.place(1.0, Vector2(1080, 1920))
+	expect(is_equal_approx(rig.frame_rect.get_center().y, 0.5), "a sky that covers every view extends evenly: %s" % rig.frame_rect)
+	rig.camera.free()
+	rig.free()
+
+
 ## The arcade's frame is 512 by 240 rows of 0x980/4096: not 4:3 in the world, 4:3 on the monitor.
 func test_the_arcade_frames_2d_at_the_monitors_shape() -> void:
 	var rig := CameraRig.new()

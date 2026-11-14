@@ -5,6 +5,7 @@ extends TestSuite
 
 const DISC_DATA := [
 	"test_converted_stage_is_placed_as_the_arcade_places_it",
+	"test_no_tall_window_shows_above_a_converted_sky",
 	"test_the_setting_offers_arcade_only_when_converted",
 ]
 
@@ -50,6 +51,66 @@ func test_sky_top_follows_the_pitch_with_the_clamps() -> void:
 	_free(view)
 
 
+## A taller window extends over the sky as far as its top row, where the picture ends and the
+## arcade leaves black (no upper fill, or a black one), and without limit into a coloured fill,
+## stage 3's gradient and stage 6's single colour.
+func test_a_tall_window_ends_at_the_skys_top_row() -> void:
+	var view := _sky_view({"pitch_scale": 128, "offset": -32, "rows": 4, "kind": "tiles", "step": 546})
+	var camera := _camera()
+	for pitch: int in [-400, 0, 200, 600]:
+		camera.transform = Transform3D(CameraRig.view_basis(WorldSpace.radians(pitch), 0.0), Vector3.ZERO)
+		view.place_sky(camera, Vector2(0.368, 0.276))
+		var top := view.sky_material.get_shader_parameter("sky_top") as float
+		var row := _row(view.sky_cover(WorldSpace.radians(pitch), 0.276), 0.276, top)
+		expect(absf(row) < 1e-3, "pitch %d: the cover ends at the top row (row %f)" % [pitch, row])
+	for fill: Variant in [null, [0, 0, 0]]:
+		view.arcade.sky["upper_fill"] = fill
+		expect(view.sky_cover(0.0, 0.276) < INF, "upper fill %s: up to the top row" % [fill])
+	view.arcade.sky["upper_fill"] = [48, 64, 128]
+	expect_equal(view.sky_cover(0.0, 0.276), INF, "a coloured fill continues the sky")
+	view.arcade.sky["upper_fill"] = null
+	for kind: String in ["gradient", "fill"]:
+		view.arcade.sky["kind"] = kind
+		expect_equal(view.sky_cover(0.0, 0.276), INF, kind + ": no edge")
+	camera.free()
+	_free(view)
+
+
+## Every converted sky in a phone's tall windows (a foldable's inner screen, a portrait phone),
+## with the camera looking up, level and down: the window's top row is never above the sky's,
+## unless the 4:3 frame itself shows it, as in the arcade.
+func test_no_tall_window_shows_above_a_converted_sky() -> void:
+	if not require(AssetCatalog.ROOT.path_join("stages/a/arcade/arcade.json")):
+		return
+	var root := (Engine.get_main_loop() as SceneTree).root
+	for letter: String in "abcdefgijklmn":
+		var dir := AssetCatalog.ROOT.path_join("stages").path_join(letter)
+		if not FileAccess.file_exists(dir.path_join("arcade/arcade.json")):
+			continue
+		var view := _sky_view(StageData.load_from(dir).arcade.sky)
+		var rig := CameraRig.new()
+		root.add_child(rig)
+		view.limit_view(rig)
+		for window: Vector2 in [Vector2(2184, 1968), Vector2(1080, 2400)]:
+			for pitch: int in [-300, 0, 150, 400]:
+				rig.set_view(CameraView.new(pitch, 700, 0, -1000, -3000, 500), true)
+				rig.place(1.0, window)
+				view.place_sky(rig.camera, rig.frame_tan)
+				var up := window.y / window.x * rig.frame_tan.x + rig.camera.frustum_offset.y / CameraRig.NEAR
+				var row := _row(up, rig.frame_tan.y, view.sky_material.get_shader_parameter("sky_top") as float)
+				var frame_only := is_equal_approx(up, rig.frame_tan.y)
+				if view.sky_cover(WorldSpace.radians(pitch), rig.frame_tan.y) < INF:
+					expect(row > -1e-2 or frame_only, "stage %s, %s, pitch %d: the window's top is row %f" % [letter, window, pitch, row])
+		root.remove_child(rig)
+		rig.free()
+		_free(view)
+
+
+## The sky shader's row of a direction `t` (view-plane units) above the view centre.
+static func _row(t: float, frame_half_tan: float, sky_top: float) -> float:
+	return 240.0 - 240.0 * t / frame_half_tan - sky_top
+
+
 ## The shader takes a direction's place in the 4:3 frame from the camera's view: the frame's
 ## corners are the strip's 512 × 480 screen (the arcade's), not angles at the scroll rates.
 func test_sky_shader_lays_the_strip_on_the_frame() -> void:
@@ -91,7 +152,11 @@ func test_converted_stage_is_placed_as_the_arcade_places_it() -> void:
 	expect(view.arcade != null and view.sky_material != null, "the arcade scene and sky are drawn")
 	expect(is_equal_approx(view.panorama.scale.x, 10.0), "scaled by 10: %s" % view.panorama.scale)
 	expect_equal(StageView.floor_half_extent(stage, view.arcade), 12500, "10 × 10 tiles of 2,500 units")
-	expect_equal(view.coverage().size(), 0, "the sky covers every view")
+	var rig := CameraRig.new()
+	view.limit_view(rig)
+	expect(rig.coverage.is_empty() and rig.sky_cover.is_valid(), "the sky, not the panorama's coverage, limits a taller window")
+	rig.camera.free()
+	rig.free()
 	var environment := Environment.new()
 	var root := (Engine.get_main_loop() as SceneTree).root
 	root.add_child(view)

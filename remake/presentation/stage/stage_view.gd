@@ -36,6 +36,7 @@ const FLOOR_FADE_FILE := "floor_fade.json"
 const ARCADE_SCENE_SHADER := preload("res://presentation/stage/arcade_scene.gdshader")
 const ARCADE_SKY_SHADER := preload("res://presentation/stage/arcade_sky.gdshader")
 const SKY_KINDS := {"tiles": 0, "gradient": 1, "fill": 2}
+const SKY_HALF_LINES := 240.0      ## half the arcade's 480-line frame (arcade_sky.gdshader)
 const ANGLE_HALF := 2048           ## 4096-unit angles wrap to −2048 … 2047
 const FADE_SCALE := 0x4000000      ## FloorDrawGrid: the table index is depth · (FADE_SCALE / fade) >> 16
 
@@ -243,9 +244,27 @@ func floor_kind() -> int:
 	return arcade.floor_kind if arcade != null else _stage.floor_kind
 
 
-## The camera rig's coverage: the arcade's sky surrounds the camera, so it covers every view.
-func coverage() -> PackedInt32Array:
-	return PackedInt32Array() if arcade != null else _stage.coverage
+## Sets how far `rig` extends a taller window upwards (remake-plan.md#aspect-ratios): as far as the
+## panorama covers (its coverage data), or over the arcade's sky, which surrounds the camera, as
+## far as its picture reaches (sky_cover).
+func limit_view(rig: CameraRig) -> void:
+	rig.coverage = PackedInt32Array() if arcade != null else _stage.coverage
+	rig.sky_cover = sky_cover if arcade != null else Callable()
+
+
+## How far above the view centre (in view-plane units) the arcade's sky covers a taller window,
+## for a camera pitch (radians, positive looking down) and the 4:3 frame's half height
+## (CameraRig.sky_cover). The picture ends at its top row: above it the arcade draws its upper fill
+## if the stage has one, and leaves its clear colour, black, if not. A black fill (stages 0, 2
+## and 9) looks the same, and the picture's edge against it showed as a black band across the top
+## of stages 0 and 5 on a phone's tall screen. So the view extends past the top row only into a
+## coloured fill (stages 1, 4, 7 and 10), stage 3's gradient and stage 6's single colour.
+func sky_cover(pitch: float, frame_half_tan: float) -> float:
+	var sky := arcade.sky
+	var fill := _fill(sky.get("upper_fill"))
+	if str(sky.get("kind", "tiles")) != "tiles" or (fill.a > 0.0 and fill != Color.BLACK):
+		return INF
+	return frame_half_tan * (1.0 - _sky_line(pitch * WorldSpace.ANGLE_UNITS / TAU) / SKY_HALF_LINES)
 
 
 ## Shows the arcade's sky as `environment`'s background (no sky in True Ogre fights, which
@@ -284,20 +303,26 @@ func place_sky(camera: Camera3D, frame_tan: Vector2) -> void:
 		return
 	var b := camera.global_basis
 	var yaw := atan2(b.z.x, b.z.z) * WorldSpace.ANGLE_UNITS / TAU
-	var pitch := wrapf(asin(clampf(b.z.y, -1.0, 1.0)) * WorldSpace.ANGLE_UNITS / TAU, -ANGLE_HALF, ANGLE_HALF)
+	var pitch := asin(clampf(b.z.y, -1.0, 1.0)) * WorldSpace.ANGLE_UNITS / TAU
+	var step := float(JsonFile.number(arcade.sky.get("step", 1)))
+	sky_material.set_shader_parameter("view", b.inverse())
+	sky_material.set_shader_parameter("frame_tan", frame_tan)
+	sky_material.set_shader_parameter("scroll", fposmod(_backdrop_turn - yaw, WorldSpace.ANGLE_UNITS) * 512.0 / step)
+	sky_material.set_shader_parameter("sky_top", _sky_line(pitch))
+
+
+## The line of the arcade sky's top row in the 480-line frame for a camera pitch (4096 units,
+## positive looking down): −pitch · k / 256 + offset, after the stage's clamps.
+func _sky_line(pitch: float) -> float:
 	var sky := arcade.sky
-	var step := float(JsonFile.number(sky.get("step", 1)))
 	var k := float(JsonFile.number(sky.get("pitch_scale", 0)))
-	var y := -pitch * k / 256.0 + JsonFile.number(sky.get("offset", 0))
+	var y := -wrapf(pitch, -ANGLE_HALF, ANGLE_HALF) * k / 256.0 + JsonFile.number(sky.get("offset", 0))
 	if sky.get("clamp_top", false) or str(sky.get("kind", "")) == "gradient":
 		y = minf(y, 0.0)
 	var bottom: Variant = sky.get("clamp_bottom")
 	if bottom != null:
 		y = maxf(y, JsonFile.number(bottom))
-	sky_material.set_shader_parameter("view", b.inverse())
-	sky_material.set_shader_parameter("frame_tan", frame_tan)
-	sky_material.set_shader_parameter("scroll", fposmod(_backdrop_turn - yaw, WorldSpace.ANGLE_UNITS) * 512.0 / step)
-	sky_material.set_shader_parameter("sky_top", y)
+	return y
 
 
 func _sky_parameters() -> void:

@@ -81,9 +81,11 @@ func setup(stage: StageData, effect_data: EffectData, models: Array[CharacterMod
 		else Color.BLACK
 	lighting.environment.background_color = clear_colour
 	stage_view.apply_environment(lighting.environment, true_ogre)
+	stage_view.limit_view(rig)
 	# Where the clear colour is the sky (stage 11) the view may extend upwards without limit:
 	# above the panorama the game shows that colour too.
-	rig.coverage = stage_view.coverage() if clear_colour == Color.BLACK else PackedInt32Array()
+	if clear_colour != Color.BLACK:
+		rig.coverage = PackedInt32Array()
 	_fighter_lighting = StageLighting.fighter_parameters(lights)
 	_costume_slots = costume_slots.duplicate()
 	for model in models:

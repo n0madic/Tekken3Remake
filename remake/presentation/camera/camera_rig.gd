@@ -8,8 +8,9 @@ extends Node3D
 ## scaled by 0x1BD2/4096 for the 4:3 picture: the 4:3 frame spans ±184/H horizontally and
 ## ±138/H vertically in view-plane units. That frame is always fully visible. A wider window
 ## extends it sideways (up to 21:9); a taller one extends it upwards as far as the stage's
-## backdrop reaches (its coverage data) and downwards over the endless floor for the rest, so
-## the 4:3 frame sits higher in a tall window. What cannot be extended is framed.
+## backdrop reaches (its coverage data, or the arcade sky's picture: sky_cover) and downwards over
+## the endless floor for the rest, so the 4:3 frame sits higher in a tall window. What cannot be
+## extended is framed.
 ##
 ## The monitor shows a frame at 4:3 whatever its pixels. The arcade's rows are scaled 95/100 of that
 ## (ArcadeViewMatrix.ARCADE_ASPECT: ±256/H by ±202/H), so its scene is 5.26 % wider there than it
@@ -25,6 +26,10 @@ const FAR := 400.0
 
 var camera := Camera3D.new()
 var coverage := PackedInt32Array()   ## per direction: highest covered elevation (degrees)
+## In place of the coverage, for a sky laid out on the screen (the arcade's: StageView.sky_cover):
+## how far above the view centre it covers, in view-plane units, given the pitch (radians) and
+## the 4:3 frame's half height.
+var sky_cover := Callable()
 ## The part of the window that shows the scene (normalised); the rest is framed.
 var visible_rect := Rect2(0, 0, 1, 1)
 ## Where the original 4:3 frame lies in the window (normalised): the HUD's frame.
@@ -100,7 +105,8 @@ func _project(h: float, pitch: float, yaw: float, window: Vector2) -> void:
 		# Taller than 4:3: upwards as far as the backdrop covers, downwards over the floor
 		# for the rest of the window (an off-centre frustum).
 		var window_tan := tan_x / aspect
-		var up := clampf(_covered_tan(pitch, yaw, tan_x, tan_y), tan_y, window_tan)
+		var covered := (sky_cover.call(pitch, tan_y) as float) if sky_cover.is_valid() else _covered_tan(pitch, yaw, tan_x, tan_y)
+		var up := clampf(covered, tan_y, window_tan)
 		var down := 2.0 * window_tan - up
 		camera.projection = Camera3D.PROJECTION_FRUSTUM
 		camera.keep_aspect = Camera3D.KEEP_WIDTH
