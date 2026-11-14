@@ -22,6 +22,17 @@ var _gpu_msec := 0.0
 var _gpu_frames := 0          ## the screenshot frame is reached: draw it at the step itself
 
 
+## Command-line options, or on the web the page's query string as `--name[=value]` options.
+static func arguments() -> PackedStringArray:
+	if not OS.has_feature("web"):
+		return OS.get_cmdline_user_args()
+	var query := str(JavaScriptBridge.eval("window.location.search", true))
+	var out := PackedStringArray()
+	for item in query.trim_prefix("?").split("&", false):
+		out.append("--" + item.uri_decode())
+	return out
+
+
 ## The shared options of `args`; the entry points read their own options from `args` themselves.
 static func parse(args: PackedStringArray) -> DevOptions:
 	var o := DevOptions.new()

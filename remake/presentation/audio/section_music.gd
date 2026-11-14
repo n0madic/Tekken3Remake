@@ -71,9 +71,8 @@ static func next_section(section: int) -> int:
 
 
 func _ready() -> void:
-	if AudioServer.get_bus_index(BUS) < 0:
-		AudioServer.add_bus()
-		AudioServer.set_bus_name(AudioServer.bus_count - 1, BUS)
+	var buses: Array[StringName] = [BUS]
+	AudioDirector.add_buses(buses)
 	_add_lane()
 	available = Assets.has_group("music") and FileAccess.file_exists(Assets.path(TABLE))
 	if available:

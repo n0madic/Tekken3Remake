@@ -60,6 +60,9 @@ var _hit: Array[PackedInt32Array] = []
 var _voice: Array[PackedInt32Array] = []    ## per player: the plan without and with the replay's echoes
 var _sequences: Dictionary = {}      ## sequence → plan
 var _streams: Dictionary = {}        ## file → AudioStream
+## File → true: a background load not taken yet. Every request is taken (into `_streams`): the
+## loader keeps one nobody takes until the end, and it leaks at exit.
+var _requested: Dictionary = {}
 
 var _clock := 0                      ## board ticks
 var _players: Array[AudioStreamPlayer] = []
@@ -71,10 +74,7 @@ var _note_gain: Array[PackedFloat32Array] = []
 
 
 func _ready() -> void:
-	for bus in AudioDirector.BUSES:
-		if AudioServer.get_bus_index(bus) < 0:
-			AudioServer.add_bus()
-			AudioServer.set_bus_name(AudioServer.bus_count - 1, bus)
+	AudioDirector.add_buses(AudioDirector.BUSES)
 	_note_channel.resize(VOICES)
 	_note_channel.fill(-1)
 	_note_started.resize(VOICES)
@@ -119,6 +119,25 @@ func _load_sounds() -> void:
 	for key: String in sequences:
 		_sequences[key.to_int()] = sequences[key]
 	available = true
+	_preload_waves()
+
+
+## Loads every sample ahead of its first key-on, which would otherwise load and decode it in the
+## middle of a simulation step: in the background, except on the web, where threads are not a
+## given and they are loaded now (AudioDirector's banks likewise).
+func _preload_waves() -> void:
+	for file: String in _waves.values():
+		if _streams.has(file) or _requested.has(file):
+			continue
+		if OS.has_feature("web"):
+			_streams[file] = load(_sound_path(file))
+		elif ResourceLoader.load_threaded_request(_sound_path(file)) == OK:
+			_requested[file] = true
+
+
+func _exit_tree() -> void:
+	for file: String in _requested.keys():
+		_take(file)
 
 
 ## The step's requests. `sounds_on`: the board hears what the program does not hold back (ArcadeGameFlow.sounds_on).
@@ -237,17 +256,40 @@ func _key_on(channel: int, run: Running, note: PlanNote) -> void:
 	_note_gain[note.voice] = note.gain
 
 
+## A sample's stream: the one requested ahead (`_preload_waves`, waiting for it if need be) or
+## loaded now.
 func _wave_stream(wave: int) -> AudioStream:
 	var file := str(_waves.get(str(wave), ""))
 	if file.is_empty():
 		return null
+	if _requested.has(file):
+		_take(file)
 	if not _streams.has(file):
-		_streams[file] = load(Assets.path("sounds/" + file))
+		_streams[file] = load(_sound_path(file))
 	return _streams[file] as AudioStream
+
+
+func _sound_path(file: String) -> String:
+	return Assets.path("sounds/" + file)
+
+
+func _take(file: String) -> void:
+	_requested.erase(file)
+	_streams[file] = ResourceLoader.load_threaded_get(_sound_path(file))
+
+
+## Takes the background loads that have finished.
+func _collect_requests() -> void:
+	if _requested.is_empty():
+		return
+	for file: String in _requested.keys():
+		if ResourceLoader.load_threaded_get_status(_sound_path(file)) != ResourceLoader.THREAD_LOAD_IN_PROGRESS:
+			_take(file)
 
 
 ## Each simulation step, whether the flow ran or not: the board's clock.
 func advance() -> void:
+	_collect_requests()
 	_clock += TICKS_PER_STEP
 	for channel in CHANNELS:
 		var run := _running[channel]
@@ -258,6 +300,12 @@ func advance() -> void:
 			var at := mini(_clock - _note_started[v], _note_gain[v].size() - 1)
 			_players[v].volume_linear = _note_gain[v][at]
 	music.advance(TICKS_PER_STEP)
+
+
+## Every voice and the music off (before quitting: the audio server releases a playback on its next
+## mix, so a stream still playing at exit is reported as leaked).
+func stop_all() -> void:
+	_stop_all(false)
 
 
 ## The pause: the voices and the music hold where they are and go on from there. The board's clock

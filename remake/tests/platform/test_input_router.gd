@@ -11,6 +11,24 @@ func test_devices_join_in_order_and_only_once() -> void:
 	router.free()
 
 
+## The touch controls turned off give player 1 back: to the device they moved to player 2, else to
+## the next device that joins.
+func test_touch_released() -> void:
+	var router := InputRouter.new()
+	router.devices = PackedInt32Array([InputRouter.KEYBOARD, InputRouter.NO_DEVICE])
+	router.assign_touch()
+	router.release_touch()
+	expect_equal(router.devices, PackedInt32Array([InputRouter.KEYBOARD, InputRouter.NO_DEVICE]), "the keyboard back on player 1")
+	router.devices = PackedInt32Array([InputRouter.NO_DEVICE, 3])
+	router.assign_touch()
+	router.release_touch()
+	expect_equal(router.devices, PackedInt32Array([InputRouter.NO_DEVICE, 3]), "a pad that joined as player 2 stays there")
+	expect_equal(router.assign(InputRouter.KEYBOARD), 0, "the next device takes player 1")
+	router.release_touch()
+	expect_equal(router.devices, PackedInt32Array([InputRouter.KEYBOARD, 3]), "no touch device: nothing changes")
+	router.free()
+
+
 func test_unassigned_player_reads_nothing() -> void:
 	var router := InputRouter.new()
 	expect_equal(router.read_device(InputRouter.NO_DEVICE), 0)

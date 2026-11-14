@@ -64,11 +64,17 @@ var mono := false                    ## SPEAKER OUT: MONO
 var _downmix := AudioEffectStereoEnhance.new()
 
 
-func _ready() -> void:
-	for bus in BUSES:
+## Adds the buses of `names` that do not exist yet (the sound classes' players send to them; the
+## settings set their volumes, GameSettings.apply_audio).
+static func add_buses(names: Array[StringName]) -> void:
+	for bus in names:
 		if AudioServer.get_bus_index(bus) < 0:
 			AudioServer.add_bus()
 			AudioServer.set_bus_name(AudioServer.bus_count - 1, bus)
+
+
+func _ready() -> void:
+	add_buses(BUSES)
 	# A pan pull-out of 0 folds both sides into one (SPEAKER OUT: MONO).
 	_downmix.pan_pullout = 0.0
 	AudioServer.add_bus_effect(0, _downmix)

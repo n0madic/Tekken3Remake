@@ -19,3 +19,21 @@ func test_touch_drives_the_phone_motor() -> void:
 	rumble.set_motors(InputRouter.KEYBOARD, true, 255)
 	rumble.update()
 	expect_equal(rumble.handheld_level, 0.0, "a keyboard has no motor")
+
+
+## A pad's motors are stopped once as they fall still, not on every frame the game asks for nothing.
+func test_pad_stopped_once() -> void:
+	var rumble := Rumble.new()
+	var pad := 0
+	rumble.set_motors(pad, false, 0)
+	rumble.update()
+	expect(not rumble.running.has(pad), "never started: nothing to stop")
+	rumble.set_motors(pad, true, 128)
+	rumble.update()
+	expect(rumble.running.has(pad), "running")
+	rumble.set_motors(pad, false, 0)
+	rumble.update()
+	expect(not rumble.running.has(pad), "stopped as the levels fall to zero")
+	rumble.set_motors(pad, false, 0)
+	rumble.update()
+	expect(not rumble.running.has(pad), "and left alone after that")

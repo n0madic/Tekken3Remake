@@ -101,6 +101,7 @@ var back_allowed := true           ## the system's Back presses Escape on this s
 var touch_bits := 0                ## the touch controls' pad word (TouchControls sets it each frame)
 var touch_latch := 0               ## touch presses since the last physics frame: a tap shorter
                                    ## than a frame still reaches the game once
+var _touch_displaced := NO_DEVICE  ## the device the touch controls moved from player 1 to player 2
 
 
 func _ready() -> void:
@@ -178,12 +179,29 @@ func assign_touch() -> int:
 	var other := devices[0]
 	if other == TOUCH:
 		return 0
+	_touch_displaced = NO_DEVICE
 	if other != NO_DEVICE:
 		devices[0] = NO_DEVICE
 		if devices[1] == NO_DEVICE:
 			devices[1] = other
+			_touch_displaced = other
 	devices[0] = TOUCH
 	return 0
+
+
+## The touch controls turned off give player 1 back: to the device they moved to player 2, if it is
+## still there, else to the next device that joins.
+func release_touch() -> void:
+	if devices[0] != TOUCH:
+		return
+	devices[0] = NO_DEVICE
+	if _touch_displaced != NO_DEVICE and devices[1] == _touch_displaced:
+		devices[1] = NO_DEVICE
+		devices[0] = _touch_displaced
+	_touch_displaced = NO_DEVICE
+	for player in PLAYERS:
+		held[player] = 0
+		pressed[player] = 0
 
 
 ## Physical buttons of one device as a pad word.

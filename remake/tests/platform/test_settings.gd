@@ -132,6 +132,45 @@ func test_game_texts_follow_the_source() -> void:
 	Settings.values["game_texts"] = saved_texts
 
 
+## A choice saved by another build reads as this build's first: the arcade's build, sharing the
+## settings file with a disc's, plays without the Gameplay fixes and with its own backdrops.
+func test_arcade_reads_its_own_choices() -> void:
+	var saved: Dictionary = Assets.manifest
+	var saved_fixes: Variant = Settings.values.get("gameplay_fixes")
+	var saved_backdrops: Variant = Settings.values.get("stage_backdrops")
+	Assets.manifest = saved.duplicate()
+	Assets.manifest["source"] = AssetCatalog.ARCADE_SOURCE
+	Settings.values["gameplay_fixes"] = true
+	Settings.values["stage_backdrops"] = "playstation"
+	expect(not Settings.flag("gameplay_fixes"), "the fixes read as off")
+	expect_equal(Settings.text("stage_backdrops"), "arcade", "the arcade's backdrops")
+	expect_equal(Settings.values["gameplay_fixes"], true, "the saved choice stays for the disc's build")
+	Assets.manifest = saved
+	Settings.values["gameplay_fixes"] = saved_fixes
+	Settings.values["stage_backdrops"] = saved_backdrops
+
+
+## A texture pack or filter chosen drops the pictures taken from the old one before anything hears
+## of the change: the views that reload on the signal get the new pack's.
+func test_texture_settings_clear_the_cache_first() -> void:
+	var saved: Variant = Settings.values.get("texture_filter")
+	var before := TexturePacks.generation
+	var seen: Array[int] = [-1]
+	var listener := func(key: String) -> void:
+		if key == "texture_filter":
+			seen[0] = TexturePacks.generation
+	Settings.changed.connect(listener)
+	Settings.set_value("texture_filter", "crisp" if Settings.text("texture_filter") != "crisp" else "smooth")
+	Settings.changed.disconnect(listener)
+	expect(seen[0] > before, "the cache was dropped when the signal came")
+	if saved == null:
+		Settings.values.erase("texture_filter")
+	else:
+		Settings.values["texture_filter"] = saved
+	TexturePacks.clear()
+	Settings._dirty = false
+
+
 func test_session_preset() -> void:
 	var offered: Array = GameSettings.RENDERER_PRESETS.get(GameSettings.renderer(), ["desktop_low"])
 	var saved: Variant = Settings.values.get("graphics")
@@ -268,7 +307,15 @@ func test_arcade_operator() -> void:
 	for key: String in GameSettings.OPERATOR_KEYS:
 		var list: Array = (GameSettings.SCHEMA[key] as Array)[1]
 		Settings.values[key] = list[list.size() - 1]
+	var manifest: Dictionary = Assets.manifest
+	Assets.manifest = manifest.duplicate()
+	Assets.manifest["source"] = "jp_rev1"
 	s = Settings.arcade_operator()
+	expect_equal(s.difficulty, 1, "a disc's build offers the factory settings only")
+	# The arcade's build, the one that reads them, offers every choice.
+	Assets.manifest["source"] = AssetCatalog.ARCADE_SOURCE
+	s = Settings.arcade_operator()
+	Assets.manifest = manifest
 	var last := [s.difficulty, s.rounds_one, s.rounds_versus, s.life_one, s.life_versus, s.guard_damage,
 		s.neutral_guard, s.round_time, s.reselect, s.versus_change, s.event_mode, s.hit_colour]
 	expect_equal(last, [4, 4, 4, 4, 4, 1, 0, 4, 0, 1, 1, 1], "each setting's last choice")

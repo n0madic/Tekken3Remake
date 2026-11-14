@@ -1,4 +1,4 @@
-extends Node
+extends GameShell
 ## The game from MAME's set alone, no disc (`manifest.source` "arcade"): the frame loop of
 ## ArcadeGameFlow, the arcade's own screens over the shared fight view. game.gd comes here at once
 ## when the conversion is the arcade's, so nothing of the PlayStation's flow, modes or fighters runs.
@@ -10,13 +10,12 @@ extends Node
 ## goes on from fight n, the CPU's fighters at one point of life, a quick way to its last fights and
 ## the ending.
 ## `--no-movies` plays as a build without movies does. The records stay in SaveStore's file between
-## runs; `--fresh`, a pad script, a screenshot or `--ladder-from` neither read nor write it.
+## runs; `--fresh`, a pad script, a screenshot or `--ladder-from` neither read nor write it. On the
+## web the same options come from the page's query string, and the game waits for a first input.
 
 ## Without these the game cannot run; the sounds' absence only silences it.
 const REQUIRED := ["screens", "hud"]
 const DAY_ALL_OPEN := 120
-const MESSAGE_SHARE := 0.035
-const MESSAGE_MIN_SIZE := 18
 
 var flow: ArcadeGameFlow
 var content: ArcadeFightContent
@@ -30,20 +29,11 @@ var hud := ArcadeFightHud.new()
 var screens := ArcadeScreens.new()
 var fade := FadeOverlay.new()
 var audio := ArcadeAudio.new()
-var message := Label.new()
-var stats := Label.new()
-var touch := TouchControls.new()
-var settings_view := SettingsView.new()
-var settings_button := SettingsButton.new()
-var options := DevOptions.new()
 var day := DAY_ALL_OPEN
-var steps := 0
-var _pad_script: Array[Vector2i] = []
 var _fight_loads := -1
 var _model_loads := PackedInt32Array()
 var _step_usec := 0.0
 var _previous_pads := 0
-var _release_pads := false
 var _skip_movies := false
 var _vblanks_left := 0
 var _ladder_from := -1
@@ -56,9 +46,8 @@ var _operator_changed := false          ## an operator setting changed since the
 
 
 func _ready() -> void:
-	var args := OS.get_cmdline_user_args()
+	var args := DevOptions.arguments()
 	options = DevOptions.parse(args)
-	stats.visible = options.stats
 	for arg in args:
 		var value := arg.get_slice("=", 1)
 		if arg.begins_with("--pads="):
@@ -73,7 +62,6 @@ func _ready() -> void:
 			_ladder_from = value.to_int()
 	get_tree().auto_accept_quit = false
 	add_child(audio)
-	Settings.apply_audio()
 	var layer := CanvasLayer.new()
 	layer.layer = 1
 	add_child(layer)
@@ -84,25 +72,16 @@ func _ready() -> void:
 	add_child(top)
 	for view: Control in [fade, message, stats, touch, settings_button, settings_view]:
 		top.add_child(view)
-	settings_view.closed.connect(_on_settings_closed)
-	settings_button.pressed.connect(_open_settings)
-	Settings.changed.connect(_on_setting_changed)
-	RenderQuality.apply_viewport(get_viewport())
-	TranslationServer.set_locale(Settings.locale())
 	Pads.escape_rules = _escape_rules
-	_show_touch()
-	stats.position = Vector2(8, 8)
-	message.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	message.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	message.add_theme_font_size_override("font_size", maxi(MESSAGE_MIN_SIZE, int(get_viewport().get_visible_rect().size.y * MESSAGE_SHARE)))
-	message.visible = false
+	_follow_settings()
+	_setup_labels()
 	if not _can_start():
 		message.text = Assets.missing_message()
 		message.visible = true
 		set_physics_process(false)
 		return
 	_load()
+	_wait_for_gesture()
 
 
 func _can_start() -> bool:
@@ -162,21 +141,6 @@ func _apply_operator_settings() -> void:
 		fight_view.effects.green_hit = flow.settings.hit_colour != 0
 
 
-## A development pad script (game.gd's format): lines `<steps> <pad 1> [<pad 2>]` in hex words.
-func _load_pad_script(path: String) -> void:
-	var f := FileAccess.open(path, FileAccess.READ)
-	if f == null:
-		Log.warning("arcade game: no pad script %s" % path)
-		return
-	while not f.eof_reached():
-		var words := f.get_line().get_slice("#", 0).split(" ", false)
-		if words.size() < 2:
-			continue
-		var second := words[2].hex_to_int() if words.size() > 2 else 0
-		for i in words[0].to_int():
-			_pad_script.append(Vector2i(words[1].hex_to_int(), second))
-
-
 func _notification(what: int) -> void:
 	match what:
 		NOTIFICATION_PREDELETE:
@@ -190,6 +154,8 @@ func _notification(what: int) -> void:
 func _quit() -> void:
 	_write_records()
 	Settings.save()
+	screens.title.movie.stop()
+	audio.stop_all()
 	set_physics_process(false)
 	DevOptions.quit_after_drain(get_tree())
 
@@ -227,36 +193,25 @@ func _no_game() -> bool:
 	return _idle() or flow.mode == ArcadeGameFlow.MODE_DEMO
 
 
-## The touch controls where the settings want them (hidden while the settings are open: the panel
-## takes the taps).
-func _show_touch() -> void:
-	touch.set_macros(Settings.text("touch_macros"))
-	touch.set_scale_share(Settings.touch_scale())
-	touch.visible = Settings.touch_enabled() and not settings_view.visible
-	if not touch.visible:
-		touch.reset()
-
-
 ## Escape stands for Select, always: the pause, and the way out of the settings.
 func _escape_rules() -> Vector2i:
 	return Vector2i(PadState.SELECT, -1)
 
 
-## A fight whose window lost focus (or went to the background) pauses; a scripted session does not.
+## A game's fight whose window lost focus (or went to the background) pauses; the attract's demo
+## fights and a scripted session do not.
 func _pause_on_focus_loss() -> void:
-	if flow != null and flow.state == ArcadeGameFlow.State.MATCH and _pad_script.is_empty() and options.screenshot_path.is_empty():
+	if flow != null and flow.state == ArcadeGameFlow.State.MATCH and not _no_game() and _pad_script.is_empty() \
+			and options.screenshot_path.is_empty():
 		_open_settings()
 
 
 func _on_setting_changed(key: String) -> void:
-	if key == "stage_backdrops" or key == "graphics":
-		RenderQuality.apply_viewport(get_viewport())
-	elif key == "attract_sound" and flow != null:
+	super(key)
+	if key == "attract_sound" and flow != null:
 		flow.settings.attract_sound = Settings.arcade_operator().attract_sound
 	elif key in GameSettings.OPERATOR_KEYS:
 		_operator_changed = true
-	elif key == "touch_controls" or key == "touch_macros" or key == "touch_size":
-		_show_touch()
 
 
 func _physics_process(_delta: float) -> void:

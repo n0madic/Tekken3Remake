@@ -1,4 +1,4 @@
-extends Node
+extends GameShell
 ## The game (remake-plan.md, M3): the whole frame loop of GameFlow from boot, with every mode, the
 ## screens, the fights, the movies and the music, and the progress kept in the save file.
 ##
@@ -19,7 +19,8 @@ extends Node
 ## a graphics preset for the session. For development `--replay=<scenario>`
 ## plays a flow trace's pads (`--replay-frames=<n>`: its first n steps), `--pads=<file>` a pad
 ## script after it. On the web the same options come from the page's query string. `--m0` opens
-## the character viewer, `--fight` the M2 VS set-up, `--stages` the stage viewer.
+## the character viewer, `--fight` the M2 VS set-up, `--stages` the stage viewer (on a disc's
+## conversion: they read the PlayStation's data).
 
 const M0_SCENE := "res://app/m0_viewer.tscn"
 const FIGHT_SCENE := "res://app/fight.tscn"
@@ -29,8 +30,6 @@ const ARCADE_SCENE := "res://app/arcade_game.tscn"
 const DEV_SCENES := {"--m0": M0_SCENE, "--stages": STAGES_SCENE, "--fight": FIGHT_SCENE}
 const FLOW_TRACE_READER := "res://dev/flow_trace.gd"
 const ENBU_STAGE := "e"
-const MESSAGE_SHARE := 0.035           ## the message's text height as a share of the window height
-const MESSAGE_MIN_SIZE := 18
 ## The game's overlays by logical id (the loader's slots): the screens' drawing reads their tables.
 const OVERLAY_NAMES := {0: "arcade", 1: "practice", 4: "select", 5: "title", 6: "ranking", 8: "ending", 9: "result"}
 
@@ -68,15 +67,9 @@ var movie := MoviePlayer.new()
 var mask := ScreenMask.new()
 var fade := FadeOverlay.new()
 var blackout := ColorRect.new()
-var message := Label.new()
-var stats := Label.new()
-var settings_view := SettingsView.new()
-var settings_button := SettingsButton.new()
-var touch := TouchControls.new()
 var rule_set := RuleSet.original()
 var locale: TextLocale
 var movies: Dictionary = {}
-var options := DevOptions.new()            ## --screenshot, --frames, --speed, --seed, --stats
 var seed := -1
 var skip_movies := false
 var fresh := false
@@ -85,8 +78,6 @@ var replay_name := ""
 var dev_screen := ""
 var _replay: Object                        ## the flow trace a replay reads its pads from
 var replay_frames := -1                    ## the replay's steps played (−1: all)
-var _pad_script: Array[Vector2i] = []      ## `--pads`: the steps' pads after the replay
-var steps := 0
 var _fight_loads := -1
 var _model_loads := PackedInt32Array()     ## FightSimulation.model_loads the fight view shows
 var _fight_view_due := false               ## a new fight was set up: _show builds its view
@@ -94,26 +85,27 @@ var _slots := PackedInt32Array([-1, -1])
 var _step_usec := 0.0
 var _tap := false
 var _prev_pads := 0                       ## both pads the step before (Select opens the settings on a press)
-var _waiting_for_gesture := false         ## the web build before its first input
-var _release_pads := false                 ## after the settings: the game gets no buttons until all are released
 var _joypads := 0                          ## gamepads connected (the title's start prompt)
 var _fading_views: Array[ScreenCanvas] = []   ## the screens with a fade of their own
 var _pause_owed := false                   ## the window lost focus in a fight: its pause opens as soon as one can
 
 
 func _ready() -> void:
-	var args := _arguments()
+	var args := DevOptions.arguments()
+	# A conversion from MAME's set alone is another game: its own flow, views and rules. The
+	# development scenes read the PlayStation's data, which it does not have.
+	var scene := ARCADE_SCENE if Assets.is_available() and Assets.arcade_only() else ""
 	for flag: String in DEV_SCENES:
 		if flag in args:
-			set_physics_process(false)
-			set_process(false)
-			get_tree().change_scene_to_file.call_deferred(DEV_SCENES[flag] as String)
-			return
-	# A conversion from MAME's set alone is another game: its own flow, views and rules.
-	if Assets.is_available() and Assets.arcade_only():
+			if scene.is_empty():
+				scene = DEV_SCENES[flag] as String
+			else:
+				Log.warning("game: %s needs a disc's conversion; this one is the arcade's" % flag)
+			break
+	if not scene.is_empty():
 		set_physics_process(false)
 		set_process(false)
-		get_tree().change_scene_to_file.call_deferred(ARCADE_SCENE)
+		get_tree().change_scene_to_file.call_deferred(scene)
 		return
 	_parse_arguments(args)
 	get_tree().auto_accept_quit = false
@@ -135,29 +127,16 @@ func _ready() -> void:
 	top.add_child(touch)
 	top.add_child(settings_button)
 	top.add_child(settings_view)
-	settings_view.closed.connect(_on_settings_closed)
 	Pads.escape_rules = _escape_rules
 	_fading_views = [quick_view, result_view, ranking_view]
 	_joypads = Input.get_connected_joypads().size()
 	Input.joy_connection_changed.connect(func(_device: int, _connected: bool) -> void:
 		_joypads = Input.get_connected_joypads().size())
-	settings_button.pressed.connect(_open_settings)
-	Settings.changed.connect(_on_setting_changed)
-	Settings.apply_audio()
-	RenderQuality.apply_viewport(get_viewport())
-	TranslationServer.set_locale(Settings.locale())
-	_show_touch()
+	_follow_settings()
 	blackout.color = Color.BLACK
 	blackout.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	blackout.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	stats.position = Vector2(8, 8)
-	stats.add_theme_color_override("font_outline_color", Color.BLACK)
-	stats.add_theme_constant_override("outline_size", 4)
-	message.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	message.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	message.visible = false
-	message.add_theme_font_size_override("font_size", maxi(MESSAGE_MIN_SIZE, int(get_viewport().get_visible_rect().size.y * MESSAGE_SHARE)))
+	_setup_labels()
 	movie.visible = false
 	movie.finished.connect(_on_movie_finished)
 	if not Assets.is_available() or not FileAccess.file_exists(Assets.path("tables/flow.json")):
@@ -166,13 +145,7 @@ func _ready() -> void:
 		set_physics_process(false)
 		return
 	_load()
-	# Browsers start audio only after a user gesture: the web build waits for the first input
-	# before the game (and its sound) starts.
-	if OS.has_feature("web") and options.screenshot_path.is_empty():
-		message.text = tr("WEB_START")
-		message.visible = true
-		set_physics_process(false)
-		_waiting_for_gesture = true
+	_wait_for_gesture()
 
 
 func _load() -> void:
@@ -275,7 +248,6 @@ func _map_blocks() -> void:
 func _parse_arguments(args: PackedStringArray) -> void:
 	options = DevOptions.parse(args)
 	seed = options.seed
-	stats.visible = options.stats
 	for arg in args:
 		var value := arg.get_slice("=", 1)
 		if arg == "--no-movies":
@@ -294,33 +266,6 @@ func _parse_arguments(args: PackedStringArray) -> void:
 			replay_frames = value.to_int()
 		elif arg.begins_with("--pads="):
 			_load_pad_script(value)
-
-
-## A development pad script: lines `<steps> <pad 1> [<pad 2>]` (hex words) played in turn once the
-## replay ends (or from boot); `#` starts a comment.
-func _load_pad_script(path: String) -> void:
-	var f := FileAccess.open(path, FileAccess.READ)
-	if f == null:
-		Log.warning("game: no pad script %s" % path)
-		return
-	while not f.eof_reached():
-		var words := f.get_line().get_slice("#", 0).split(" ", false)
-		if words.size() < 2:
-			continue
-		var p1 := words[2].hex_to_int() if words.size() > 2 else 0
-		for i in words[0].to_int():
-			_pad_script.append(Vector2i(words[1].hex_to_int(), p1))
-
-
-## Command-line options, or on the web the page's query string as `--name[=value]` options.
-static func _arguments() -> PackedStringArray:
-	if not OS.has_feature("web"):
-		return OS.get_cmdline_user_args()
-	var query := str(JavaScriptBridge.eval("window.location.search", true))
-	var out := PackedStringArray()
-	for item in query.trim_prefix("?").split("&", false):
-		out.append("--" + item.uri_decode())
-	return out
 
 
 func _new_performance(number: int) -> EnbuPerformance:
@@ -357,19 +302,6 @@ func _quit() -> void:
 	PadVibration.stop_motors()
 	set_physics_process(false)
 	DevOptions.quit_after_drain(get_tree())
-
-
-func _input(event: InputEvent) -> void:
-	if _waiting_for_gesture and event.is_pressed() and not event.is_echo() \
-			and (event is InputEventKey or event is InputEventMouseButton or event is InputEventScreenTouch
-			or event is InputEventJoypadButton):
-		_waiting_for_gesture = false
-		message.visible = false
-		set_physics_process(true)
-		get_viewport().set_input_as_handled()
-		return
-	if DevOptions.toggles_stats(event):
-		stats.visible = not stats.visible
 
 
 ## The settings' Gameplay fixes on the rule set the game shares (RuleSet is read by the fights and
@@ -420,38 +352,20 @@ func _select_vram() -> VramImage:
 
 
 func _on_setting_changed(key: String) -> void:
+	super(key)
 	match key:
 		"gameplay_fixes":
 			if _replay == null:
 				_apply_rules()
-		"language":
-			TranslationServer.set_locale(Settings.locale())
 		"game_texts":
 			_apply_texts()
-		"graphics":
-			RenderQuality.apply_viewport(get_viewport())
-		"texture_pack", "texture_filter":
-			TexturePacks.clear()
-			_reload_pictures()
 		"stage_backdrops":
 			_rebuild_stages()
-		"touch_controls", "touch_macros", "touch_size":
-			_show_touch()
 
 
 ## Whether the settings may open: on the main menu's list (not while it opens or leaves).
 func _settings_allowed() -> bool:
 	return flow != null and flow.state == GameFlow.State.MENU and flow.sub == 1 and _replay == null
-
-
-## The touch controls where the settings want them, with their macro buttons (hidden while the
-## settings are open: the panel takes the taps).
-func _show_touch() -> void:
-	touch.set_macros(Settings.text("touch_macros"))
-	touch.set_scale_share(Settings.touch_scale())
-	touch.visible = Settings.touch_enabled() and not settings_view.visible
-	if not touch.visible:
-		touch.reset()
 
 
 ## A tap waiting for the next step is dropped as the settings open or close: the step does not run
@@ -587,6 +501,14 @@ func _step(pads: PackedInt32Array) -> void:
 	var started := Time.get_ticks_usec()
 	var in_options := flow.state == GameFlow.State.OPTIONS
 	flow.step(pads)
+	# The harness's movies end on their first frame: the frame that started a blocking one finishes
+	# now, and its outputs after the movie are handled with the others.
+	var replayed_movie := flow.movie_started >= 0 and _replay != null
+	if replayed_movie:
+		while flow.movie_blocking:
+			flow.movie_result = 1
+			flow.step(pads)
+		flow.movie_result = 1
 	# Leaving OPTIONS saves the options (ProgressCard): the game would keep them until its next
 	# auto save.
 	var save := flow.save_requested or (in_options and flow.state != GameFlow.State.OPTIONS
@@ -613,13 +535,7 @@ func _step(pads: PackedInt32Array) -> void:
 			vibration.vibrate(e.a, e.b)
 	if save and card.write(flow.progress.save_data()) != SaveStore.CARD_DONE:
 		flow.save_failed()
-	if flow.movie_started >= 0 and _replay != null:
-		# The harness's movies end on their first frame.
-		while flow.movie_blocking:
-			flow.movie_result = 1
-			flow.step(pads)
-		flow.movie_result = 1
-	elif flow.movie_started >= 0:
+	if flow.movie_started >= 0 and not replayed_movie:
 		_start_movie(flow.movie_started, flow.movie_blocking)
 	if movie.playing and not flow.movie_blocking and not (flow.state == GameFlow.State.TITLE and flow.sub == 2):
 		movie.stop()

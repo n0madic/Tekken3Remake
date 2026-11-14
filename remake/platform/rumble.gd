@@ -23,6 +23,7 @@ const HANDHELD_RENEW := 4       ## frames
 const HANDHELD_CUT_MS := 1
 
 var _levels: Dictionary = {}    ## device → Vector2(weak, strong)
+var running: Dictionary = {}    ## device → true: its motors were started and not stopped since
 var handheld_level := 0.0       ## the phone motor's level running now (0: still)
 var _handheld_age := 0          ## frames since its last pulse
 
@@ -33,16 +34,20 @@ func set_motors(device: int, small_on: bool, large: int) -> void:
 	_levels[device] = Vector2(1.0 if small_on else 0.0, clampf(large / LARGE_MAX, 0.0, 1.0))
 
 
+## The frame's levels to the motors. A pad asked for nothing is stopped once, as its motors fall
+## still (the pads that never ran are left alone: the call is not free on every system).
 func update() -> void:
 	var handheld := 0.0
 	for device: int in _levels:
 		var level: Vector2 = _levels[device]
 		if device == InputRouter.TOUCH:
 			handheld = maxf(level.x * SMALL_SHARE, level.y)
-		elif level == Vector2.ZERO:
-			Input.stop_joy_vibration(device)
-		else:
+		elif level != Vector2.ZERO:
 			Input.start_joy_vibration(device, level.x, level.y, FRAME_SECONDS * HOLD_FRAMES)
+			running[device] = true
+		elif running.has(device):
+			Input.stop_joy_vibration(device)
+			running.erase(device)
 	_levels.clear()
 	_update_handheld(handheld)
 

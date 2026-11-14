@@ -62,3 +62,20 @@ func test_a_change_waits_until_no_game_is_on() -> void:
 		expect_equal(flow.settings != before, read, "%s: the settings read" % at)
 		expect_equal(game.get("_operator_changed"), not read, "%s: the change still waiting" % at)
 	game.free()
+
+
+## A window that loses focus pauses a game's fight (the settings open), not the attract's demo fights.
+func test_focus_loss_pauses_a_game_only() -> void:
+	var flow := _flow()
+	if flow == null:
+		return
+	var game := (load("res://app/arcade_game.gd") as GDScript).new() as Node
+	game.set("flow", flow)
+	var view := game.get("settings_view") as SettingsView
+	for c: Array in [[ArcadeGameFlow.MODE_ARCADE, true], [ArcadeGameFlow.MODE_DEMO, false]]:
+		view.visible = false
+		flow.state = ArcadeGameFlow.State.MATCH
+		flow.mode = c[0] as int
+		game.call("_pause_on_focus_loss")
+		expect_equal(view.visible, c[1] as bool, "mode %d: paused" % (c[0] as int))
+	game.free()
