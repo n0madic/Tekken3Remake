@@ -53,7 +53,7 @@ The repository's `Makefile` wraps the steps below and the builds (`make help`: `
 
 ## Exports
 
-`export_presets.cfg` has a **full**, a **nomovies** (music, no movies) and a **lite** (neither) preset for macOS, Windows, Linux, the web (single-threaded, Compatibility renderer), Android (arm64, Mobile renderer) and iOS (an Xcode project to sign and build with your team). Desktop builds keep the large movies, the others the small ones. `tools/remake/export_all.sh [preset …]` exports them into `remake/export/` and prints each build's size; Android builds are signed with the keystore in `GODOT_ANDROID_KEYSTORE_RELEASE_PATH` / `_USER` / `_PASSWORD` (Godot's debug keystore by default). All builds contain converted game data and stay private.
+`export_presets.cfg` has a **full**, a **nomovies** (music, no movies) and a **lite** (neither) preset for macOS, Windows, Linux, the web (single-threaded, Compatibility renderer), Android (arm64, Mobile renderer) and iOS (an Xcode project to sign and build with your team). Desktop builds keep the large movies, the others the small ones. `tools/remake/export_all.sh [preset …]` exports them into `remake/export/` and prints each build's size; Android builds are signed with the keystore in `GODOT_ANDROID_KEYSTORE_RELEASE_PATH` / `_USER` / `_PASSWORD` (Godot's debug keystore by default), and their v4 signature file (`.apk.idsig`) is removed: beside the APK it makes `adb install` install incrementally, where the game starts while the APK still streams and shows a black screen until the parts it reads arrive (for good if the connection drops). An APK that still has one installs whole with `adb install --no-incremental`. All builds contain converted game data and stay private.
 
 ```sh
 tools/remake/export_all.sh "Web lite"

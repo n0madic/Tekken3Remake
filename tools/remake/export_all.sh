@@ -46,6 +46,11 @@ for preset in "$@"; do
 	mkdir -p "$dir"
 	if "$GODOT" --headless --path "$PROJECT" --export-release "$name" "$PROJECT/$path" >"$dir.log" 2>&1 \
 			&& [ -n "$(ls -A "$dir")" ]; then
+		# apksigner leaves the APK's v4 signature beside it, and with it `adb install` installs
+		# incrementally: the app starts while the APK still streams over adb and waits on a black
+		# screen for every part not there yet (for good if the connection drops). Without it the
+		# whole APK is copied first; the APK keeps its v2/v3 signatures.
+		rm -f "$dir"/*.idsig
 		printf '%-14s %8s  %s\n' "$name" "$(du -sh "$dir" | cut -f1)" "$path"
 	else
 		printf '%-14s %8s  (see %s)\n' "$name" "FAILED" "$dir.log"
