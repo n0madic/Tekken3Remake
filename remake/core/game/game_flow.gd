@@ -14,7 +14,9 @@ extends RefCounted
 enum State { BOOT = 0, LOADER = 1, TRANSITION = 2, TITLE = 3, MENU = 4, OPTIONS = 5, ENBU = 6,
 	PREPARE = 7, FIGHT = 8, SELECT = 9, QUICK_SELECT = 10, VS = 11, TEAM_RESULT = 12,
 	TIME_RESULT = 13, SURVIVAL_RESULT = 14, FORCE_RESULT = 15, RANKING_LOAD = 16, RANKING = 17,
-	SCREEN_LOADER = 18, ENDING = 19 }
+	SCREEN_LOADER = 18, ENDING = 19,
+	# The remake's own state (docs/DECISIONS.md D16): the NET MODE screen, after every original's.
+	NET = 20 }
 
 const FACE_BUTTONS := PadState.FACE_BUTTONS
 const SOUND_START := 0x4CC0
@@ -69,6 +71,7 @@ var slots := PackedInt32Array([-1, -1])          ## the overlay in each slot
 
 # Screens with their own state.
 var menu: MainMenu
+var net: NetMenu                   ## the remake's NET MODE screen (D16)
 var quick: QuickSelect
 var select: CharacterSelect
 var ranking: RankingScreen
@@ -78,6 +81,11 @@ var theater: TheaterScreen
 var options: OptionsScreen
 var practice: PracticeMode
 var escape_pressed := false          ## the remake's Escape on a pause menu, pending until the menu takes it (not a button of the game's pads)
+var quit_requested := false          ## the main menu's EXIT (the remake's own entry, D18): game.gd quits
+var replay_requested := false        ## the main menu's REPLAY (D19): game.gd boots the recorded session
+
+## Where the last-battle replay lives (D19), in the user data directory.
+const REPLAY_PATH := "user://replays/last.bin"
 var vs_screen: VsScreen
 var match_flow: MatchFlow
 
@@ -116,6 +124,7 @@ func _init(fight_content: FightContent, flow_data: FlowData, fight_rules: RuleSe
 	rules = ProgressRules.new(progress, globals, region, data, fight_rules)
 	modes = ModeRules.new(self)
 	menu = MainMenu.new(self)
+	net = NetMenu.new(self)
 	quick = QuickSelect.new(self)
 	select = CharacterSelect.new(self)
 	ranking = RankingScreen.new(self)
@@ -179,6 +188,8 @@ func step(buttons: PackedInt32Array) -> void:
 			_title()
 		State.MENU:
 			menu.step()
+		State.NET:
+			net.step()
 		State.OPTIONS:
 			options.step()
 		State.ENBU:

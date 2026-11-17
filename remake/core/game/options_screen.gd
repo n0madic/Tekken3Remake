@@ -10,6 +10,7 @@ const PAGE_LEAVE := 6
 const PAGE_DISPLAY_ADJUST := 5
 const PAGE_RECORDS := 2
 const PAGE_CARD := 3
+const PAGE_UNLOCK := 7                ## the remake's own UNLOCK ALL page (D14)
 const PAGE_KEYS := 4
 const SOUND_MOVE := 0x546C
 const SOUND_OK := 0x4CEB
@@ -63,6 +64,7 @@ var page := 0                        ## 0x800EC5E8
 var cursors := PackedInt32Array([0, 0, 0, 0, 0, 0])   ## per page (+0)
 var subs := PackedInt32Array([0, 0, 0, 0, 0, 0])      ## per page (+4)
 var card_state := 0                  ## 0x800EC63C: 0 the prompt, else the result + 1
+var unlock_state := 0                ## the UNLOCK ALL page's own state (0 the prompt, else result + 1)
 var keys: Array[KeyRecord] = []
 var record_page := 0                 ## 0x800ECA10
 var record_tops := PackedInt32Array([0, 0, 0, 0])
@@ -148,6 +150,10 @@ func step() -> void:
 				page = JsonFile.number(g.data.option_pages[PAGE_RECORDS]["back_value"])
 		PAGE_CARD:
 			_card_page()
+		PAGE_UNLOCK:
+			if _unlock_page():
+				page = 0
+				unlock_state = 0
 		PAGE_KEYS:
 			if key_config_step():
 				page = 0
@@ -377,6 +383,28 @@ func _card_auto_save_screen() -> int:
 			if g.pressed_any() & PadState.START:
 				card_state = (_save() + 1) & 0xFF
 	return 0
+
+
+# ---- unlock all (the remake's own page, docs/DECISIONS.md D14) ------------------------------
+
+## ProgressRules.open_all opens every character, Start costume, mode and Theater movie, then the
+## save is written like the memory card's save. START confirms; SELECT or a face button leaves
+## without changing anything, and the result screen leaves on any button, like the card's.
+func _unlock_page() -> bool:
+	var pressed := g.pressed_any()
+	if unlock_state == 0:
+		if pressed & (PadState.FACE_BUTTONS | PadState.SELECT):
+			g.sound(SOUND_MOVE)
+			return true
+		if pressed & PadState.START:
+			ProgressRules.open_all(g.progress)
+			unlock_state = (_save() + 1) & 0xFF
+			g.sound(SOUND_DONE)
+	else:
+		if pressed & (PadState.CONFIRM | PadState.SELECT):
+			g.sound(SOUND_MOVE)
+			return true
+	return false
 
 
 # ---- key configuration (FUN_800DF9EC, FUN_800DF630) ----------------------------------------

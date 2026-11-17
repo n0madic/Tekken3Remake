@@ -26,7 +26,7 @@ func setup(stage: StageData, effect_data: EffectData) -> void:
 	_fighter_lighting = StageLighting.fighter_parameters(stage)
 	effects.setup(effect_data)
 	add_child(effects)
-	stage_view.limit_view(rig)
+	rig.coverage = stage_view.coverage()
 	add_child(rig)
 
 

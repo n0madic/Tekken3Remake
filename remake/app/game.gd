@@ -1,4 +1,4 @@
-extends GameShell
+extends Node
 ## The game (remake-plan.md, M3): the whole frame loop of GameFlow from boot, with every mode, the
 ## screens, the fights, the movies and the music, and the progress kept in the save file.
 ##
@@ -19,8 +19,7 @@ extends GameShell
 ## a graphics preset for the session. For development `--replay=<scenario>`
 ## plays a flow trace's pads (`--replay-frames=<n>`: its first n steps), `--pads=<file>` a pad
 ## script after it. On the web the same options come from the page's query string. `--m0` opens
-## the character viewer, `--fight` the M2 VS set-up, `--stages` the stage viewer (on a disc's
-## conversion: they read the PlayStation's data).
+## the character viewer, `--fight` the M2 VS set-up, `--stages` the stage viewer.
 
 const M0_SCENE := "res://app/m0_viewer.tscn"
 const FIGHT_SCENE := "res://app/fight.tscn"
@@ -29,7 +28,11 @@ const ARCADE_SCENE := "res://app/arcade_game.tscn"
 ## The development scenes the command line opens at once, in priority order.
 const DEV_SCENES := {"--m0": M0_SCENE, "--stages": STAGES_SCENE, "--fight": FIGHT_SCENE}
 const FLOW_TRACE_READER := "res://dev/flow_trace.gd"
+const SPLASH_VIEW := "res://app/splash_view.gd"   ## the boot splash overlay (D21)
+const REPLAY_SPEED := 8               ## the playback's steps per tick until the battle shows (D19)
 const ENBU_STAGE := "e"
+const MESSAGE_SHARE := 0.035           ## the message's text height as a share of the window height
+const MESSAGE_MIN_SIZE := 18
 ## The game's overlays by logical id (the loader's slots): the screens' drawing reads their tables.
 const OVERLAY_NAMES := {0: "arcade", 1: "practice", 4: "select", 5: "title", 6: "ranking", 8: "ending", 9: "result"}
 
@@ -53,6 +56,7 @@ var bars := FramingBars.new()
 var attract_screen := AttractScreen.new()
 var main_menu_view := MainMenuView.new()
 var options_view := OptionsView.new()
+var net_view := NetView.new()
 var select_view := SelectView.new()
 var quick_view := QuickSelectView.new()
 var vs_view := VsView.new()
@@ -67,17 +71,33 @@ var movie := MoviePlayer.new()
 var mask := ScreenMask.new()
 var fade := FadeOverlay.new()
 var blackout := ColorRect.new()
+var message := Label.new()
+var stats := Label.new()
+var settings_view := SettingsView.new()
+var settings_button := SettingsButton.new()
+var touch := TouchControls.new()
 var rule_set := RuleSet.original()
 var locale: TextLocale
 var movies: Dictionary = {}
+var options := DevOptions.new()            ## --screenshot, --frames, --speed, --seed, --stats
 var seed := -1
+var net_host := ""                          ## --host[=port]: the network play waits for an opponent
+var net_join := ""                          ## --join=<ip>[:port]: the network play joins a host
 var skip_movies := false
 var fresh := false
 var unlock_all := false
 var replay_name := ""
 var dev_screen := ""
 var _replay: Object                        ## the flow trace a replay reads its pads from
+var _rec_pads := PackedInt32Array()        ## the session's pads for the last-battle replay (D19)
+var _rec_flags := PackedByteArray()        ## the recording's per-step movie-blocking flags (D19)
+var _boot_progress := PackedByteArray()    ## the progress block at the boot (the replay's pokes)
+var _rec_fights := 0                       ## the recording's FIGHT steps (a replay needs a battle)
+var _replay_fight_seen := false            ## the playback reached the battle (fast-forward over)
+var _prev_real_pads := 0                   ## the real pads' edge, to cancel the playback
 var replay_frames := -1                    ## the replay's steps played (−1: all)
+var _pad_script: Array[Vector2i] = []      ## `--pads`: the steps' pads after the replay
+var steps := 0
 var _fight_loads := -1
 var _model_loads := PackedInt32Array()     ## FightSimulation.model_loads the fight view shows
 var _fight_view_due := false               ## a new fight was set up: _show builds its view
@@ -85,27 +105,28 @@ var _slots := PackedInt32Array([-1, -1])
 var _step_usec := 0.0
 var _tap := false
 var _prev_pads := 0                       ## both pads the step before (Select opens the settings on a press)
+var _net_synced := false                  ## the NET screen's rebuild with the shared seed has happened (D16)
+var _waiting_for_gesture := false         ## the web build before its first input
+var _release_pads := false                 ## after the settings: the game gets no buttons until all are released
 var _joypads := 0                          ## gamepads connected (the title's start prompt)
 var _fading_views: Array[ScreenCanvas] = []   ## the screens with a fade of their own
 var _pause_owed := false                   ## the window lost focus in a fight: its pause opens as soon as one can
+var _splash: CanvasLayer                   ## the boot splash overlay while it shows (D21)
 
 
 func _ready() -> void:
-	var args := DevOptions.arguments()
-	# A conversion from MAME's set alone is another game: its own flow, views and rules. The
-	# development scenes read the PlayStation's data, which it does not have.
-	var scene := ARCADE_SCENE if Assets.is_available() and Assets.arcade_only() else ""
+	var args := _arguments()
 	for flag: String in DEV_SCENES:
 		if flag in args:
-			if scene.is_empty():
-				scene = DEV_SCENES[flag] as String
-			else:
-				Log.warning("game: %s needs a disc's conversion; this one is the arcade's" % flag)
-			break
-	if not scene.is_empty():
+			set_physics_process(false)
+			set_process(false)
+			get_tree().change_scene_to_file.call_deferred(DEV_SCENES[flag] as String)
+			return
+	# A conversion from MAME's set alone is another game: its own flow, views and rules.
+	if Assets.is_available() and Assets.arcade_only():
 		set_physics_process(false)
 		set_process(false)
-		get_tree().change_scene_to_file.call_deferred(scene)
+		get_tree().change_scene_to_file.call_deferred(ARCADE_SCENE)
 		return
 	_parse_arguments(args)
 	get_tree().auto_accept_quit = false
@@ -115,7 +136,7 @@ func _ready() -> void:
 	layer.layer = 1
 	add_child(layer)
 	for view: Control in [bars, team_icons, hud, mode_hud, pause_view, practice_view, move_list_view, attract_screen, main_menu_view, options_view,
-			select_view, quick_view, vs_view, result_view, ranking_view, ending_view, mask, movie]:
+			net_view, select_view, quick_view, vs_view, result_view, ranking_view, ending_view, mask, movie]:
 		layer.add_child(view)
 	var top := CanvasLayer.new()
 	top.layer = 10
@@ -127,16 +148,29 @@ func _ready() -> void:
 	top.add_child(touch)
 	top.add_child(settings_button)
 	top.add_child(settings_view)
+	settings_view.closed.connect(_on_settings_closed)
 	Pads.escape_rules = _escape_rules
 	_fading_views = [quick_view, result_view, ranking_view]
 	_joypads = Input.get_connected_joypads().size()
 	Input.joy_connection_changed.connect(func(_device: int, _connected: bool) -> void:
 		_joypads = Input.get_connected_joypads().size())
-	_follow_settings()
+	settings_button.pressed.connect(_open_settings)
+	Settings.changed.connect(_on_setting_changed)
+	Settings.apply_audio()
+	RenderQuality.apply_viewport(get_viewport())
+	TranslationServer.set_locale(Settings.locale())
+	_show_touch()
 	blackout.color = Color.BLACK
 	blackout.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	blackout.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_setup_labels()
+	stats.position = Vector2(8, 8)
+	stats.add_theme_color_override("font_outline_color", Color.BLACK)
+	stats.add_theme_constant_override("outline_size", 4)
+	message.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	message.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	message.visible = false
+	message.add_theme_font_size_override("font_size", maxi(MESSAGE_MIN_SIZE, int(get_viewport().get_visible_rect().size.y * MESSAGE_SHARE)))
 	movie.visible = false
 	movie.finished.connect(_on_movie_finished)
 	if not Assets.is_available() or not FileAccess.file_exists(Assets.path("tables/flow.json")):
@@ -144,8 +178,53 @@ func _ready() -> void:
 		message.visible = true
 		set_physics_process(false)
 		return
+	# The network play (`--host` / `--join`, D16): both sides rebuild their flows with the server's
+	# seed, so the session must be up before the flows exist. The server waits; the client gives
+	# up after 15 s and plays offline.
+	if not net_host.is_empty() or not net_join.is_empty():
+		set_physics_process(false)
+		if seed < 0:
+			seed = Time.get_ticks_usec() & 0x7FFFFFFF
+		if not net_host.is_empty():
+			NetPlay.host(int(net_host) if not net_host.is_empty() else NetPlay.DEFAULT_PORT, seed)
+		else:
+			var at := net_join.rfind(":")
+			NetPlay.join(net_join if at < 0 else net_join.left(at),
+				NetPlay.DEFAULT_PORT if at < 0 else net_join.substr(at + 1).to_int())
+		NetPlay.status_changed.connect(func(text: String) -> void: message.text = text)
+		message.text = NetPlay.status
+		message.visible = true
+		var deadline := -1 if not net_host.is_empty() else Time.get_ticks_msec() + 15_000
+		while not NetPlay.session_active and NetPlay.role != NetPlay.Role.NONE:
+			NetPlay.poll()
+			if deadline > 0 and Time.get_ticks_msec() > deadline:
+				NetPlay.shutdown()
+				break
+			await get_tree().create_timer(0.1).timeout
+			message.text = NetPlay.status
+		message.visible = false
+		if NetPlay.session_active:
+			seed = NetPlay.seed
+			NetPlay.reset_session()
 	_load()
-	_wait_for_gesture()
+	if NetPlay.session_active:
+		_start_net_vs()
+		NetPlay.flow_ready()
+		Log.debug("game: net session, flow rebuilt with seed %d" % seed)
+	# A failed wait (the client's timeout) plays offline as usual: the physics runs again.
+	set_physics_process(true)
+	# The boot splash (D21): the user's relief, reduced, with a vignette, then the fade
+	# into the title sequence. Not with a screenshot run (the harness counts its frames).
+	if options.screenshot_path.is_empty():
+		_splash = load(SPLASH_VIEW).new()
+		add_child(_splash)
+	# Browsers start audio only after a user gesture: the web build waits for the first input
+	# before the game (and its sound) starts.
+	if OS.has_feature("web") and options.screenshot_path.is_empty():
+		message.text = tr("WEB_START")
+		message.visible = true
+		set_physics_process(false)
+		_waiting_for_gesture = true
 
 
 func _load() -> void:
@@ -162,14 +241,52 @@ func _load() -> void:
 	vibration = PadVibration.new(content.tables.vibration)
 	audio.use_tables(content.tables)
 	var data := FlowData.load_from(Assets.path("tables/flow.json"))
+	# The remake's own options item (docs/DECISIONS.md D14): UNLOCK ALL opens every character,
+	# Start costume, mode and Theater movie, as Tekken 3 Plus does, and writes the save.
+	# It sits before EXIT on the options' front page.
+	var pages: Array[Dictionary] = data.option_pages
+	var items: Array = pages[0]["items"]
+	items.insert(items.size() - 1, {"action": 1, "count": 0, "kind": 0, "label": "UNLOCK ALL",
+		"layout": 1, "modes": 0, "value": 7, "values": [], "variable": {"page": true}})
+	# The remake's NET MODE menu entry (docs/DECISIONS.md D16/D17): under VS MODE. The entry's
+	# index is the font colour the menu draws the label with (colour 3's sheet is empty).
+	var net_entry := FlowData.MenuEntry.new()
+	net_entry.text = "NET MODE"
+	net_entry.mode = 11
+	net_entry.two_players = 0
+	net_entry.index = 9
+	var menu_index := 0
+	while menu_index < data.menu_entries.size() and data.menu_entries[menu_index].mode != 1:
+		menu_index += 1
+	data.menu_entries.insert(menu_index + 1, net_entry)
+	# The remake's REPLAY menu entry (D19): after NET MODE, boots the recorded session.
+	var replay_entry := FlowData.MenuEntry.new()
+	replay_entry.text = "REPLAY"
+	replay_entry.mode = 13
+	replay_entry.two_players = 0
+	replay_entry.index = 9
+	data.menu_entries.insert(menu_index + 2, replay_entry)
+	# The remake's EXIT menu entry (D18): after OPTION MODE, quits the game cleanly.
+	var quit_entry := FlowData.MenuEntry.new()
+	quit_entry.text = "EXIT"
+	quit_entry.mode = 12
+	quit_entry.two_players = 0
+	quit_entry.index = 9
+	var options_index := 0
+	while options_index < data.menu_entries.size() and data.menu_entries[options_index].mode != 9:
+		options_index += 1
+	data.menu_entries.insert(options_index + 1, quit_entry)
 	if not replay_name.is_empty():
 		_load_replay()
 	if seed < 0:
 		seed = Time.get_ticks_usec() & 0x7FFFFFFF
 	# The seed repeats a session with `--seed=<n>`.
 	Log.debug("game: seed %d" % seed)
-	# A trace replay runs the original rules, as the game does.
-	if _replay == null:
+	# The NET screen hosts with this side's seed (D16).
+	NetPlay.game_seed = seed
+	# A trace replay runs the original rules, as the game does; the last-battle replay (D19)
+	# recorded a session of this game and repeats it with the settings' rules as it had.
+	if _replay == null or _replay is LastReplay:
 		_apply_rules()
 	flow = GameFlow.new(content, data, rule_set, seed)
 	flow.performance_factory = _new_performance
@@ -196,6 +313,7 @@ func _load() -> void:
 	attract_screen.setup(screens, false)
 	main_menu_view.setup(hud_data, TexturePacks.texture(screens_dir.path_join("title.png")))
 	options_view.setup(hud_data, ram, vram_system, screens_dir)
+	net_view.setup(hud_data, ram, vram_system, screens_dir)
 	settings_view.pad_texture = options_view.pads[0]
 	select_view.setup(hud_data, ram, vram_system, screens_dir)
 	quick_view.setup(hud_data, ram, vram_system)
@@ -209,6 +327,43 @@ func _load() -> void:
 	team_icons.setup_psx(hud_data, ram, vram_system)
 	pause_view.setup(hud)
 	_apply_texts()
+	# The last-battle replay's recording (D19): every flow build starts a new recording — the
+	# replay file holds the pads from the latest boot on.
+	_rec_pads = PackedInt32Array()
+	_rec_flags = PackedByteArray()
+	_rec_fights = 0
+	_boot_progress = flow.progress.bytes.duplicate()
+
+
+## The last-battle replay (D19): boots the recorded session anew — its seed, its boot progress
+## and its pads — and plays it back. The fast-forward runs until the battle shows; Select or
+## Escape cancels into a fresh session.
+func _start_replay() -> void:
+	var replay := LastReplay.read(GameFlow.REPLAY_PATH)
+	if replay == null:
+		return
+	_replay = replay
+	_replay_fight_seen = false
+	seed = replay.seed
+	fresh = true
+	_load()
+
+
+## Leaving the playback: a normal session with a new seed, recording again.
+func _stop_replay() -> void:
+	_replay = null
+	AudioServer.set_bus_mute(0, false)
+	seed = -1
+	fresh = false
+	_load()
+
+
+## The session's pads so far, once a battle has been played (the menu's REPLAY boots them).
+func _save_replay() -> void:
+	if _replay != null or NetPlay.session_active or _rec_fights < 60:
+		return
+	if not LastReplay.save(GameFlow.REPLAY_PATH, seed, _boot_progress, _rec_pads, _rec_flags):
+		Log.warning("game: replay save failed")
 
 
 ## `--replay`: the flow trace's reader is development tooling (`dev/`), which exported builds leave
@@ -248,6 +403,7 @@ func _map_blocks() -> void:
 func _parse_arguments(args: PackedStringArray) -> void:
 	options = DevOptions.parse(args)
 	seed = options.seed
+	stats.visible = options.stats
 	for arg in args:
 		var value := arg.get_slice("=", 1)
 		if arg == "--no-movies":
@@ -256,6 +412,13 @@ func _parse_arguments(args: PackedStringArray) -> void:
 			fresh = true
 		elif arg == "--unlock":
 			unlock_all = true
+		elif arg.begins_with("--host"):
+			# `--host` or `--host=<port>`; a bare `--host` hosts on the default port.
+			net_host = arg.trim_prefix("--host").trim_prefix("=")
+			if net_host.is_empty():
+				net_host = str(NetPlay.DEFAULT_PORT)
+		elif arg.begins_with("--join="):
+			net_join = value
 		elif arg.begins_with("--texture-pack="):
 			TexturePacks.use_for_session(value)
 		elif arg.begins_with("--screen="):
@@ -266,6 +429,41 @@ func _parse_arguments(args: PackedStringArray) -> void:
 			replay_frames = value.to_int()
 		elif arg.begins_with("--pads="):
 			_load_pad_script(value)
+
+
+## A development pad script: lines `<steps> <pad 1> [<pad 2>]` (hex words) played in turn once the
+## replay ends (or from boot); `#` starts a comment.
+func _load_pad_script(path: String) -> void:
+	var f := FileAccess.open(path, FileAccess.READ)
+	if f == null:
+		Log.warning("game: no pad script %s" % path)
+		return
+	while not f.eof_reached():
+		var words := f.get_line().get_slice("#", 0).split(" ", false)
+		if words.size() < 2:
+			continue
+		var p1 := words[2].hex_to_int() if words.size() > 2 else 0
+		for i in words[0].to_int():
+			_pad_script.append(Vector2i(words[1].hex_to_int(), p1))
+
+
+## A connected session (D16): both sides go straight into VS MODE — the host plays player 1,
+## the client player 2 (their pads are the lockstep's words 0 and 1).
+func _start_net_vs() -> void:
+	if not NetPlay.session_active:
+		return
+	ModeStart.start(flow, GameMode.VS, 3)
+
+
+## Command-line options, or on the web the page's query string as `--name[=value]` options.
+static func _arguments() -> PackedStringArray:
+	if not OS.has_feature("web"):
+		return OS.get_cmdline_user_args()
+	var query := str(JavaScriptBridge.eval("window.location.search", true))
+	var out := PackedStringArray()
+	for item in query.trim_prefix("?").split("&", false):
+		out.append("--" + item.uri_decode())
+	return out
 
 
 func _new_performance(number: int) -> EnbuPerformance:
@@ -296,12 +494,26 @@ func _notification(what: int) -> void:
 
 
 func _quit() -> void:
+	_save_replay()
 	Settings.save()
 	movie.stop()
 	audio.stop_all()
 	PadVibration.stop_motors()
 	set_physics_process(false)
 	DevOptions.quit_after_drain(get_tree())
+
+
+func _input(event: InputEvent) -> void:
+	if _waiting_for_gesture and event.is_pressed() and not event.is_echo() \
+			and (event is InputEventKey or event is InputEventMouseButton or event is InputEventScreenTouch
+			or event is InputEventJoypadButton):
+		_waiting_for_gesture = false
+		message.visible = false
+		set_physics_process(true)
+		get_viewport().set_input_as_handled()
+		return
+	if DevOptions.toggles_stats(event):
+		stats.visible = not stats.visible
 
 
 ## The settings' Gameplay fixes on the rule set the game shares (RuleSet is read by the fights and
@@ -352,20 +564,38 @@ func _select_vram() -> VramImage:
 
 
 func _on_setting_changed(key: String) -> void:
-	super(key)
 	match key:
 		"gameplay_fixes":
 			if _replay == null:
 				_apply_rules()
+		"language":
+			TranslationServer.set_locale(Settings.locale())
 		"game_texts":
 			_apply_texts()
+		"graphics":
+			RenderQuality.apply_viewport(get_viewport())
+		"texture_pack", "texture_filter":
+			TexturePacks.clear()
+			_reload_pictures()
 		"stage_backdrops":
 			_rebuild_stages()
+		"touch_controls", "touch_macros", "touch_size":
+			_show_touch()
 
 
 ## Whether the settings may open: on the main menu's list (not while it opens or leaves).
 func _settings_allowed() -> bool:
 	return flow != null and flow.state == GameFlow.State.MENU and flow.sub == 1 and _replay == null
+
+
+## The touch controls where the settings want them, with their macro buttons (hidden while the
+## settings are open: the panel takes the taps).
+func _show_touch() -> void:
+	touch.set_macros(Settings.text("touch_macros"))
+	touch.set_scale_share(Settings.touch_scale())
+	touch.visible = Settings.touch_enabled() and not settings_view.visible
+	if not touch.visible:
+		touch.reset()
 
 
 ## A tap waiting for the next step is dropped as the settings open or close: the step does not run
@@ -396,6 +626,18 @@ func _switch_card() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# The NET screen's IP field (D16): the keystrokes type the address (digits and dots only).
+	if flow != null and flow.state == GameFlow.State.NET and flow.sub == 2:
+		var key := event as InputEventKey
+		if key != null and key.pressed and not key.echo:
+			if key.keycode == KEY_BACKSPACE:
+				NetPlay.backspace()
+				get_viewport().set_input_as_handled()
+				return
+			if key.unicode >= 32 and key.unicode < 127:
+				NetPlay.type_char(char(key.unicode))
+				get_viewport().set_input_as_handled()
+				return
 	# With the touch controls shown, Start is their button: other taps do nothing.
 	if touch.visible:
 		return
@@ -406,16 +648,79 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(_delta: float) -> void:
+	# The boot splash's hold (D21): the flow (and its pads) wait until the splash fades.
+	if _splash != null:
+		if is_instance_valid(_splash):
+			return
+		_splash = null
 	# Android's Back backs out of the settings but does not open them from the main menu.
 	Pads.back_allowed = flow.state != GameFlow.State.MENU or settings_view.visible
 	settings_button.visible = _settings_allowed() and not settings_view.visible
 	settings_button.place(touch.top_left_free if touch.visible else Rect2())
 	touch.set_shoulders(TouchControls.shoulders_shown(flow))
 	touch.set_playback(_playback())
-	if Pads.escape_pressed and flow.pause_menu_open():
+	# The remake's Escape on a pause menu, when the game steps offline: the lockstep session
+	# carries the press in its frames instead (the flag must be the same on both sides).
+	if not NetPlay.running and Pads.escape_pressed and flow.pause_menu_open():
 		flow.escape_pressed = true
-	for i in options.speed:
+	# The NET screen's rebuild (D16): once a session rises, both sides rebuild their flows with
+	# the shared seed — game.gd owns it, the flow's screens do not survive the rebuild.
+	if not NetPlay.session_active:
+		_net_synced = false
+	elif flow.state == GameFlow.State.NET and not _net_synced:
+		_net_synced = true
+		message.visible = false
+		seed = NetPlay.seed
+		NetPlay.reset_session()
+		_load()
+		_start_net_vs()
+		NetPlay.flow_ready()
+		return
+	# The main menu's EXIT (D18): the same clean quit as the window's close.
+	if flow.quit_requested:
+		_quit()
+		return
+	# The main menu's REPLAY (D19): boots the recorded session as a playback.
+	if flow.replay_requested:
+		_start_replay()
+		return
+	# The playback's cancel: Select's edge or Escape — a fresh session instead.
+	if _replay != null:
+		var real := Pads.held[0] | Pads.held[1]
+		if Pads.escape_pressed or ((real & PadState.SELECT) != 0
+				and _prev_real_pads & PadState.SELECT == 0):
+			_stop_replay()
+			return
+		_prev_real_pads = real
+	var fast := _replay != null and not _replay_fight_seen and not flow.showing_fight()
+	if _replay != null and flow.showing_fight():
+		_replay_fight_seen = true
+	AudioServer.set_bus_mute(0, fast)
+	for i in (REPLAY_SPEED if fast else options.speed):
 		var pads := _pads()
+		# The network play: the connection is serviced every tick, and a frame steps only when
+		# both sides' words for it have crossed (NetPlay, D16). While a session is coming up
+		# (the NET screen waits) the game steps locally.
+		if NetPlay.session_active or NetPlay.role != NetPlay.Role.NONE:
+			NetPlay.poll()
+			if not NetPlay.running:
+				if NetPlay.session_active:
+					message.text = tr("NET_SYNC")
+					message.visible = true
+					continue
+			elif message.visible and message.text == tr("NET_SYNC"):
+				message.visible = false
+			if NetPlay.running:
+				var net_pads := PackedInt32Array([0, 0])
+				var net_esc := PackedInt32Array([0, 0])
+				if not NetPlay.exchange(pads[NetPlay.local_player], Pads.escape_pressed, net_pads,
+						net_esc):
+					continue
+				pads = net_pads
+				# The remake's Escape travels in the frames: both sides leave the pause menu
+				# together (the flag is pending until the menu takes it, identically here).
+				if (net_esc[0] | net_esc[1]) != 0 and flow.pause_menu_open():
+					flow.escape_pressed = true
 		steps += 1
 		if settings_view.visible:
 			settings_view.handle(pads[0] | pads[1])
@@ -482,6 +787,25 @@ func _pads() -> PackedInt32Array:
 
 ## One step of the game and everything that shows it.
 func _step(pads: PackedInt32Array) -> void:
+	# The playback's movies (D19): the flow's blocking follows the recording's steps, not the
+	# video's clock — the video may end early or late, the flags say when the frame finished.
+	if _replay is LastReplay and flow.movie_blocking:
+		var replay := _replay as LastReplay
+		if replay.step_flag(steps - 1) == 2:
+			flow.movie_result = 1
+			movie.stop()
+		else:
+			flow.movie_result = 0
+	# The last-battle replay's recording (D19): every step's pads (and its movie-blocking state,
+	# so the playback's movies hold the flow exactly as long), except a netplay session's (its
+	# opponent is not part of a replay) and a playback's (it would record itself).
+	if _replay == null and not NetPlay.session_active:
+		if flow.movie_blocking:
+			_rec_flags.append(2 if flow.movie_result != 0 else 1)
+		else:
+			_rec_flags.append(0)
+		_rec_pads.append(pads[0] & 0xFFFF)
+		_rec_pads.append(pads[1] & 0xFFFF)
 	# A trace replay keeps its pads.
 	if _replay == null:
 		pads = SkipButtons.apply(pads, flow, movie.playing)
@@ -500,15 +824,15 @@ func _step(pads: PackedInt32Array) -> void:
 		_open_dev_screen()
 	var started := Time.get_ticks_usec()
 	var in_options := flow.state == GameFlow.State.OPTIONS
+	var was_fight := flow.state == GameFlow.State.FIGHT
 	flow.step(pads)
-	# The harness's movies end on their first frame: the frame that started a blocking one finishes
-	# now, and its outputs after the movie are handled with the others.
-	var replayed_movie := flow.movie_started >= 0 and _replay != null
-	if replayed_movie:
-		while flow.movie_blocking:
-			flow.movie_result = 1
-			flow.step(pads)
-		flow.movie_result = 1
+	# A battle's end (back to the menu, the results chain, an ending): the replay file holds the
+	# session's pads through it.
+	if was_fight:
+		if flow.state == GameFlow.State.FIGHT:
+			_rec_fights += 1
+		else:
+			_save_replay()
 	# Leaving OPTIONS saves the options (ProgressCard): the game would keep them until its next
 	# auto save.
 	var save := flow.save_requested or (in_options and flow.state != GameFlow.State.OPTIONS
@@ -535,7 +859,14 @@ func _step(pads: PackedInt32Array) -> void:
 			vibration.vibrate(e.a, e.b)
 	if save and card.write(flow.progress.save_data()) != SaveStore.CARD_DONE:
 		flow.save_failed()
-	if flow.movie_started >= 0 and not replayed_movie:
+	if flow.movie_started >= 0 and _replay != null and not _replay is LastReplay:
+		# The harness's movies end on their first frame; the last-battle replay's (D19) hold the
+		# flow as the recording did.
+		while flow.movie_blocking:
+			flow.movie_result = 1
+			flow.step(pads)
+		flow.movie_result = 1
+	elif flow.movie_started >= 0:
 		_start_movie(flow.movie_started, flow.movie_blocking)
 	if movie.playing and not flow.movie_blocking and not (flow.state == GameFlow.State.TITLE and flow.sub == 2):
 		movie.stop()
@@ -636,6 +967,9 @@ func _show() -> void:
 	options_view.visible = state == GameFlow.State.OPTIONS
 	if options_view.visible:
 		options_view.show_state(flow)
+	net_view.visible = state == GameFlow.State.NET
+	if net_view.visible:
+		net_view.show_state(flow)
 	select_view.visible = state == GameFlow.State.SELECT
 	if select_view.visible:
 		select_view.show_state(flow)
@@ -812,5 +1146,7 @@ func _start_movie(which: int, blocking: bool) -> void:
 
 
 func _on_movie_finished() -> void:
+	if _replay is LastReplay:
+		return  # the playback's blocking follows the recording's steps (D19)
 	if flow.movie_blocking or (flow.state == GameFlow.State.TITLE and flow.sub == 2):
 		flow.movie_result = 1

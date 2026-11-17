@@ -13,6 +13,9 @@ const MODE_BALL := GameMode.BALL
 const MODE_FORCE := GameMode.FORCE
 const MODE_OPTIONS := 9
 const MODE_THEATER := 10
+const MODE_NET := 11               ## the remake's NET MODE entry (D16)
+const MODE_QUIT := 12              ## the remake's EXIT entry (D18)
+const MODE_REPLAY := 13            ## the remake's REPLAY entry (D19)
 
 class Entry:
 	var entry: FlowData.MenuEntry
@@ -98,6 +101,18 @@ func _step() -> void:
 			var mode := entries[g.progress.menu_cursor].entry.mode
 			if mode == MODE_OPTIONS:
 				g.goto_transition(GameFlow.State.OPTIONS)
+			elif mode == MODE_NET:
+				g.goto_transition(GameFlow.State.NET)
+			elif mode == MODE_QUIT:
+				g.quit_requested = true
+			elif mode == MODE_REPLAY:
+				# The last-battle replay (D19): game.gd boots the recorded session; without a
+				# recording the buzz sends back to the list.
+				if FileAccess.file_exists(GameFlow.REPLAY_PATH):
+					g.replay_requested = true
+				else:
+					g.sound(SOUND_CURSOR)
+					g.sub = 1
 			elif mode == MODE_THEATER:
 				if g.progress.theater_new < 3:
 					g.progress.theater_new += 1
