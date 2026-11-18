@@ -27,6 +27,10 @@ static func load_from(path: String, pose_solver: PoseSolver, fighter_tables: Fig
 ## The converted tables, for a PlayStation fight that shows arcade models.
 static func shared() -> ArcadeAttachmentTables:
 	if _shared == null:
-		_shared = load_from(Assets.path(FILE), PoseSolver.new(PoseTables.load_from(Assets.path("tables/pose.json"))),
-			FighterTables.load_from(Assets.path("tables/fighter.json")))
+		_shared = ArcadeAttachmentTables.new()
+		# Only the arcade conversion (models with swinging attachments) writes this file;
+		# a PlayStation-only conversion has no use for the tables, so leave them empty.
+		if FileAccess.file_exists(Assets.path(FILE)):
+			_shared = load_from(Assets.path(FILE), PoseSolver.new(PoseTables.load_from(Assets.path("tables/pose.json"))),
+				FighterTables.load_from(Assets.path("tables/fighter.json")))
 	return _shared

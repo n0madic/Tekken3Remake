@@ -19,7 +19,7 @@ const SCHEMA := {
 	"gameplay_fixes": [false, [false, true]],
 	"memory_card": [1, [1, 2]],
 	"game_texts": ["english", ["english", "japanese"]],
-	"language": ["auto", ["auto", "en", "ja"]],
+	"language": ["auto", ["auto", "en", "ru"]],
 	"fullscreen": [false, [false, true]],
 	"graphics": ["auto", ["auto", "web", "mobile", "mobile_high", "desktop_low", "desktop_high"]],
 	"texture_filter": ["smooth", ["smooth", "crisp"]],
@@ -236,25 +236,15 @@ func reset_key_bindings() -> void:
 	set_value(KEY_BINDINGS, default_bindings())
 
 
-## A setting's value; a choice this build does not offer reads as its first one (the arcade's build
-## has no Gameplay fixes and only its own backdrops, converted from the USA disc the game texts are
-## English), while the saved choice stays for another build. A texture pack's name reads as saved:
-## a pack not installed replaces nothing.
+## A setting's value; a choice this build does not offer reads as its first one (converted from
+## the USA disc the game texts are English), while the saved choice stays for another build.
 func value(key: String) -> Variant:
 	if session.has(key):
 		return session[key]
 	var v: Variant = values.get(key, (SCHEMA[key] as Array)[0])
-	if _fixed_choices(key):
-		var list := choices(key)
-		if not v in list:
-			return list[0]
+	if key == "game_texts" and not v in choices(key):
+		return choices(key)[0]
 	return v
-
-
-## Whether a key's choices are a fixed list (not a volume, not a name chosen at run time).
-static func _fixed_choices(key: String) -> bool:
-	var list: Array = (SCHEMA[key] as Array)[1]
-	return not list.is_empty() and not (list[0] is String and (list[0] as String).is_empty())
 
 
 func flag(key: String) -> bool:
@@ -345,9 +335,6 @@ func set_value(key: String, v: Variant) -> void:
 		_apply_key_layouts()
 	elif key == "fullscreen":
 		_apply_fullscreen(v as bool)
-	elif key in RenderQuality.TEXTURE_SETTINGS:
-		# Before anything reloads its pictures on the signal: they come from the new pack.
-		TexturePacks.clear()
 	_dirty = true
 	changed.emit(key)
 

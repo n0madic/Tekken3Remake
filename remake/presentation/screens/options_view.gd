@@ -67,6 +67,8 @@ func _draw() -> void:
 			_card_message()
 		OptionsScreen.PAGE_KEYS:
 			_keys()
+		OptionsScreen.PAGE_UNLOCK:
+			_unlock_page()
 
 
 ## FUN_800DC838: the cursor bar behind an option (pulsing).
@@ -187,6 +189,20 @@ func _card_message() -> void:
 		return
 	var table := LOAD_MESSAGES if sub == 2 else CARD_MESSAGES
 	var e: Array = table.get(state, ["SOMETHING MESSAGE", 3])
+	var colour: int = e[1]
+	centred(str(e[0]), 0, colour, 0xB8, 0x168)
+
+
+## The remake's own UNLOCK ALL page (D14): the prompt and the result, in the card's style.
+func _unlock_page() -> void:
+	text("UNLOCK ALL", 1, _title_colour(), 0x8B, 0x28)
+	var state := options.unlock_state
+	if state == 0:
+		centred("OPENS EVERY CHARACTER, COSTUME, MODE", 0, 6, 0xB8, 0x9A)
+		centred("AND THEATER MOVIE, AND SAVES.", 0, 6, 0xB8, 0xB4)
+		centred("START: UNLOCK    SELECT: BACK", 0, 4, 0xB8, 0x168)
+		return
+	var e: Array = {1: ["UNLOCK OK!", 1]}.get(state, ["SAVE ERROR!", 2])
 	var colour: int = e[1]
 	centred(str(e[0]), 0, colour, 0xB8, 0x168)
 

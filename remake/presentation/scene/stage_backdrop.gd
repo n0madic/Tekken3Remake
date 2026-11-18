@@ -17,7 +17,7 @@ func setup(stage: StageData) -> void:
 	lighting.setup(stage, rig.camera)
 	stage_view.apply_environment(lighting.environment)
 	add_child(lighting)
-	stage_view.limit_view(rig)
+	rig.coverage = stage_view.coverage()
 	add_child(rig)
 	stage_view.follow(WorldSpace.point(0, 0, 0))
 
